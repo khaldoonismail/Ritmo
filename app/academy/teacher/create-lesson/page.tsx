@@ -131,6 +131,8 @@ export default function CreateLessonPage() {
     borderRadius: "6px",
     border: "1px solid #ddd",
     outline: "none",
+direction: "ltr",
+    textAlign: "left",
     fontFamily: "inherit",
     width: "100%",
   };
