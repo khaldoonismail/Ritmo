@@ -41,6 +41,8 @@ export default function LoginPage() {
             borderRadius: "8px",
             border: "1px solid #ddd",
             outline: "none",
+direction: "ltr",
+            textAlign: "left",
             fontFamily: "inherit",
           }}
         />
@@ -54,6 +56,8 @@ export default function LoginPage() {
             borderRadius: "8px",
             border: "1px solid #ddd",
             outline: "none",
+direction: "ltr",
+textAlign: "left",
             fontFamily: "inherit",
           }}
         />
