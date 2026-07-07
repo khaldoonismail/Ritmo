@@ -55,6 +55,19 @@ export default function TeacherDashboard() {
           </Link>
         ))}
       </div>
+
+      <Link
+        href="/games/teacher"
+        style={{
+          fontSize: "0.9rem",
+          opacity: 0.7,
+          color: "inherit",
+          textDecoration: "underline",
+          marginTop: "0.5rem",
+        }}
+      >
+        Go to Games Dashboard →
+      </Link>
     </main>
   );
 }

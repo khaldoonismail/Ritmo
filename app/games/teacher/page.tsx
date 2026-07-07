@@ -1,10 +1,9 @@
 import Link from "next/link";
 
-export default function Home() {
-  const links = [
-    { label: "Log In", href: "/accounts/login" },
-    { label: "Academy — Teacher Dashboard", href: "/academy/teacher" },
-    { label: "Games — Teacher Dashboard", href: "/games/teacher" },
+export default function GamesTeacherDashboard() {
+  const sections = [
+    { label: "Create a Game", href: "/games/teacher/create-game" },
+    { label: "My Games", href: "/games/teacher/library" },
   ];
 
   return (
@@ -20,9 +19,11 @@ export default function Home() {
         padding: "2rem",
       }}
     >
-      <h1 style={{ fontSize: "3rem", fontWeight: 800, margin: 0 }}>Ritmo</h1>
+      <h1 style={{ fontSize: "3rem", fontWeight: 800, margin: 0 }}>
+        Games Dashboard
+      </h1>
       <p style={{ fontSize: "1.1rem", opacity: 0.7, margin: 0 }}>
-        Ritmo — Academy, Games, and Accounts for Music Education
+        Build Kahoot-style quiz games for your students
       </p>
       <div
         style={{
@@ -34,10 +35,10 @@ export default function Home() {
           marginTop: "1rem",
         }}
       >
-        {links.map((l) => (
+        {sections.map((s) => (
           <Link
-            key={l.href}
-            href={l.href}
+            key={s.href}
+            href={s.href}
             style={{
               fontSize: "1rem",
               fontWeight: 700,
@@ -49,10 +50,23 @@ export default function Home() {
               textDecoration: "none",
             }}
           >
-            {l.label}
+            {s.label}
           </Link>
         ))}
       </div>
+
+      <Link
+        href="/academy/teacher"
+        style={{
+          fontSize: "0.9rem",
+          opacity: 0.7,
+          color: "inherit",
+          textDecoration: "underline",
+          marginTop: "0.5rem",
+        }}
+      >
+        Go to Academy Dashboard →
+      </Link>
     </main>
   );
 }
