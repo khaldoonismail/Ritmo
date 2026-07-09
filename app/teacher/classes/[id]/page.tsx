@@ -16,6 +16,7 @@ interface ClassInfo {
 interface Student {
   id: string;
   name: string;
+  created_at: string;
 }
 
 interface Assignment {
@@ -58,6 +59,7 @@ export default function ManageClassPage() {
   const [copied, setCopied] = useState(false);
   const [myTeacherId, setMyTeacherId] = useState<string | null>(null);
   const [lessons, setLessons] = useState<LessonRow[] | null>(null);
+  const [studentSort, setStudentSort] = useState<"az" | "newest">("az");
 
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [newStudentName, setNewStudentName] = useState("");
@@ -114,7 +116,7 @@ export default function ManageClassPage() {
 
     const { data: studentRows, error: studentsError } = await supabase
       .from("students")
-      .select("id, name")
+      .select("id, name, created_at")
       .eq("class_id", classId)
       .order("name", { ascending: true });
 
@@ -174,7 +176,7 @@ export default function ManageClassPage() {
         name: newStudentName.trim(),
         pin: newStudentPin,
       })
-      .select("id, name")
+      .select("id, name, created_at")
       .single();
 
     setAddStudentBusy(false);
@@ -397,7 +399,11 @@ export default function ManageClassPage() {
   };
 
   const lessonTitleMap = new Map((lessons || []).map((l) => [l.id, l.title]));
-  const sortedStudents = [...(students || [])].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedStudents = [...(students || [])].sort((a, b) =>
+    studentSort === "az"
+      ? a.name.localeCompare(b.name)
+      : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 
   if (notFound) {
     return (
@@ -629,6 +635,57 @@ export default function ManageClassPage() {
               {addStudentBusy ? "Adding..." : "Add Student"}
             </button>
           </form>
+        )}
+
+        {students !== null && students.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              marginBottom: "0.5rem",
+            }}
+          >
+            <span style={{ fontSize: "0.8rem", opacity: 0.6 }}>Sort:</span>
+            <div
+              style={{
+                display: "flex",
+                border: "1px solid #ddd",
+                borderRadius: "8px",
+                overflow: "hidden",
+              }}
+            >
+              <button
+                onClick={() => setStudentSort("az")}
+                style={{
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  padding: "0.3rem 0.7rem",
+                  border: "none",
+                  background: studentSort === "az" ? "#111" : "#fff",
+                  color: studentSort === "az" ? "#fff" : "#111",
+                  cursor: "pointer",
+                }}
+              >
+                A-Z
+              </button>
+              <button
+                onClick={() => setStudentSort("newest")}
+                style={{
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  padding: "0.3rem 0.7rem",
+                  border: "none",
+                  borderLeft: "1px solid #ddd",
+                  background: studentSort === "newest" ? "#111" : "#fff",
+                  color: studentSort === "newest" ? "#fff" : "#111",
+                  cursor: "pointer",
+                }}
+              >
+                Newest
+              </button>
+            </div>
+          </div>
         )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
