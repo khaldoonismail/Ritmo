@@ -66,6 +66,16 @@ export default function ManageClassPage() {
   const [addStudentBusy, setAddStudentBusy] = useState(false);
   const [lastAddedPin, setLastAddedPin] = useState<{ name: string; pin: string } | null>(null);
 
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
+  const [editStudentName, setEditStudentName] = useState("");
+  const [editStudentBusy, setEditStudentBusy] = useState(false);
+  const [editStudentError, setEditStudentError] = useState("");
+  const [regenPinBusyId, setRegenPinBusyId] = useState<string | null>(null);
+  const [regenPinResult, setRegenPinResult] = useState<{ name: string; pin: string } | null>(
+    null
+  );
+  const [removeStudentError, setRemoveStudentError] = useState("");
+
   const [showAssignLesson, setShowAssignLesson] = useState(false);
   const [dueDate, setDueDate] = useState("");
   const [assignError, setAssignError] = useState("");
@@ -106,7 +116,7 @@ export default function ManageClassPage() {
       .from("students")
       .select("id, name")
       .eq("class_id", classId)
-      .order("created_at", { ascending: true });
+      .order("name", { ascending: true });
 
     if (studentsError) {
       setLoadError(studentsError.message);
@@ -179,6 +189,83 @@ export default function ManageClassPage() {
     setNewStudentName("");
     setNewStudentPin(randomPin());
     setShowAddStudent(false);
+  }
+
+  function startEditStudent(s: Student) {
+    setEditingStudentId(s.id);
+    setEditStudentName(s.name);
+    setEditStudentError("");
+  }
+
+  function cancelEditStudent() {
+    setEditingStudentId(null);
+    setEditStudentName("");
+    setEditStudentError("");
+  }
+
+  async function saveStudentName(studentId: string) {
+    if (!editStudentName.trim()) return;
+    setEditStudentBusy(true);
+    setEditStudentError("");
+
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase
+      .from("students")
+      .update({ name: editStudentName.trim() })
+      .eq("id", studentId)
+      .select("id, name")
+      .single();
+
+    setEditStudentBusy(false);
+
+    if (error || !data) {
+      setEditStudentError(error?.message || "Could not rename student.");
+      return;
+    }
+
+    setStudents(
+      (prev) =>
+        prev?.map((s) => (s.id === studentId ? { ...s, name: data.name } : s)) ?? prev
+    );
+    setEditingStudentId(null);
+  }
+
+  async function regenerateStudentPin(student: Student) {
+    setRegenPinBusyId(student.id);
+    setRemoveStudentError("");
+
+    const newPin = randomPin();
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase
+      .from("students")
+      .update({ pin: newPin })
+      .eq("id", student.id)
+      .select("id, name, pin")
+      .single();
+
+    setRegenPinBusyId(null);
+
+    if (error || !data) {
+      setRemoveStudentError(error?.message || "Could not regenerate PIN.");
+      return;
+    }
+
+    setRegenPinResult({ name: data.name, pin: data.pin });
+  }
+
+  async function removeStudent(student: Student) {
+    if (!window.confirm(`Remove ${student.name} from this class?`)) return;
+    setRemoveStudentError("");
+
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.from("students").delete().eq("id", student.id);
+
+    if (error) {
+      setRemoveStudentError(error.message);
+      return;
+    }
+
+    setStudents((prev) => (prev || []).filter((s) => s.id !== student.id));
   }
 
   async function assignLessonToClass(lessonId: string) {
@@ -310,6 +397,7 @@ export default function ManageClassPage() {
   };
 
   const lessonTitleMap = new Map((lessons || []).map((l) => [l.id, l.title]));
+  const sortedStudents = [...(students || [])].sort((a, b) => a.name.localeCompare(b.name));
 
   if (notFound) {
     return (
@@ -444,6 +532,31 @@ export default function ManageClassPage() {
           </div>
         )}
 
+        {regenPinResult && (
+          <div
+            style={{
+              background: "#eafbea",
+              border: "1px solid #b6e6b6",
+              borderRadius: "8px",
+              padding: "0.6rem 0.9rem",
+              marginBottom: "0.75rem",
+              textAlign: "left",
+              fontSize: "0.9rem",
+            }}
+          >
+            New PIN for <strong>{regenPinResult.name}</strong>:{" "}
+            <strong style={{ direction: "ltr", display: "inline-block" }}>
+              {regenPinResult.pin}
+            </strong>
+          </div>
+        )}
+
+        {removeStudentError && (
+          <p style={{ color: "#c00", fontSize: "0.85rem", marginBottom: "0.75rem" }}>
+            {removeStudentError}
+          </p>
+        )}
+
         {showAddStudent && (
           <form
             onSubmit={handleAddStudent}
@@ -523,20 +636,76 @@ export default function ManageClassPage() {
           {students?.length === 0 && (
             <p style={{ opacity: 0.5 }}>No students yet.</p>
           )}
-          {students?.map((s) => (
-            <div
-              key={s.id}
-              style={{
-                padding: "0.6rem 0.9rem",
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-                background: "#fff",
-                textAlign: "left",
-              }}
-            >
-              {s.name}
-            </div>
-          ))}
+          {sortedStudents.map((s) => {
+            const isEditing = editingStudentId === s.id;
+            return (
+              <div
+                key={s.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "0.6rem",
+                  padding: "0.6rem 0.9rem",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  background: "#fff",
+                  textAlign: "left",
+                }}
+              >
+                {isEditing ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", flex: 1 }}>
+                    <input
+                      type="text"
+                      value={editStudentName}
+                      onChange={(e) => setEditStudentName(e.target.value)}
+                      style={inputStyle}
+                      autoFocus
+                    />
+                    {editStudentError && (
+                      <p style={{ color: "#c00", fontSize: "0.8rem", margin: 0 }}>
+                        {editStudentError}
+                      </p>
+                    )}
+                    <div style={{ display: "flex", gap: "0.4rem" }}>
+                      <button
+                        onClick={() => saveStudentName(s.id)}
+                        disabled={editStudentBusy}
+                        style={primaryButtonStyle}
+                      >
+                        {editStudentBusy ? "Saving..." : "Save"}
+                      </button>
+                      <button onClick={cancelEditStudent} style={secondaryButtonStyle}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <span>{s.name}</span>
+                    <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
+                      <button onClick={() => startEditStudent(s)} style={secondaryButtonStyle}>
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => regenerateStudentPin(s)}
+                        disabled={regenPinBusyId === s.id}
+                        style={secondaryButtonStyle}
+                      >
+                        {regenPinBusyId === s.id ? "..." : "Regenerate PIN"}
+                      </button>
+                      <button
+                        onClick={() => removeStudent(s)}
+                        style={{ ...secondaryButtonStyle, color: "#c00" }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 
