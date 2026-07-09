@@ -22,6 +22,7 @@ interface Student {
 interface Assignment {
   id: string;
   lesson_id: string;
+  student_id: string | null;
   assigned_at: string;
   due_at: string | null;
   is_active: boolean;
@@ -84,6 +85,8 @@ export default function ManageClassPage() {
   const [assignError, setAssignError] = useState("");
   const [removeError, setRemoveError] = useState("");
   const [assignBusy, setAssignBusy] = useState(false);
+  const [assignTarget, setAssignTarget] = useState<"class" | "students">("class");
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
 
   async function loadAll() {
     const supabase = createBrowserSupabaseClient();
@@ -129,7 +132,7 @@ export default function ManageClassPage() {
 
     const { data: assignmentRows, error: assignmentsError } = await supabase
       .from("assignments")
-      .select("id, lesson_id, assigned_at, due_at, is_active")
+      .select("id, lesson_id, student_id, assigned_at, due_at, is_active")
       .eq("class_id", classId)
       .order("assigned_at", { ascending: false });
 
@@ -274,17 +277,32 @@ export default function ManageClassPage() {
   async function assignLessonToClass(lessonId: string) {
     setAssignError("");
 
+    const targets: (string | null)[] =
+      assignTarget === "class" ? [null] : selectedStudentIds;
+
+    if (assignTarget === "students" && targets.length === 0) {
+      setAssignError("Select at least one student.");
+      return;
+    }
+
     const newDueDate = dueDate || null;
-    const isDuplicate = (assignments || []).some((a) => {
-      if (a.lesson_id !== lessonId) return false;
-      const existingDueDate = a.due_at ? a.due_at.slice(0, 10) : null;
-      return existingDueDate === newDueDate;
-    });
-    if (isDuplicate) {
+    const duplicateTarget = targets.find((studentId) =>
+      (assignments || []).some((a) => {
+        if (a.lesson_id !== lessonId) return false;
+        const existingDueDate = a.due_at ? a.due_at.slice(0, 10) : null;
+        if (existingDueDate !== newDueDate) return false;
+        return a.student_id === studentId;
+      })
+    );
+    if (duplicateTarget !== undefined) {
+      const label =
+        duplicateTarget === null
+          ? "the whole class"
+          : studentNameMap.get(duplicateTarget) || "that student";
       setAssignError(
-        newDueDate
-          ? "This lesson is already assigned to this class with that due date."
-          : "This lesson is already assigned to this class."
+        `This lesson is already assigned to ${label}${
+          newDueDate ? " with that due date" : ""
+        }.`
       );
       return;
     }
@@ -292,16 +310,18 @@ export default function ManageClassPage() {
     setAssignBusy(true);
 
     const supabase = createBrowserSupabaseClient();
+    const rows = targets.map((studentId) => ({
+      class_id: classId,
+      lesson_id: lessonId,
+      student_id: studentId,
+      due_at: dueDate ? new Date(dueDate).toISOString() : null,
+      is_active: true,
+    }));
+
     const { data, error } = await supabase
       .from("assignments")
-      .insert({
-        class_id: classId,
-        lesson_id: lessonId,
-        due_at: dueDate ? new Date(dueDate).toISOString() : null,
-        is_active: true,
-      })
-      .select("id, lesson_id, assigned_at, due_at, is_active")
-      .single();
+      .insert(rows)
+      .select("id, lesson_id, student_id, assigned_at, due_at, is_active");
 
     if (error || !data) {
       setAssignBusy(false);
@@ -309,16 +329,21 @@ export default function ManageClassPage() {
       return;
     }
 
-    await supabase.rpc("increment_lesson_usage", { lesson_id: lessonId });
+    for (let i = 0; i < data.length; i++) {
+      await supabase.rpc("increment_lesson_usage", { lesson_id: lessonId });
+    }
 
-    setAssignments((prev) => [data, ...(prev || [])]);
+    setAssignments((prev) => [...data, ...(prev || [])]);
     setLessons(
       (prev) =>
         prev?.map((l) =>
-          l.id === lessonId ? { ...l, usage_count: l.usage_count + 1 } : l
+          l.id === lessonId
+            ? { ...l, usage_count: l.usage_count + data.length }
+            : l
         ) ?? prev
     );
     setDueDate("");
+    setSelectedStudentIds([]);
     setAssignBusy(false);
   }
 
@@ -388,6 +413,7 @@ export default function ManageClassPage() {
   };
 
   const lessonTitleMap = new Map((lessons || []).map((l) => [l.id, l.title]));
+  const studentNameMap = new Map((students || []).map((s) => [s.id, s.name]));
   const sortedStudents = [...(students || [])].sort((a, b) => a.name.localeCompare(b.name));
   const sortedLessons = [...(lessons || [])].sort((a, b) =>
     lessonSort === "az"
@@ -761,6 +787,71 @@ export default function ManageClassPage() {
               />
             </div>
 
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+              <label style={{ fontSize: "0.8rem", opacity: 0.7 }}>Assign to</label>
+              <div style={{ display: "flex", gap: "1rem" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.85rem" }}>
+                  <input
+                    type="radio"
+                    checked={assignTarget === "class"}
+                    onChange={() => {
+                      setAssignTarget("class");
+                      setSelectedStudentIds([]);
+                    }}
+                  />
+                  Whole class
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.85rem" }}>
+                  <input
+                    type="radio"
+                    checked={assignTarget === "students"}
+                    onChange={() => setAssignTarget("students")}
+                  />
+                  Specific student(s)
+                </label>
+              </div>
+
+              {assignTarget === "students" && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.3rem",
+                    maxHeight: "150px",
+                    overflowY: "auto",
+                    border: "1px solid #eee",
+                    borderRadius: "8px",
+                    padding: "0.5rem 0.7rem",
+                  }}
+                >
+                  {sortedStudents.length === 0 && (
+                    <span style={{ fontSize: "0.8rem", opacity: 0.5 }}>
+                      No students in this class yet.
+                    </span>
+                  )}
+                  {sortedStudents.map((s) => (
+                    <label
+                      key={s.id}
+                      style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem" }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedStudentIds.includes(s.id)}
+                        onChange={(e) =>
+                          setSelectedStudentIds((prev) =>
+                            e.target.checked
+                              ? [...prev, s.id]
+                              : prev.filter((id) => id !== s.id)
+                          )
+                        }
+                      />
+                      {s.name}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {assignError && (
               <p style={{ color: "#c00", fontSize: "0.85rem", margin: 0 }}>
                 {assignError}
@@ -923,9 +1014,16 @@ export default function ManageClassPage() {
                 fontSize: "0.9rem",
               }}
             >
-              <span style={{ fontWeight: 700 }}>
-                {lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id)}
-              </span>
+              <div>
+                <div style={{ fontWeight: 700 }}>
+                  {lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id)}
+                </div>
+                <div style={{ fontSize: "0.75rem", opacity: 0.6 }}>
+                  {a.student_id
+                    ? `Assigned to: ${studentNameMap.get(a.student_id) || "Unknown student"}`
+                    : "Whole class"}
+                </div>
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexShrink: 0 }}>
                 <span style={{ opacity: 0.6, direction: "ltr" }}>
                   {a.due_at

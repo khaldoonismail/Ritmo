@@ -50,11 +50,15 @@ export default async function StudentLessonPage({
   const supabase = createAdminSupabaseClient();
   const { data: assignment } = await supabase
     .from("assignments")
-    .select("id, class_id, lesson_id")
+    .select("id, class_id, lesson_id, student_id")
     .eq("id", params.assignmentId)
     .maybeSingle();
 
   if (!assignment || assignment.class_id !== session.classId) {
+    return <NotFound message="Assignment not found" />;
+  }
+
+  if (assignment.student_id && assignment.student_id !== session.studentId) {
     return <NotFound message="Assignment not found" />;
   }
 

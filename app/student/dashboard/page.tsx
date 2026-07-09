@@ -23,6 +23,7 @@ export default async function StudentDashboardPage() {
     .select("id, lesson_id, due_at")
     .eq("class_id", session.classId)
     .eq("is_active", true)
+    .or(`student_id.is.null,student_id.eq.${session.studentId}`)
     .order("assigned_at", { ascending: false });
 
   return (
