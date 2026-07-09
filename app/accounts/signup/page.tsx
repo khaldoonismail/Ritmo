@@ -1,32 +1,33 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
-export default function LoginPage() {
-  const router = useRouter();
+export default function SignupPage() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
     const supabase = createBrowserSupabaseClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
+      options: { data: { name } },
     });
     setLoading(false);
-    if (signInError) {
-      setError(signInError.message);
+    if (signUpError) {
+      setError(signUpError.message);
       return;
     }
-    router.push("/academy/teacher");
+    setDone(true);
   }
 
   const inputStyle: React.CSSProperties = {
@@ -39,6 +40,37 @@ export default function LoginPage() {
     textAlign: "left",
     fontFamily: "inherit",
   };
+
+  if (done) {
+    return (
+      <main
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "1rem",
+          textAlign: "center",
+          padding: "2rem",
+        }}
+      >
+        <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
+          Check your email
+        </h1>
+        <p style={{ opacity: 0.7, maxWidth: "360px" }}>
+          We sent a confirmation link to {email}. Confirm your address, then
+          log in.
+        </p>
+        <Link
+          href="/accounts/login"
+          style={{ color: "inherit", textDecoration: "underline" }}
+        >
+          ← Back to Log in
+        </Link>
+      </main>
+    );
+  }
 
   return (
     <main
@@ -54,8 +86,11 @@ export default function LoginPage() {
       }}
     >
       <h1 style={{ fontSize: "3rem", fontWeight: 800, margin: 0 }}>Ritmo</h1>
+      <p style={{ fontSize: "1.1rem", opacity: 0.7, margin: 0 }}>
+        Create a teacher account
+      </p>
       <form
-        onSubmit={handleLogin}
+        onSubmit={handleSignup}
         style={{
           display: "flex",
           flexDirection: "column",
@@ -65,6 +100,14 @@ export default function LoginPage() {
           marginTop: "1rem",
         }}
       >
+        <input
+          type="text"
+          placeholder="Full name"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          style={inputStyle}
+        />
         <input
           type="email"
           placeholder="Email"
@@ -77,6 +120,7 @@ export default function LoginPage() {
           type="password"
           placeholder="Password"
           required
+          minLength={6}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           style={inputStyle}
@@ -102,12 +146,12 @@ export default function LoginPage() {
             marginTop: "0.25rem",
           }}
         >
-          {loading ? "Logging in..." : "Log in"}
+          {loading ? "Creating account..." : "Sign up"}
         </button>
       </form>
 
       <Link
-        href="/accounts/signup"
+        href="/accounts/login"
         style={{
           fontSize: "0.9rem",
           opacity: 0.7,
@@ -116,7 +160,7 @@ export default function LoginPage() {
           marginTop: "0.5rem",
         }}
       >
-        Create a teacher account
+        Already have an account? Log in
       </Link>
     </main>
   );

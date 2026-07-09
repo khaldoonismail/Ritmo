@@ -2,6 +2,7 @@ import Link from "next/link";
 
 export default function TeacherDashboard() {
   const sections = [
+    { label: "My Classes", href: "/teacher/classes" },
     { label: "Create a Lesson", href: "/academy/teacher/create-lesson" },
     { label: "Assessment", href: "/academy/teacher/assessment" },
     { label: "Activities Library", href: "/academy/teacher/activities" },

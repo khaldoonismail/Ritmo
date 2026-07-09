@@ -2,7 +2,8 @@ import Link from "next/link";
 
 export default function Home() {
   const links = [
-    { label: "Log In", href: "/accounts/login" },
+    { label: "Log In (Teacher)", href: "/accounts/login" },
+    { label: "Log In (Student)", href: "/student/login" },
     { label: "Academy — Teacher Dashboard", href: "/academy/teacher" },
     { label: "Games — Teacher Dashboard", href: "/games/teacher" },
   ];
