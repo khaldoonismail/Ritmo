@@ -69,6 +69,7 @@ export default function ManageClassPage() {
   const [showAssignLesson, setShowAssignLesson] = useState(false);
   const [dueDate, setDueDate] = useState("");
   const [assignError, setAssignError] = useState("");
+  const [removeError, setRemoveError] = useState("");
   const [assignBusy, setAssignBusy] = useState(false);
 
   async function loadAll() {
@@ -182,6 +183,22 @@ export default function ManageClassPage() {
 
   async function assignLessonToClass(lessonId: string) {
     setAssignError("");
+
+    const newDueDate = dueDate || null;
+    const isDuplicate = (assignments || []).some((a) => {
+      if (a.lesson_id !== lessonId) return false;
+      const existingDueDate = a.due_at ? a.due_at.slice(0, 10) : null;
+      return existingDueDate === newDueDate;
+    });
+    if (isDuplicate) {
+      setAssignError(
+        newDueDate
+          ? "This lesson is already assigned to this class with that due date."
+          : "This lesson is already assigned to this class."
+      );
+      return;
+    }
+
     setAssignBusy(true);
 
     const supabase = createBrowserSupabaseClient();
@@ -213,6 +230,22 @@ export default function ManageClassPage() {
     );
     setDueDate("");
     setAssignBusy(false);
+  }
+
+  async function removeAssignment(assignmentId: string) {
+    setRemoveError("");
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase
+      .from("assignments")
+      .delete()
+      .eq("id", assignmentId);
+
+    if (error) {
+      setRemoveError(error.message);
+      return;
+    }
+
+    setAssignments((prev) => (prev || []).filter((a) => a.id !== assignmentId));
   }
 
   async function copyAndEditLesson(lesson: LessonRow) {
@@ -654,6 +687,12 @@ export default function ManageClassPage() {
           </div>
         )}
 
+        {removeError && (
+          <p style={{ color: "#c00", fontSize: "0.85rem", marginBottom: "0.5rem" }}>
+            {removeError}
+          </p>
+        )}
+
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           {assignments === null && <p style={{ opacity: 0.5 }}>Loading...</p>}
           {assignments?.length === 0 && (
@@ -664,7 +703,9 @@ export default function ManageClassPage() {
               key={a.id}
               style={{
                 display: "flex",
+                alignItems: "center",
                 justifyContent: "space-between",
+                gap: "0.6rem",
                 padding: "0.6rem 0.9rem",
                 border: "1px solid #ddd",
                 borderRadius: "8px",
@@ -676,11 +717,29 @@ export default function ManageClassPage() {
               <span style={{ fontWeight: 700 }}>
                 {lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id)}
               </span>
-              <span style={{ opacity: 0.6, direction: "ltr" }}>
-                {a.due_at
-                  ? `Due ${new Date(a.due_at).toLocaleDateString()}`
-                  : "No due date"}
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexShrink: 0 }}>
+                <span style={{ opacity: 0.6, direction: "ltr" }}>
+                  {a.due_at
+                    ? `Due ${new Date(a.due_at).toLocaleDateString()}`
+                    : "No due date"}
+                </span>
+                <button
+                  onClick={() => removeAssignment(a.id)}
+                  title="Remove this assignment"
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    padding: "0.2rem 0.5rem",
+                    borderRadius: "6px",
+                    border: "1px solid #ddd",
+                    background: "#fff",
+                    color: "#c00",
+                    cursor: "pointer",
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
             </div>
           ))}
         </div>
