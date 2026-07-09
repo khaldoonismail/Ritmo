@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { lessonTitle as legacyLessonTitle } from "@/lib/lessons";
 import type { LessonBlockData } from "@/lib/lessonBlocks";
+import { forkLesson } from "@/lib/forkLesson";
 
 interface ClassInfo {
   id: string;
@@ -343,27 +344,15 @@ export default function ManageClassPage() {
     setAssignBusy(true);
 
     const supabase = createBrowserSupabaseClient();
-    const { data: newLesson, error } = await supabase
-      .from("lessons")
-      .insert({
-        teacher_id: myTeacherId,
-        title: lesson.title,
-        blocks: lesson.blocks,
-        is_public: false,
-        forked_from: lesson.id,
-      })
-      .select("id")
-      .single();
+    const result = await forkLesson(supabase, myTeacherId, lesson);
 
-    if (error || !newLesson) {
+    if ("error" in result) {
       setAssignBusy(false);
-      setAssignError(error?.message || "Could not copy lesson.");
+      setAssignError(result.error);
       return;
     }
 
-    await supabase.rpc("increment_lesson_usage", { lesson_id: lesson.id });
-
-    router.push(`/academy/teacher/create-lesson?lessonId=${newLesson.id}`);
+    router.push(`/academy/teacher/create-lesson?lessonId=${result.id}`);
   }
 
   const inputStyle: React.CSSProperties = {

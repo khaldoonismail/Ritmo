@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { LessonBlock } from "@/lib/lessonContent";
+import type { LessonBlockData as LessonBlock } from "@/lib/lessonBlocks";
 import { resolveVideoSource, UNSUPPORTED_VIDEO_MESSAGE } from "@/lib/videoEmbed";
 
 // Renders each block type the same way app/academy/teacher/create-lesson's
@@ -151,6 +151,10 @@ export default function LessonView({
                 </p>
               );
             })()}
+
+            {block.type === "audio" && block.url && (
+              <audio src={block.url} controls style={{ width: "100%" }} />
+            )}
 
             {block.type === "question" && <QuestionBlock block={block} />}
           </div>

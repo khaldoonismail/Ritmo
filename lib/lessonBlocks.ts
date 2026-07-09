@@ -13,10 +13,13 @@ export type LessonBlockType =
 export interface LessonBlockData {
   id: string;
   type: LessonBlockType;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  // Canvas position/size — only meaningful in the create-lesson editor.
+  // Optional because read-only consumers (e.g. the student LessonView, or
+  // statically-authored content) don't have or need canvas coordinates.
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
   text?: string;
   options?: string[];
   correctIndex?: number;

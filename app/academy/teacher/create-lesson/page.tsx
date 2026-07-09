@@ -340,8 +340,8 @@ function CreateLessonEditor() {
         }}
       >
         <h1 style={{ fontSize: "1.75rem", fontWeight: 800, margin: 0 }}>{loadError}</h1>
-        <Link href="/academy/teacher" style={{ color: "inherit", textDecoration: "underline" }}>
-          ← Back to Teacher Dashboard
+        <Link href="/teacher/lessons" style={{ color: "inherit", textDecoration: "underline" }}>
+          ← Back to My Lessons
         </Link>
       </main>
     );
@@ -368,8 +368,8 @@ function CreateLessonEditor() {
           You can't edit a lesson that belongs to another teacher. Use "Copy &amp; Edit"
           from the Assign Lesson picker to make your own editable copy instead.
         </p>
-        <Link href="/academy/teacher" style={{ color: "inherit", textDecoration: "underline" }}>
-          ← Back to Teacher Dashboard
+        <Link href="/teacher/lessons" style={{ color: "inherit", textDecoration: "underline" }}>
+          ← Back to My Lessons
         </Link>
       </main>
     );
@@ -910,7 +910,7 @@ function CreateLessonEditor() {
       </div>
 
       <Link
-        href="/academy/teacher"
+        href="/teacher/lessons"
         style={{
           fontSize: "0.9rem",
           opacity: 0.7,
@@ -919,7 +919,7 @@ function CreateLessonEditor() {
           marginTop: "0.5rem",
         }}
       >
-        ← Back to Teacher Dashboard
+        ← Back to My Lessons
       </Link>
 
       {showPublishModal && (
