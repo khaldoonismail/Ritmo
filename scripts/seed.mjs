@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { randomJoinCode } from "../lib/joinCode.js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -48,22 +49,6 @@ const PUBLIC_LESSON_BLOCKS = [
     correctIndex: 2,
   },
 ];
-
-function randomJoinCode() {
-  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const digits = "23456789";
-  const prefix = Array.from(
-    { length: 4 },
-    () => letters[Math.floor(Math.random() * letters.length)]
-  ).join("");
-  const suffix =
-    "K" +
-    Array.from(
-      { length: 3 },
-      () => digits[Math.floor(Math.random() * digits.length)]
-    ).join("");
-  return `${prefix}-${suffix}`;
-}
 
 function randomPin() {
   return String(Math.floor(1000 + Math.random() * 9000));

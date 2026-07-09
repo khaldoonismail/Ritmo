@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { randomJoinCode } from "@/lib/joinCode";
 
 interface ClassRow {
   id: string;
@@ -16,6 +17,12 @@ export default function TeacherClassesPage() {
   const router = useRouter();
   const [classes, setClasses] = useState<ClassRow[] | null>(null);
   const [error, setError] = useState("");
+  const [myTeacherId, setMyTeacherId] = useState<string | null>(null);
+
+  const [showCreateClass, setShowCreateClass] = useState(false);
+  const [newClassName, setNewClassName] = useState("");
+  const [createError, setCreateError] = useState("");
+  const [createBusy, setCreateBusy] = useState(false);
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -29,6 +36,13 @@ export default function TeacherClassesPage() {
         router.push("/accounts/login");
         return;
       }
+
+      const { data: teacherRow } = await supabase
+        .from("teachers")
+        .select("id")
+        .eq("auth_user_id", session.user.id)
+        .maybeSingle();
+      if (teacherRow) setMyTeacherId(teacherRow.id);
 
       const { data, error: fetchError } = await supabase
         .from("classes")
@@ -53,6 +67,53 @@ export default function TeacherClassesPage() {
     load();
   }, [router]);
 
+  async function handleCreateClass(e: React.FormEvent) {
+    e.preventDefault();
+    if (!myTeacherId || !newClassName.trim()) return;
+    setCreateError("");
+    setCreateBusy(true);
+
+    const supabase = createBrowserSupabaseClient();
+
+    let lastError: { code?: string; message: string } | null = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { data, error } = await supabase
+        .from("classes")
+        .insert({
+          teacher_id: myTeacherId,
+          name: newClassName.trim(),
+          join_code: randomJoinCode(),
+        })
+        .select("id")
+        .single();
+
+      if (!error && data) {
+        router.push(`/teacher/classes/${data.id}`);
+        return;
+      }
+
+      lastError = error;
+      // 23505 = unique_violation; only a join_code collision is worth
+      // retrying with a freshly generated code. Anything else, stop.
+      if (error?.code !== "23505") break;
+    }
+
+    setCreateBusy(false);
+    setCreateError(lastError?.message || "Could not create class.");
+  }
+
+  const inputStyle: React.CSSProperties = {
+    fontSize: "0.95rem",
+    padding: "0.55rem 0.75rem",
+    borderRadius: "8px",
+    border: "1px solid #ddd",
+    outline: "none",
+    direction: "ltr",
+    textAlign: "left",
+    fontFamily: "inherit",
+    width: "100%",
+  };
+
   return (
     <main
       style={{
@@ -72,6 +133,73 @@ export default function TeacherClassesPage() {
         <p style={{ color: "#c00", fontSize: "0.9rem" }}>{error}</p>
       )}
 
+      <div style={{ width: "100%", maxWidth: "600px" }}>
+        <button
+          onClick={() => setShowCreateClass((v) => !v)}
+          style={{
+            fontSize: "0.95rem",
+            fontWeight: 700,
+            padding: "0.6rem 1rem",
+            borderRadius: "8px",
+            border: "1px dashed #999",
+            background: "#fafafa",
+            color: "#111",
+            cursor: "pointer",
+          }}
+        >
+          Create Class +
+        </button>
+
+        {showCreateClass && (
+          <form
+            onSubmit={handleCreateClass}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.5rem",
+              border: "1px solid #ddd",
+              borderRadius: "10px",
+              padding: "0.9rem",
+              marginTop: "0.6rem",
+              background: "#fff",
+              textAlign: "left",
+            }}
+          >
+            <input
+              type="text"
+              placeholder="Class name"
+              value={newClassName}
+              onChange={(e) => setNewClassName(e.target.value)}
+              style={inputStyle}
+              required
+              autoFocus
+            />
+            {createError && (
+              <p style={{ color: "#c00", fontSize: "0.85rem", margin: 0 }}>
+                {createError}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={createBusy}
+              style={{
+                fontSize: "0.95rem",
+                fontWeight: 700,
+                padding: "0.6rem 1rem",
+                borderRadius: "8px",
+                border: "none",
+                background: "#111",
+                color: "#fff",
+                cursor: createBusy ? "default" : "pointer",
+                opacity: createBusy ? 0.6 : 1,
+              }}
+            >
+              {createBusy ? "Creating..." : "Create Class"}
+            </button>
+          </form>
+        )}
+      </div>
+
       <div
         style={{
           display: "flex",
@@ -79,7 +207,7 @@ export default function TeacherClassesPage() {
           gap: "0.75rem",
           width: "100%",
           maxWidth: "600px",
-          marginTop: "1rem",
+          marginTop: "0.5rem",
         }}
       >
         {classes === null && !error && (
