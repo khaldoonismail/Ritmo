@@ -62,7 +62,13 @@ export default async function StudentLessonPage({
     return <NotFound message="Assignment not found" />;
   }
 
-  const lesson = getLessonContent(assignment.lesson_id);
+  const { data: realLesson } = await supabase
+    .from("lessons")
+    .select("title, blocks")
+    .eq("id", assignment.lesson_id)
+    .maybeSingle();
+
+  const lesson = realLesson || getLessonContent(assignment.lesson_id);
   if (!lesson) {
     return <NotFound message="This lesson isn't available yet" />;
   }

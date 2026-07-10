@@ -2,6 +2,8 @@
 // create-lesson canvas editor and the student-facing lesson viewer. This is
 // exactly what gets persisted into lessons.blocks (jsonb) in Supabase.
 
+import type { QuestionData } from "@/lib/questionTypes";
+
 export type LessonBlockType =
   | "text"
   | "question"
@@ -26,4 +28,5 @@ export interface LessonBlockData {
   url?: string;
   topic?: string;
   generated?: string;
+  question?: QuestionData;
 }

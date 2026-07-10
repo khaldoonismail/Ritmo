@@ -5,6 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { resolveVideoSource, UNSUPPORTED_VIDEO_MESSAGE } from "@/lib/videoEmbed";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { validateAndReadImage } from "@/lib/imageUpload";
+import {
+  QuestionData,
+  defaultQuestionData,
+  normalizeQuestionData,
+} from "@/lib/questionTypes";
+import QuestionEditor from "@/components/QuestionEditor";
 
 type BlockType = "text" | "question" | "image" | "video" | "audio" | "ai";
 
@@ -21,6 +28,7 @@ interface Block {
   url?: string;
   topic?: string;
   generated?: string;
+  question?: QuestionData;
 }
 
 let zCounter = 1;
@@ -29,7 +37,7 @@ function newBlock(type: BlockType, x: number, y: number): Block {
   const id = Math.random().toString(36).slice(2);
   const base = { id, type, x, y, width: 280, height: 200 };
   if (type === "question") {
-    return { ...base, height: 260, text: "", options: ["", "", "", ""], correctIndex: 0 };
+    return { ...base, width: 320, height: 420, question: defaultQuestionData("multiple_choice") };
   }
   return { ...base, text: "", url: "", topic: "", generated: "" };
 }
@@ -42,9 +50,6 @@ const typeLabels: Record<BlockType, string> = {
   audio: "Audio",
   ai: "AI Suggestion",
 };
-
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
-const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 export default function CreateLessonPage() {
   return (
@@ -241,21 +246,14 @@ function CreateLessonEditor() {
     });
   }
 
-  function validateAndSetImage(id: string, file: File) {
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      setImageError(id, "Only JPG, PNG, WEBP, or GIF images are supported.");
+  async function validateAndSetImage(id: string, file: File) {
+    const result = await validateAndReadImage(file);
+    if (!result.ok) {
+      setImageError(id, result.error);
       return;
     }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setImageError(id, "Image is too large — max 5MB.");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      updateBlock(id, { url: reader.result as string });
-      clearImageError(id);
-    };
-    reader.readAsDataURL(file);
+    updateBlock(id, { url: result.url });
+    clearImageError(id);
   }
 
   // Dragging
@@ -593,46 +591,14 @@ function CreateLessonEditor() {
               )}
 
               {block.type === "question" && (
-                <>
-                  <input
-                    type="text"
-                    placeholder="Question text"
-                    value={block.text}
-                    onChange={(e) =>
-                      updateBlock(block.id, { text: e.target.value })
-                    }
-                    style={inputStyle}
-                  />
-                  {block.options?.map((opt, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.3rem",
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        checked={block.correctIndex === i}
-                        onChange={() =>
-                          updateBlock(block.id, { correctIndex: i })
-                        }
-                      />
-                      <input
-                        type="text"
-                        placeholder={`Option ${i + 1}`}
-                        value={opt}
-                        onChange={(e) => {
-                          const newOptions = [...(block.options || [])];
-                          newOptions[i] = e.target.value;
-                          updateBlock(block.id, { options: newOptions });
-                        }}
-                        style={inputStyle}
-                      />
-                    </div>
-                  ))}
-                </>
+                <QuestionEditor
+                  value={normalizeQuestionData(block)}
+                  onChange={(patch) =>
+                    updateBlock(block.id, {
+                      question: { ...normalizeQuestionData(block), ...patch },
+                    })
+                  }
+                />
               )}
 
               {block.type === "image" && (
