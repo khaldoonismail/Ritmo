@@ -6,8 +6,10 @@ import {
   STUDENT_SESSION_COOKIE,
 } from "@/lib/studentSession";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { lessonTitle } from "@/lib/lessons";
+import { lessonTitle as legacyLessonTitle } from "@/lib/lessons";
 import LogoutButton from "./LogoutButton";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function StudentDashboardPage() {
   const token = cookies().get(STUDENT_SESSION_COOKIE)?.value;
@@ -25,6 +27,22 @@ export default async function StudentDashboardPage() {
     .eq("is_active", true)
     .or(`student_id.is.null,student_id.eq.${session.studentId}`)
     .order("assigned_at", { ascending: false });
+
+  // assignments.lesson_id is either a real lessons.id (uuid) or the legacy
+  // static demo lesson_id ("1"), which isn't a valid uuid — only look up
+  // the real ones, and fall back to the static title map for the rest.
+  const realLessonIds = [
+    ...new Set((assignments || []).map((a) => a.lesson_id)),
+  ].filter((id) => UUID_RE.test(id));
+
+  let lessonTitleMap = new Map<string, string>();
+  if (realLessonIds.length > 0) {
+    const { data: lessonRows } = await supabase
+      .from("lessons")
+      .select("id, title")
+      .in("id", realLessonIds);
+    lessonTitleMap = new Map((lessonRows || []).map((l) => [l.id, l.title]));
+  }
 
   return (
     <main
@@ -76,7 +94,9 @@ export default async function StudentDashboardPage() {
               textAlign: "left",
             }}
           >
-            <span style={{ fontWeight: 700 }}>{lessonTitle(a.lesson_id)}</span>
+            <span style={{ fontWeight: 700 }}>
+              {lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id)}
+            </span>
             {a.due_at && (
               <span style={{ opacity: 0.6, fontSize: "0.85rem", direction: "ltr" }}>
                 Due {new Date(a.due_at).toLocaleDateString()}
