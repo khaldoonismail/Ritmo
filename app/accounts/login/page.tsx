@@ -55,10 +55,16 @@ export default function LoginPage() {
     >
       <Link
         href="/"
-        style={{ color: "inherit", textDecoration: "none" }}
+        style={{
+          fontSize: "0.9rem",
+          opacity: 0.7,
+          color: "inherit",
+          textDecoration: "underline",
+        }}
       >
-        <h1 style={{ fontSize: "3rem", fontWeight: 800, margin: 0 }}>Ritmo</h1>
+        ← Back to Home
       </Link>
+      <h1 style={{ fontSize: "3rem", fontWeight: 800, margin: 0 }}>Ritmo</h1>
       <form
         onSubmit={handleLogin}
         style={{

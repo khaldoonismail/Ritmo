@@ -77,10 +77,16 @@ export default function StudentLoginPage() {
     >
       <Link
         href="/"
-        style={{ color: "inherit", textDecoration: "none" }}
+        style={{
+          fontSize: "0.9rem",
+          opacity: 0.7,
+          color: "inherit",
+          textDecoration: "underline",
+        }}
       >
-        <h1 style={{ fontSize: "3rem", fontWeight: 800, margin: 0 }}>Ritmo</h1>
+        ← Back to Home
       </Link>
+      <h1 style={{ fontSize: "3rem", fontWeight: 800, margin: 0 }}>Ritmo</h1>
       <p style={{ fontSize: "1.1rem", opacity: 0.7, margin: 0 }}>
         Student Login
       </p>
