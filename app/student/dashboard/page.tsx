@@ -11,6 +11,17 @@ import LogoutButton from "./LogoutButton";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+type ProgressStatus = "not_started" | "in_progress" | "completed";
+
+const STATUS_DISPLAY: Record<
+  ProgressStatus,
+  { icon: string; label: string; color: string }
+> = {
+  completed: { icon: "✅", label: "Completed", color: "#1a7f37" },
+  in_progress: { icon: "🔵", label: "In Progress", color: "#1a5fd6" },
+  not_started: { icon: "⚪", label: "Not Started", color: "#6b7280" },
+};
+
 export default async function StudentDashboardPage() {
   const token = cookies().get(STUDENT_SESSION_COOKIE)?.value;
   const session = token ? await verifyStudentSessionToken(token) : null;
@@ -44,6 +55,21 @@ export default async function StudentDashboardPage() {
     lessonTitleMap = new Map((lessonRows || []).map((l) => [l.id, l.title]));
   }
 
+  // Scoped to this student's own id (never another student's) to prevent
+  // leaking another student's progress via this join.
+  let progressMap = new Map<string, ProgressStatus>();
+  const assignmentIds = (assignments || []).map((a) => a.id);
+  if (assignmentIds.length > 0) {
+    const { data: progressRows } = await supabase
+      .from("student_progress")
+      .select("assignment_id, status")
+      .eq("student_id", session.studentId)
+      .in("assignment_id", assignmentIds);
+    progressMap = new Map(
+      (progressRows || []).map((p) => [p.assignment_id, p.status as ProgressStatus])
+    );
+  }
+
   return (
     <main
       style={{
@@ -71,39 +97,64 @@ export default async function StudentDashboardPage() {
           flexDirection: "column",
           gap: "0.75rem",
           width: "100%",
-          maxWidth: "420px",
+          maxWidth: "480px",
           marginTop: "1rem",
         }}
       >
         {(!assignments || assignments.length === 0) && (
-          <p style={{ opacity: 0.5 }}>No lessons assigned yet.</p>
+          <p style={{ opacity: 0.6, fontSize: "1.1rem" }}>
+            You don't have any lessons yet — check with your teacher!
+          </p>
         )}
-        {assignments?.map((a) => (
-          <Link
-            key={a.id}
-            href={`/student/lesson/${a.id}`}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "0.75rem 1rem",
-              borderRadius: "8px",
-              border: "1px solid #ddd",
-              background: "#fff",
-              color: "inherit",
-              textDecoration: "none",
-              textAlign: "left",
-            }}
-          >
-            <span style={{ fontWeight: 700 }}>
-              {lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id)}
-            </span>
-            {a.due_at && (
-              <span style={{ opacity: 0.6, fontSize: "0.85rem", direction: "ltr" }}>
-                Due {new Date(a.due_at).toLocaleDateString()}
+        {assignments?.map((a) => {
+          const status = progressMap.get(a.id) ?? "not_started";
+          const { icon, label, color } = STATUS_DISPLAY[status];
+          return (
+            <Link
+              key={a.id}
+              href={`/student/lesson/${a.id}`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "1rem",
+                padding: "1rem 1.25rem",
+                borderRadius: "12px",
+                border: "1px solid #ddd",
+                background: "#fff",
+                color: "inherit",
+                textDecoration: "none",
+                textAlign: "left",
+              }}
+            >
+              <span style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <span style={{ fontSize: "1.4rem" }} aria-hidden="true">
+                  {icon}
+                </span>
+                <span style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+                  <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>
+                    {lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id)}
+                  </span>
+                  {a.due_at && (
+                    <span style={{ opacity: 0.6, fontSize: "0.8rem", direction: "ltr" }}>
+                      Due {new Date(a.due_at).toLocaleDateString()}
+                    </span>
+                  )}
+                </span>
               </span>
-            )}
-          </Link>
-        ))}
+              <span
+                style={{
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  color,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {label}
+              </span>
+            </Link>
+          );
+        })}
       </div>
 
       <LogoutButton />
