@@ -16,6 +16,22 @@ const STATUS_DISPLAY: Record<
   not_started: { icon: "⚪", label: "Not Started", color: "#6b7280" },
 };
 
+type PerformanceRating = "excellent" | "very_good" | "good" | "needs_practice";
+
+const RATING_DISPLAY: Record<PerformanceRating, { label: string; color: string }> = {
+  excellent: { label: "Excellent", color: "#1a7f37" },
+  very_good: { label: "Very Good", color: "#1a7f37" },
+  good: { label: "Good", color: "#a68b00" },
+  needs_practice: { label: "Needs Practice", color: "#c76a00" },
+};
+
+const RATING_OPTIONS: PerformanceRating[] = [
+  "excellent",
+  "very_good",
+  "good",
+  "needs_practice",
+];
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ClassRow {
@@ -43,6 +59,7 @@ interface ProgressRow {
   assignment_id: string;
   status: ProgressStatus;
   score: number | null;
+  performance_rating: PerformanceRating | null;
   updated_at: string;
 }
 
@@ -51,6 +68,7 @@ interface RosterEntry {
   studentName: string;
   status: ProgressStatus;
   score: number | null;
+  rating: PerformanceRating | null;
   updatedAt: string | null;
 }
 
@@ -132,7 +150,7 @@ export default function StudentProgress() {
       if (assignmentIds.length > 0) {
         const { data } = await supabase
           .from("student_progress")
-          .select("student_id, assignment_id, status, score, updated_at")
+          .select("student_id, assignment_id, status, score, performance_rating, updated_at")
           .in("assignment_id", assignmentIds);
         progressRows = data || [];
       }
@@ -163,6 +181,7 @@ export default function StudentProgress() {
               studentName: s.name,
               status: p?.status ?? "not_started",
               score: p?.score ?? null,
+              rating: p?.performance_rating ?? null,
               updatedAt: p?.updated_at ?? null,
             };
           })
@@ -222,6 +241,49 @@ export default function StudentProgress() {
       const entries = (next.get(assignmentId) || []).map((e) =>
         e.studentId === studentId
           ? { ...e, score, updatedAt: new Date().toISOString() }
+          : e
+      );
+      next.set(assignmentId, entries);
+      return next;
+    });
+  }
+
+  async function saveRating(
+    assignmentId: string,
+    studentId: string,
+    rating: PerformanceRating | null
+  ) {
+    const key = `${assignmentId}:${studentId}`;
+    const currentStatus =
+      roster.get(assignmentId)?.find((e) => e.studentId === studentId)?.status ??
+      "not_started";
+
+    setSavingKey(key);
+    setSaveError((prev) => ({ ...prev, [key]: "" }));
+
+    const supabase = createBrowserSupabaseClient();
+    const { error: saveErr } = await supabase.from("student_progress").upsert(
+      {
+        student_id: studentId,
+        assignment_id: assignmentId,
+        performance_rating: rating,
+        status: currentStatus,
+      },
+      { onConflict: "student_id,assignment_id" }
+    );
+
+    setSavingKey(null);
+
+    if (saveErr) {
+      setSaveError((prev) => ({ ...prev, [key]: saveErr.message }));
+      return;
+    }
+
+    setRoster((prev) => {
+      const next = new Map(prev);
+      const entries = (next.get(assignmentId) || []).map((e) =>
+        e.studentId === studentId
+          ? { ...e, rating, updatedAt: new Date().toISOString() }
           : e
       );
       next.set(assignmentId, entries);
@@ -322,6 +384,7 @@ export default function StudentProgress() {
                       <th style={{ textAlign: "left", padding: "0.4rem" }}>Student</th>
                       <th style={{ textAlign: "left", padding: "0.4rem" }}>Status</th>
                       <th style={{ textAlign: "left", padding: "0.4rem" }}>Score</th>
+                      <th style={{ textAlign: "left", padding: "0.4rem" }}>Rating</th>
                       <th style={{ textAlign: "left", padding: "0.4rem" }}>Last updated</th>
                     </tr>
                   </thead>
@@ -353,6 +416,36 @@ export default function StudentProgress() {
                                 {saveError[key]}
                               </div>
                             )}
+                          </td>
+                          <td style={{ padding: "0.4rem" }}>
+                            <select
+                              value={entry.rating ?? ""}
+                              onChange={(e) =>
+                                saveRating(
+                                  a.id,
+                                  entry.studentId,
+                                  e.target.value === ""
+                                    ? null
+                                    : (e.target.value as PerformanceRating)
+                                )
+                              }
+                              disabled={savingKey === key}
+                              style={{
+                                ...inputStyle,
+                                width: "140px",
+                                color: entry.rating
+                                  ? RATING_DISPLAY[entry.rating].color
+                                  : undefined,
+                                fontWeight: entry.rating ? 600 : 400,
+                              }}
+                            >
+                              <option value="">—</option>
+                              {RATING_OPTIONS.map((r) => (
+                                <option key={r} value={r}>
+                                  {RATING_DISPLAY[r].label}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                           <td style={{ padding: "0.4rem", opacity: 0.6, fontSize: "0.8rem" }}>
                             {entry.updatedAt
