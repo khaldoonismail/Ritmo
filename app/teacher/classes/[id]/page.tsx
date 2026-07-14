@@ -7,6 +7,8 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { lessonTitle as legacyLessonTitle } from "@/lib/lessons";
 import type { LessonBlockData } from "@/lib/lessonBlocks";
 import { forkLesson } from "@/lib/forkLesson";
+import { randomPin } from "@/lib/studentPin";
+import UploadStudentsExcel from "./UploadStudentsExcel";
 
 interface ClassInfo {
   id: string;
@@ -39,10 +41,6 @@ interface LessonRow {
   teachers: { name: string } | { name: string }[] | null;
 }
 
-function randomPin() {
-  return String(Math.floor(1000 + Math.random() * 9000));
-}
-
 function ownerNameOf(row: LessonRow): string | null {
   if (Array.isArray(row.teachers)) return row.teachers[0]?.name ?? null;
   return row.teachers?.name ?? null;
@@ -64,6 +62,7 @@ export default function ManageClassPage() {
   const [lessonSort, setLessonSort] = useState<"az" | "newest">("newest");
 
   const [showAddStudent, setShowAddStudent] = useState(false);
+  const [showUploadStudents, setShowUploadStudents] = useState(false);
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentPin, setNewStudentPin] = useState(randomPin());
   const [addStudentError, setAddStudentError] = useState("");
@@ -517,22 +516,49 @@ export default function ManageClassPage() {
           <h2 style={{ fontSize: "1.4rem", fontWeight: 700, margin: 0 }}>
             Students
           </h2>
-          <button
-            onClick={() => setShowAddStudent((v) => !v)}
-            style={{
-              fontSize: "0.9rem",
-              fontWeight: 700,
-              padding: "0.5rem 0.9rem",
-              borderRadius: "8px",
-              border: "1px dashed #999",
-              background: "#fafafa",
-              color: "#111",
-              cursor: "pointer",
-            }}
-          >
-            + Add Student
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              onClick={() => setShowAddStudent((v) => !v)}
+              style={{
+                fontSize: "0.9rem",
+                fontWeight: 700,
+                padding: "0.5rem 0.9rem",
+                borderRadius: "8px",
+                border: "1px dashed #999",
+                background: "#fafafa",
+                color: "#111",
+                cursor: "pointer",
+              }}
+            >
+              + Add Student
+            </button>
+            <button
+              onClick={() => setShowUploadStudents((v) => !v)}
+              style={{
+                fontSize: "0.9rem",
+                fontWeight: 700,
+                padding: "0.5rem 0.9rem",
+                borderRadius: "8px",
+                border: "1px dashed #999",
+                background: "#fafafa",
+                color: "#111",
+                cursor: "pointer",
+              }}
+            >
+              Upload Students (Excel)
+            </button>
+          </div>
         </div>
+
+        {showUploadStudents && (
+          <UploadStudentsExcel
+            classId={classId}
+            onAdded={(newStudents) =>
+              setStudents((prev) => [...(prev || []), ...newStudents])
+            }
+            onDone={() => setShowUploadStudents(false)}
+          />
+        )}
 
         {lastAddedPin && (
           <div
