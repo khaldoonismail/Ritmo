@@ -9,6 +9,8 @@ import type { LessonBlockData } from "@/lib/lessonBlocks";
 import { forkLesson } from "@/lib/forkLesson";
 import { randomPin } from "@/lib/studentPin";
 import UploadStudentsExcel from "./UploadStudentsExcel";
+import StudentThumbnail from "./StudentThumbnail";
+import StudentPhotoUploader from "./StudentPhotoUploader";
 
 interface ClassInfo {
   id: string;
@@ -19,6 +21,7 @@ interface ClassInfo {
 interface Student {
   id: string;
   name: string;
+  avatar_url: string | null;
 }
 
 interface Assignment {
@@ -63,6 +66,7 @@ export default function ManageClassPage() {
 
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [showUploadStudents, setShowUploadStudents] = useState(false);
+  const [photoStudentId, setPhotoStudentId] = useState<string | null>(null);
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentPin, setNewStudentPin] = useState(randomPin());
   const [addStudentError, setAddStudentError] = useState("");
@@ -119,7 +123,7 @@ export default function ManageClassPage() {
 
     const { data: studentRows, error: studentsError } = await supabase
       .from("students")
-      .select("id, name")
+      .select("id, name, avatar_url")
       .eq("class_id", classId)
       .order("name", { ascending: true });
 
@@ -179,7 +183,7 @@ export default function ManageClassPage() {
         name: newStudentName.trim(),
         pin: newStudentPin,
       })
-      .select("id, name")
+      .select("id, name, avatar_url")
       .single();
 
     setAddStudentBusy(false);
@@ -554,7 +558,10 @@ export default function ManageClassPage() {
           <UploadStudentsExcel
             classId={classId}
             onAdded={(newStudents) =>
-              setStudents((prev) => [...(prev || []), ...newStudents])
+              setStudents((prev) => [
+                ...(prev || []),
+                ...newStudents.map((s) => ({ ...s, avatar_url: null })),
+              ])
             }
             onDone={() => setShowUploadStudents(false)}
           />
@@ -687,20 +694,20 @@ export default function ManageClassPage() {
           {sortedStudents.map((s) => {
             const isEditing = editingStudentId === s.id;
             return (
-              <div
-                key={s.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "0.6rem",
-                  padding: "0.6rem 0.9rem",
-                  border: "1px solid #ddd",
-                  borderRadius: "8px",
-                  background: "#fff",
-                  textAlign: "left",
-                }}
-              >
+              <div key={s.id} style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "0.6rem",
+                    padding: "0.6rem 0.9rem",
+                    border: "1px solid #ddd",
+                    borderRadius: "8px",
+                    background: "#fff",
+                    textAlign: "left",
+                  }}
+                >
                 {isEditing ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", flex: 1 }}>
                     <input
@@ -730,8 +737,17 @@ export default function ManageClassPage() {
                   </div>
                 ) : (
                   <>
-                    <span>{s.name}</span>
-                    <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                      <StudentThumbnail avatarUrl={s.avatar_url} />
+                      <span>{s.name}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0, flexWrap: "wrap" }}>
+                      <button
+                        onClick={() => setPhotoStudentId((v) => (v === s.id ? null : s.id))}
+                        style={secondaryButtonStyle}
+                      >
+                        Photo
+                      </button>
                       <button onClick={() => startEditStudent(s)} style={secondaryButtonStyle}>
                         Edit
                       </button>
@@ -751,6 +767,23 @@ export default function ManageClassPage() {
                     </div>
                   </>
                 )}
+              </div>
+              {photoStudentId === s.id && (
+                <StudentPhotoUploader
+                  studentId={s.id}
+                  studentName={s.name}
+                  onUploaded={(avatarUrl) => {
+                    setStudents(
+                      (prev) =>
+                        prev?.map((student) =>
+                          student.id === s.id ? { ...student, avatar_url: avatarUrl } : student
+                        ) ?? prev
+                    );
+                    setPhotoStudentId(null);
+                  }}
+                  onCancel={() => setPhotoStudentId(null)}
+                />
+              )}
               </div>
             );
           })}
