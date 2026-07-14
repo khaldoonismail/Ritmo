@@ -1,4 +1,5 @@
 import Link from "next/link";
+import LogoutButton from "./LogoutButton";
 
 export default function TeacherDashboard() {
   const sections = [
@@ -69,6 +70,8 @@ export default function TeacherDashboard() {
       >
         Go to Games Dashboard →
       </Link>
+
+      <LogoutButton />
     </main>
   );
 }
