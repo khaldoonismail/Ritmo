@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type MediaType = "text" | "image" | "video" | "audio";
 
@@ -20,15 +21,12 @@ interface Game {
   id: string;
   title: string;
   questions: Question[];
-  createdAt: number;
 }
 
 interface Player {
   name: string;
   score: number;
 }
-
-const STORAGE_KEY = "ritmo_games";
 
 const answerColors = ["#e21b3c", "#1368ce", "#d89e00", "#26890c"];
 const answerShapes = ["▲", "◆", "●", "■"];
@@ -37,6 +35,7 @@ type Stage = "loading" | "notfound" | "lobby" | "question" | "reveal" | "leaderb
 
 export default function PlayGamePage() {
   const params = useParams();
+  const router = useRouter();
   const id = params?.id as string;
 
   const [game, setGame] = useState<Game | null>(null);
@@ -60,11 +59,30 @@ export default function PlayGamePage() {
   const roundEndedRef = useRef(false);
 
   useEffect(() => {
-    const games: Game[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    const found = games.find((g) => g.id === id) || null;
-    setGame(found);
-    setStage(found ? "lobby" : "notfound");
-  }, [id]);
+    const supabase = createBrowserSupabaseClient();
+
+    async function load() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.push("/accounts/login");
+        return;
+      }
+
+      const { data } = await supabase
+        .from("games")
+        .select("id, title, questions")
+        .eq("id", id)
+        .maybeSingle();
+
+      setGame(data);
+      setStage(data ? "lobby" : "notfound");
+    }
+
+    load();
+  }, [id, router]);
 
   useEffect(() => {
     if (stage !== "question") return;

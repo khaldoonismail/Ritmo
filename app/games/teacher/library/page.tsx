@@ -1,29 +1,63 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 interface Game {
   id: string;
   title: string;
   questions: unknown[];
-  createdAt: number;
+  created_at: string;
 }
 
-const STORAGE_KEY = "ritmo_games";
-
 export default function GamesLibraryPage() {
-  const [games, setGames] = useState<Game[]>([]);
+  const router = useRouter();
+  const [games, setGames] = useState<Game[] | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
-    const stored: Game[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    setGames(stored.sort((a, b) => b.createdAt - a.createdAt));
-  }, []);
+    const supabase = createBrowserSupabaseClient();
 
-  function deleteGame(id: string) {
-    const remaining = games.filter((g) => g.id !== id);
-    setGames(remaining);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(remaining));
+    async function load() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.push("/accounts/login");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("games")
+        .select("id, title, questions, created_at")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setLoadError(error.message);
+        return;
+      }
+
+      setGames(data || []);
+    }
+
+    load();
+  }, [router]);
+
+  async function deleteGame(id: string) {
+    setDeleteError("");
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.from("games").delete().eq("id", id);
+
+    if (error) {
+      setDeleteError(error.message);
+      return;
+    }
+
+    setGames((prev) => (prev || []).filter((g) => g.id !== id));
   }
 
   return (
@@ -44,6 +78,9 @@ export default function GamesLibraryPage() {
         Host a demo round of any game you've created
       </p>
 
+      {loadError && <p style={{ color: "#c00", fontSize: "0.9rem" }}>{loadError}</p>}
+      {deleteError && <p style={{ color: "#c00", fontSize: "0.9rem" }}>{deleteError}</p>}
+
       <div
         style={{
           display: "flex",
@@ -54,13 +91,17 @@ export default function GamesLibraryPage() {
           marginTop: "1rem",
         }}
       >
-        {games.length === 0 && (
+        {games === null && !loadError && (
+          <p style={{ opacity: 0.5, textAlign: "center" }}>Loading...</p>
+        )}
+
+        {games?.length === 0 && (
           <p style={{ opacity: 0.5, textAlign: "center" }}>
             No games yet. Create one to get started.
           </p>
         )}
 
-        {games.map((g) => (
+        {games?.map((g) => (
           <div
             key={g.id}
             style={{

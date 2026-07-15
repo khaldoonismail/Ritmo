@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type MediaType = "text" | "image" | "video" | "audio";
 
@@ -19,15 +20,6 @@ interface Question {
   correctIndex: number;
   timeLimit: number;
 }
-
-interface Game {
-  id: string;
-  title: string;
-  questions: Question[];
-  createdAt: number;
-}
-
-const STORAGE_KEY = "ritmo_games";
 
 let zCounter = 1;
 
@@ -63,6 +55,33 @@ export default function CreateGamePage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [zOrder, setZOrder] = useState<Record<string, number>>({});
+  const [myTeacherId, setMyTeacherId] = useState<string | null>(null);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  useEffect(() => {
+    const supabase = createBrowserSupabaseClient();
+
+    async function load() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.push("/accounts/login");
+        return;
+      }
+
+      const { data: teacherRow } = await supabase
+        .from("teachers")
+        .select("id")
+        .eq("auth_user_id", session.user.id)
+        .maybeSingle();
+      if (teacherRow) setMyTeacherId(teacherRow.id);
+    }
+
+    load();
+  }, [router]);
 
   function addQuestion(mediaType: MediaType) {
     const x = 40 + Math.random() * 60;
@@ -136,21 +155,30 @@ export default function CreateGamePage() {
     window.addEventListener("mouseup", onUp);
   }
 
-  function saveGame() {
+  async function saveGame() {
     if (!gameTitle.trim() || questions.length === 0) {
       alert("Add a game title and at least one question before saving.");
       return;
     }
-    const game: Game = {
-      id: Math.random().toString(36).slice(2),
+    if (!myTeacherId) return;
+
+    setSaveError("");
+    setSaveBusy(true);
+
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.from("games").insert({
+      teacher_id: myTeacherId,
       title: gameTitle.trim(),
       questions,
-      createdAt: Date.now(),
-    };
-    const existing: Game[] = JSON.parse(
-      localStorage.getItem(STORAGE_KEY) || "[]"
-    );
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...existing, game]));
+    });
+
+    setSaveBusy(false);
+
+    if (error) {
+      setSaveError(error.message);
+      return;
+    }
+
     router.push("/games/teacher/library");
   }
 
@@ -203,6 +231,7 @@ export default function CreateGamePage() {
         />
         <button
           onClick={saveGame}
+          disabled={saveBusy}
           style={{
             fontSize: "0.95rem",
             fontWeight: 700,
@@ -211,13 +240,20 @@ export default function CreateGamePage() {
             border: "none",
             background: "#111",
             color: "#fff",
-            cursor: "pointer",
+            cursor: saveBusy ? "default" : "pointer",
+            opacity: saveBusy ? 0.6 : 1,
             whiteSpace: "nowrap",
           }}
         >
-          Save Game
+          {saveBusy ? "Saving..." : "Save Game"}
         </button>
       </div>
+
+      {saveError && (
+        <p style={{ color: "#c00", fontSize: "0.85rem", width: "100%", maxWidth: "700px" }}>
+          {saveError}
+        </p>
+      )}
 
       <div style={{ position: "relative", width: "100%", maxWidth: "700px" }}>
         <button
