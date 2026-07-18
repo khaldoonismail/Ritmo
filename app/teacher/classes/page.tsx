@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { randomJoinCode } from "@/lib/joinCode";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 interface ClassRow {
   id: string;
@@ -175,23 +176,25 @@ export default function TeacherClassesPage() {
   const inputStyle: React.CSSProperties = {
     fontSize: "0.95rem",
     padding: "0.55rem 0.75rem",
-    borderRadius: "8px",
-    border: "1px solid #ddd",
+    borderRadius: radius.iconSquare,
+    border: "1px solid #E5DFC8",
     outline: "none",
     direction: "ltr",
     textAlign: "left",
     fontFamily: "inherit",
     width: "100%",
+    background: colors.white,
   };
 
   const smallButtonStyle: React.CSSProperties = {
     fontSize: "0.8rem",
-    fontWeight: 700,
-    padding: "0.4rem 0.7rem",
-    borderRadius: "6px",
-    border: "1px solid #ddd",
-    background: "#fff",
-    color: "#111",
+    fontWeight: 800,
+    padding: "0.45rem 0.8rem",
+    borderRadius: radius.button,
+    border: "none",
+    background: colors.neutralGray,
+    boxShadow: solidShadow(3, colors.neutralGrayShadow),
+    color: colors.white,
     cursor: "pointer",
     whiteSpace: "nowrap",
   };
@@ -205,14 +208,16 @@ export default function TeacherClassesPage() {
         alignItems: "center",
         padding: "2rem",
         gap: "1rem",
+        background: colors.background,
+        color: colors.textPrimary,
       }}
     >
-      <h1 style={{ fontSize: "2.25rem", fontWeight: 800, margin: 0 }}>
+      <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
         My Classes
       </h1>
 
       {error && (
-        <p style={{ color: "#c00", fontSize: "0.9rem" }}>{error}</p>
+        <p style={{ color: colors.coralText, fontSize: "0.9rem", fontWeight: 600 }}>{error}</p>
       )}
 
       <div style={{ width: "100%", maxWidth: "600px" }}>
@@ -220,12 +225,13 @@ export default function TeacherClassesPage() {
           onClick={() => setShowCreateClass((v) => !v)}
           style={{
             fontSize: "0.95rem",
-            fontWeight: 700,
-            padding: "0.6rem 1rem",
-            borderRadius: "8px",
-            border: "1px dashed #999",
-            background: "#fafafa",
-            color: "#111",
+            fontWeight: 800,
+            padding: "0.7rem 1.1rem",
+            borderRadius: radius.button,
+            border: "none",
+            background: colors.orange,
+            boxShadow: solidShadow(5, colors.orangeShadow),
+            color: colors.white,
             cursor: "pointer",
           }}
         >
@@ -239,11 +245,11 @@ export default function TeacherClassesPage() {
               display: "flex",
               flexDirection: "column",
               gap: "0.5rem",
-              border: "1px solid #ddd",
-              borderRadius: "10px",
+              borderRadius: radius.card,
               padding: "0.9rem",
               marginTop: "0.6rem",
-              background: "#fff",
+              background: colors.white,
+              boxShadow: solidShadow(4, colors.rosterCardShadow),
               textAlign: "left",
             }}
           >
@@ -257,7 +263,7 @@ export default function TeacherClassesPage() {
               autoFocus
             />
             {createError && (
-              <p style={{ color: "#c00", fontSize: "0.85rem", margin: 0 }}>
+              <p style={{ color: colors.coralText, fontSize: "0.85rem", margin: 0 }}>
                 {createError}
               </p>
             )}
@@ -266,14 +272,15 @@ export default function TeacherClassesPage() {
               disabled={createBusy}
               style={{
                 fontSize: "0.95rem",
-                fontWeight: 700,
-                padding: "0.6rem 1rem",
-                borderRadius: "8px",
+                fontWeight: 800,
+                padding: "0.7rem 1rem",
+                borderRadius: radius.button,
                 border: "none",
-                background: "#111",
-                color: "#fff",
+                background: colors.orange,
+                boxShadow: createBusy ? "none" : solidShadow(4, colors.orangeShadow),
+                color: colors.white,
                 cursor: createBusy ? "default" : "pointer",
-                opacity: createBusy ? 0.6 : 1,
+                opacity: createBusy ? 0.7 : 1,
               }}
             >
               {createBusy ? "Creating..." : "Create Class"}
@@ -293,11 +300,11 @@ export default function TeacherClassesPage() {
         }}
       >
         {classes === null && !error && (
-          <p style={{ opacity: 0.5, textAlign: "center" }}>Loading...</p>
+          <p style={{ opacity: 0.6, fontWeight: 600, textAlign: "center" }}>Loading...</p>
         )}
 
         {classes?.length === 0 && (
-          <p style={{ opacity: 0.5, textAlign: "center" }}>
+          <p style={{ opacity: 0.6, fontWeight: 600, textAlign: "center" }}>
             You don't have any classes yet.
           </p>
         )}
@@ -313,9 +320,9 @@ export default function TeacherClassesPage() {
                 justifyContent: "space-between",
                 gap: "0.75rem",
                 padding: "0.9rem 1.1rem",
-                border: "1px solid #ddd",
-                borderRadius: "10px",
-                background: "#fff",
+                borderRadius: radius.card,
+                background: colors.white,
+                boxShadow: solidShadow(4, colors.rosterCardShadow),
               }}
             >
               {isEditing ? (
@@ -336,7 +343,7 @@ export default function TeacherClassesPage() {
                     autoFocus
                   />
                   {editError && (
-                    <p style={{ color: "#c00", fontSize: "0.8rem", margin: 0 }}>
+                    <p style={{ color: colors.coralText, fontSize: "0.8rem", margin: 0 }}>
                       {editError}
                     </p>
                   )}
@@ -346,9 +353,8 @@ export default function TeacherClassesPage() {
                       disabled={editBusy}
                       style={{
                         ...smallButtonStyle,
-                        background: "#111",
-                        color: "#fff",
-                        border: "none",
+                        background: colors.orange,
+                        boxShadow: solidShadow(3, colors.orangeShadow),
                       }}
                     >
                       {editBusy ? "Saving..." : "Save"}
@@ -361,8 +367,8 @@ export default function TeacherClassesPage() {
               ) : (
                 <>
                   <div style={{ textAlign: "left" }}>
-                    <div style={{ fontWeight: 700 }}>{c.name}</div>
-                    <div style={{ fontSize: "0.8rem", opacity: 0.6 }}>
+                    <div style={{ fontWeight: 800 }}>{c.name}</div>
+                    <div style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.6 }}>
                       {c.studentCount} student{c.studentCount === 1 ? "" : "s"}
                     </div>
                   </div>
@@ -371,12 +377,13 @@ export default function TeacherClassesPage() {
                       href={`/teacher/classes/${c.id}`}
                       style={{
                         fontSize: "0.9rem",
-                        fontWeight: 700,
+                        fontWeight: 800,
                         padding: "0.5rem 0.9rem",
-                        borderRadius: "8px",
+                        borderRadius: radius.button,
                         border: "none",
-                        background: "#111",
-                        color: "#fff",
+                        background: colors.orange,
+                        boxShadow: solidShadow(3, colors.orangeShadow),
+                        color: colors.white,
                         textDecoration: "none",
                       }}
                     >
@@ -390,7 +397,7 @@ export default function TeacherClassesPage() {
                         setDeleteError("");
                         setDeleteTarget(c);
                       }}
-                      style={{ ...smallButtonStyle, color: "#c00" }}
+                      style={{ ...smallButtonStyle, background: colors.coralText, boxShadow: "none" }}
                     >
                       Delete
                     </button>
@@ -406,6 +413,7 @@ export default function TeacherClassesPage() {
         href="/academy/teacher"
         style={{
           fontSize: "0.9rem",
+          fontWeight: 700,
           opacity: 0.7,
           color: "inherit",
           textDecoration: "underline",
@@ -430,8 +438,8 @@ export default function TeacherClassesPage() {
         >
           <div
             style={{
-              background: "#fff",
-              borderRadius: "12px",
+              background: colors.white,
+              borderRadius: radius.card,
               padding: "1.5rem",
               maxWidth: "380px",
               width: "100%",
@@ -441,13 +449,13 @@ export default function TeacherClassesPage() {
             <h2 style={{ fontSize: "1.2rem", fontWeight: 800, margin: "0 0 0.5rem" }}>
               Delete "{deleteTarget.name}"?
             </h2>
-            <p style={{ fontSize: "0.85rem", opacity: 0.7, margin: "0 0 1.25rem" }}>
+            <p style={{ fontSize: "0.85rem", fontWeight: 600, opacity: 0.7, margin: "0 0 1.25rem" }}>
               This will permanently delete this class, all {deleteTarget.studentCount}{" "}
               student{deleteTarget.studentCount === 1 ? "" : "s"} in it, and all lesson
               assignments for it. This cannot be undone.
             </p>
             {deleteError && (
-              <p style={{ color: "#c00", fontSize: "0.85rem", margin: "0 0 0.75rem" }}>
+              <p style={{ color: colors.coralText, fontSize: "0.85rem", margin: "0 0 0.75rem" }}>
                 {deleteError}
               </p>
             )}
@@ -457,14 +465,14 @@ export default function TeacherClassesPage() {
                 disabled={deleteBusy}
                 style={{
                   fontSize: "0.95rem",
-                  fontWeight: 700,
-                  padding: "0.7rem 1rem",
-                  borderRadius: "8px",
+                  fontWeight: 800,
+                  padding: "0.8rem 1rem",
+                  borderRadius: radius.button,
                   border: "none",
-                  background: "#c00",
-                  color: "#fff",
+                  background: colors.coralText,
+                  color: colors.white,
                   cursor: deleteBusy ? "default" : "pointer",
-                  opacity: deleteBusy ? 0.6 : 1,
+                  opacity: deleteBusy ? 0.7 : 1,
                 }}
               >
                 {deleteBusy ? "Deleting..." : "Delete Class"}
@@ -474,6 +482,7 @@ export default function TeacherClassesPage() {
                 disabled={deleteBusy}
                 style={{
                   fontSize: "0.85rem",
+                  fontWeight: 700,
                   opacity: 0.7,
                   background: "none",
                   border: "none",

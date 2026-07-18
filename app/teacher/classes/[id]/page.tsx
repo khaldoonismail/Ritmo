@@ -11,6 +11,7 @@ import { randomPin } from "@/lib/studentPin";
 import UploadStudentsExcel from "./UploadStudentsExcel";
 import StudentThumbnail from "./StudentThumbnail";
 import StudentPhotoUploader from "./StudentPhotoUploader";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 interface ClassInfo {
   id: string;
@@ -386,23 +387,25 @@ export default function ManageClassPage() {
   const inputStyle: React.CSSProperties = {
     fontSize: "0.95rem",
     padding: "0.55rem 0.75rem",
-    borderRadius: "8px",
-    border: "1px solid #ddd",
+    borderRadius: radius.iconSquare,
+    border: "1px solid #E5DFC8",
     outline: "none",
     direction: "ltr",
     textAlign: "left",
     fontFamily: "inherit",
     width: "100%",
+    background: colors.white,
   };
 
   const primaryButtonStyle: React.CSSProperties = {
     fontSize: "0.82rem",
-    fontWeight: 700,
-    padding: "0.4rem 0.7rem",
-    borderRadius: "6px",
+    fontWeight: 800,
+    padding: "0.45rem 0.8rem",
+    borderRadius: radius.button,
     border: "none",
-    background: "#111",
-    color: "#fff",
+    background: colors.orange,
+    boxShadow: solidShadow(3, colors.orangeShadow),
+    color: colors.white,
     cursor: "pointer",
     textDecoration: "none",
     whiteSpace: "nowrap",
@@ -410,9 +413,20 @@ export default function ManageClassPage() {
 
   const secondaryButtonStyle: React.CSSProperties = {
     ...primaryButtonStyle,
-    background: "#fff",
-    color: "#111",
-    border: "1px solid #ddd",
+    background: colors.neutralGray,
+    boxShadow: solidShadow(3, colors.neutralGrayShadow),
+  };
+
+  const dashedButtonStyle: React.CSSProperties = {
+    fontSize: "0.9rem",
+    fontWeight: 800,
+    padding: "0.5rem 0.9rem",
+    borderRadius: radius.button,
+    border: "none",
+    background: colors.greenButton,
+    boxShadow: solidShadow(3, colors.greenButtonShadow),
+    color: colors.white,
+    cursor: "pointer",
   };
 
   const lessonTitleMap = new Map((lessons || []).map((l) => [l.id, l.title]));
@@ -435,12 +449,14 @@ export default function ManageClassPage() {
           justifyContent: "center",
           gap: "1rem",
           padding: "2rem",
+          background: colors.background,
+          color: colors.textPrimary,
         }}
       >
         <h1 style={{ fontSize: "1.75rem", fontWeight: 800, margin: 0 }}>
           Class not found
         </h1>
-        <Link href="/teacher/classes" style={{ color: "inherit", textDecoration: "underline" }}>
+        <Link href="/teacher/classes" style={{ color: "inherit", textDecoration: "underline", fontWeight: 700 }}>
           ← Back to My Classes
         </Link>
       </main>
@@ -456,15 +472,17 @@ export default function ManageClassPage() {
         alignItems: "center",
         padding: "2rem",
         gap: "1.5rem",
+        background: colors.background,
+        color: colors.textPrimary,
       }}
     >
       <div style={{ textAlign: "center" }}>
-        <h1 style={{ fontSize: "2.25rem", fontWeight: 800, margin: 0 }}>
+        <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
           {classInfo?.name || "Loading..."}
         </h1>
       </div>
 
-      {loadError && <p style={{ color: "#c00", fontSize: "0.9rem" }}>{loadError}</p>}
+      {loadError && <p style={{ color: colors.coralText, fontSize: "0.9rem", fontWeight: 600 }}>{loadError}</p>}
 
       {classInfo && (
         <div
@@ -473,12 +491,12 @@ export default function ManageClassPage() {
             alignItems: "center",
             gap: "0.6rem",
             padding: "0.6rem 1rem",
-            border: "1px solid #ddd",
-            borderRadius: "10px",
-            background: "#fff",
+            borderRadius: radius.card,
+            background: colors.white,
+            boxShadow: solidShadow(4, colors.rosterCardShadow),
           }}
         >
-          <span style={{ fontSize: "0.85rem", opacity: 0.6 }}>Join code</span>
+          <span style={{ fontSize: "0.85rem", fontWeight: 600, opacity: 0.6 }}>Join code</span>
           <span
             style={{
               fontSize: "1.2rem",
@@ -493,12 +511,13 @@ export default function ManageClassPage() {
             onClick={handleCopyJoinCode}
             style={{
               fontSize: "0.8rem",
-              fontWeight: 700,
-              padding: "0.35rem 0.7rem",
-              borderRadius: "6px",
-              border: "1px solid #ddd",
-              background: copied ? "#111" : "#fff",
-              color: copied ? "#fff" : "#111",
+              fontWeight: 800,
+              padding: "0.4rem 0.8rem",
+              borderRadius: radius.button,
+              border: "none",
+              background: copied ? colors.greenCard : colors.neutralGray,
+              boxShadow: solidShadow(3, copied ? colors.greenCardShadow : colors.neutralGrayShadow),
+              color: colors.white,
               cursor: "pointer",
             }}
           >
@@ -517,38 +536,14 @@ export default function ManageClassPage() {
             marginBottom: "0.75rem",
           }}
         >
-          <h2 style={{ fontSize: "1.4rem", fontWeight: 700, margin: 0 }}>
+          <h2 style={{ fontSize: "1.3rem", fontWeight: 800, margin: 0 }}>
             Students
           </h2>
           <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button
-              onClick={() => setShowAddStudent((v) => !v)}
-              style={{
-                fontSize: "0.9rem",
-                fontWeight: 700,
-                padding: "0.5rem 0.9rem",
-                borderRadius: "8px",
-                border: "1px dashed #999",
-                background: "#fafafa",
-                color: "#111",
-                cursor: "pointer",
-              }}
-            >
+            <button onClick={() => setShowAddStudent((v) => !v)} style={dashedButtonStyle}>
               + Add Student
             </button>
-            <button
-              onClick={() => setShowUploadStudents((v) => !v)}
-              style={{
-                fontSize: "0.9rem",
-                fontWeight: 700,
-                padding: "0.5rem 0.9rem",
-                borderRadius: "8px",
-                border: "1px dashed #999",
-                background: "#fafafa",
-                color: "#111",
-                cursor: "pointer",
-              }}
-            >
+            <button onClick={() => setShowUploadStudents((v) => !v)} style={dashedButtonStyle}>
               Upload Students (Excel)
             </button>
           </div>
@@ -570,13 +565,14 @@ export default function ManageClassPage() {
         {lastAddedPin && (
           <div
             style={{
-              background: "#eafbea",
-              border: "1px solid #b6e6b6",
-              borderRadius: "8px",
+              background: colors.completedCardBg,
+              borderRadius: radius.iconSquare,
+              boxShadow: solidShadow(3, colors.completedCardShadow),
               padding: "0.6rem 0.9rem",
               marginBottom: "0.75rem",
               textAlign: "left",
               fontSize: "0.9rem",
+              fontWeight: 600,
             }}
           >
             Added <strong>{lastAddedPin.name}</strong> — give them PIN{" "}
@@ -590,13 +586,14 @@ export default function ManageClassPage() {
         {regenPinResult && (
           <div
             style={{
-              background: "#eafbea",
-              border: "1px solid #b6e6b6",
-              borderRadius: "8px",
+              background: colors.completedCardBg,
+              borderRadius: radius.iconSquare,
+              boxShadow: solidShadow(3, colors.completedCardShadow),
               padding: "0.6rem 0.9rem",
               marginBottom: "0.75rem",
               textAlign: "left",
               fontSize: "0.9rem",
+              fontWeight: 600,
             }}
           >
             New PIN for <strong>{regenPinResult.name}</strong>:{" "}
@@ -607,7 +604,7 @@ export default function ManageClassPage() {
         )}
 
         {removeStudentError && (
-          <p style={{ color: "#c00", fontSize: "0.85rem", marginBottom: "0.75rem" }}>
+          <p style={{ color: colors.coralText, fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.75rem" }}>
             {removeStudentError}
           </p>
         )}
@@ -619,11 +616,11 @@ export default function ManageClassPage() {
               display: "flex",
               flexDirection: "column",
               gap: "0.5rem",
-              border: "1px solid #ddd",
-              borderRadius: "10px",
+              borderRadius: radius.card,
               padding: "0.9rem",
               marginBottom: "0.75rem",
-              background: "#fff",
+              background: colors.white,
+              boxShadow: solidShadow(4, colors.rosterCardShadow),
               textAlign: "left",
             }}
           >
@@ -636,7 +633,7 @@ export default function ManageClassPage() {
               required
             />
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <span style={{ fontSize: "0.85rem", opacity: 0.7 }}>PIN</span>
+              <span style={{ fontSize: "0.85rem", fontWeight: 600, opacity: 0.7 }}>PIN</span>
               <span
                 style={{
                   fontSize: "1.1rem",
@@ -651,10 +648,12 @@ export default function ManageClassPage() {
                 onClick={() => setNewStudentPin(randomPin())}
                 style={{
                   fontSize: "0.8rem",
-                  padding: "0.3rem 0.6rem",
-                  borderRadius: "6px",
-                  border: "1px solid #ddd",
-                  background: "#fff",
+                  fontWeight: 700,
+                  padding: "0.35rem 0.7rem",
+                  borderRadius: radius.button,
+                  border: "none",
+                  background: colors.neutralGray,
+                  color: colors.white,
                   cursor: "pointer",
                 }}
               >
@@ -662,7 +661,7 @@ export default function ManageClassPage() {
               </button>
             </div>
             {addStudentError && (
-              <p style={{ color: "#c00", fontSize: "0.85rem", margin: 0 }}>
+              <p style={{ color: colors.coralText, fontSize: "0.85rem", margin: 0 }}>
                 {addStudentError}
               </p>
             )}
@@ -671,14 +670,15 @@ export default function ManageClassPage() {
               disabled={addStudentBusy}
               style={{
                 fontSize: "0.95rem",
-                fontWeight: 700,
-                padding: "0.6rem 1rem",
-                borderRadius: "8px",
+                fontWeight: 800,
+                padding: "0.7rem 1rem",
+                borderRadius: radius.button,
                 border: "none",
-                background: "#111",
-                color: "#fff",
+                background: colors.orange,
+                boxShadow: addStudentBusy ? "none" : solidShadow(4, colors.orangeShadow),
+                color: colors.white,
                 cursor: addStudentBusy ? "default" : "pointer",
-                opacity: addStudentBusy ? 0.6 : 1,
+                opacity: addStudentBusy ? 0.7 : 1,
               }}
             >
               {addStudentBusy ? "Adding..." : "Add Student"}
@@ -687,9 +687,9 @@ export default function ManageClassPage() {
         )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {students === null && <p style={{ opacity: 0.5 }}>Loading...</p>}
+          {students === null && <p style={{ opacity: 0.6, fontWeight: 600 }}>Loading...</p>}
           {students?.length === 0 && (
-            <p style={{ opacity: 0.5 }}>No students yet.</p>
+            <p style={{ opacity: 0.6, fontWeight: 600 }}>No students yet.</p>
           )}
           {sortedStudents.map((s) => {
             const isEditing = editingStudentId === s.id;
@@ -702,9 +702,9 @@ export default function ManageClassPage() {
                     justifyContent: "space-between",
                     gap: "0.6rem",
                     padding: "0.6rem 0.9rem",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    background: "#fff",
+                    borderRadius: radius.iconSquare,
+                    background: colors.white,
+                    boxShadow: solidShadow(3, colors.rosterCardShadow),
                     textAlign: "left",
                   }}
                 >
@@ -718,7 +718,7 @@ export default function ManageClassPage() {
                       autoFocus
                     />
                     {editStudentError && (
-                      <p style={{ color: "#c00", fontSize: "0.8rem", margin: 0 }}>
+                      <p style={{ color: colors.coralText, fontSize: "0.8rem", margin: 0 }}>
                         {editStudentError}
                       </p>
                     )}
@@ -760,7 +760,7 @@ export default function ManageClassPage() {
                       </button>
                       <button
                         onClick={() => removeStudent(s)}
-                        style={{ ...secondaryButtonStyle, color: "#c00" }}
+                        style={{ ...secondaryButtonStyle, background: colors.coralText, boxShadow: "none" }}
                       >
                         Remove
                       </button>
@@ -800,22 +800,10 @@ export default function ManageClassPage() {
             marginBottom: "0.75rem",
           }}
         >
-          <h2 style={{ fontSize: "1.4rem", fontWeight: 700, margin: 0 }}>
+          <h2 style={{ fontSize: "1.3rem", fontWeight: 800, margin: 0 }}>
             Assigned Lessons
           </h2>
-          <button
-            onClick={() => setShowAssignLesson((v) => !v)}
-            style={{
-              fontSize: "0.9rem",
-              fontWeight: 700,
-              padding: "0.5rem 0.9rem",
-              borderRadius: "8px",
-              border: "1px dashed #999",
-              background: "#fafafa",
-              color: "#111",
-              cursor: "pointer",
-            }}
-          >
+          <button onClick={() => setShowAssignLesson((v) => !v)} style={dashedButtonStyle}>
             + Assign New Lesson
           </button>
         </div>
@@ -826,16 +814,16 @@ export default function ManageClassPage() {
               display: "flex",
               flexDirection: "column",
               gap: "0.6rem",
-              border: "1px solid #ddd",
-              borderRadius: "10px",
+              borderRadius: radius.card,
               padding: "0.9rem",
               marginBottom: "0.75rem",
-              background: "#fff",
+              background: colors.white,
+              boxShadow: solidShadow(4, colors.rosterCardShadow),
               textAlign: "left",
             }}
           >
             <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-              <label style={{ fontSize: "0.8rem", opacity: 0.7 }}>
+              <label style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.7 }}>
                 Due date (optional, applies to whichever lesson you assign below)
               </label>
               <input
@@ -847,7 +835,7 @@ export default function ManageClassPage() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-              <label style={{ fontSize: "0.8rem", opacity: 0.7 }}>Assign to</label>
+              <label style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.7 }}>Assign to</label>
               <div style={{ display: "flex", gap: "1rem" }}>
                 <label style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.85rem" }}>
                   <input
@@ -912,19 +900,18 @@ export default function ManageClassPage() {
             </div>
 
             {assignError && (
-              <p style={{ color: "#c00", fontSize: "0.85rem", margin: 0 }}>
+              <p style={{ color: colors.coralText, fontSize: "0.85rem", margin: 0 }}>
                 {assignError}
               </p>
             )}
 
             {lessons !== null && lessons.length > 0 && (
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span style={{ fontSize: "0.8rem", opacity: 0.6 }}>Sort:</span>
+                <span style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.6 }}>Sort:</span>
                 <div
                   style={{
                     display: "flex",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
+                    borderRadius: radius.button,
                     overflow: "hidden",
                   }}
                 >
@@ -932,11 +919,11 @@ export default function ManageClassPage() {
                     onClick={() => setLessonSort("newest")}
                     style={{
                       fontSize: "0.8rem",
-                      fontWeight: 700,
-                      padding: "0.3rem 0.7rem",
+                      fontWeight: 800,
+                      padding: "0.35rem 0.8rem",
                       border: "none",
-                      background: lessonSort === "newest" ? "#111" : "#fff",
-                      color: lessonSort === "newest" ? "#fff" : "#111",
+                      background: lessonSort === "newest" ? colors.orange : colors.neutralGray,
+                      color: colors.white,
                       cursor: "pointer",
                     }}
                   >
@@ -946,12 +933,11 @@ export default function ManageClassPage() {
                     onClick={() => setLessonSort("az")}
                     style={{
                       fontSize: "0.8rem",
-                      fontWeight: 700,
-                      padding: "0.3rem 0.7rem",
+                      fontWeight: 800,
+                      padding: "0.35rem 0.8rem",
                       border: "none",
-                      borderLeft: "1px solid #ddd",
-                      background: lessonSort === "az" ? "#111" : "#fff",
-                      color: lessonSort === "az" ? "#fff" : "#111",
+                      background: lessonSort === "az" ? colors.orange : colors.neutralGray,
+                      color: colors.white,
                       cursor: "pointer",
                     }}
                   >
@@ -970,9 +956,9 @@ export default function ManageClassPage() {
                 overflowY: "auto",
               }}
             >
-              {lessons === null && <p style={{ opacity: 0.5 }}>Loading lessons...</p>}
+              {lessons === null && <p style={{ opacity: 0.6, fontWeight: 600 }}>Loading lessons...</p>}
               {lessons?.length === 0 && (
-                <p style={{ opacity: 0.5 }}>
+                <p style={{ opacity: 0.6, fontWeight: 600 }}>
                   No lessons yet.{" "}
                   <Link href="/academy/teacher/create-lesson" style={{ textDecoration: "underline" }}>
                     Create one
@@ -992,13 +978,13 @@ export default function ManageClassPage() {
                       justifyContent: "space-between",
                       gap: "0.6rem",
                       padding: "0.6rem 0.75rem",
-                      border: "1px solid #eee",
-                      borderRadius: "8px",
+                      borderRadius: radius.iconSquare,
+                      background: "#FCFAF3",
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{l.title}</div>
-                      <div style={{ fontSize: "0.72rem", opacity: 0.6 }}>
+                      <div style={{ fontWeight: 800, fontSize: "0.9rem" }}>{l.title}</div>
+                      <div style={{ fontSize: "0.72rem", fontWeight: 600, opacity: 0.6 }}>
                         {isMine ? "Your lesson" : `by ${owner || "another teacher"}`} · used{" "}
                         {l.usage_count} time{l.usage_count === 1 ? "" : "s"}
                       </div>
@@ -1047,15 +1033,15 @@ export default function ManageClassPage() {
         )}
 
         {removeError && (
-          <p style={{ color: "#c00", fontSize: "0.85rem", marginBottom: "0.5rem" }}>
+          <p style={{ color: colors.coralText, fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.5rem" }}>
             {removeError}
           </p>
         )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {assignments === null && <p style={{ opacity: 0.5 }}>Loading...</p>}
+          {assignments === null && <p style={{ opacity: 0.6, fontWeight: 600 }}>Loading...</p>}
           {assignments?.length === 0 && (
-            <p style={{ opacity: 0.5 }}>No lessons assigned yet.</p>
+            <p style={{ opacity: 0.6, fontWeight: 600 }}>No lessons assigned yet.</p>
           )}
           {assignments?.map((a) => (
             <div
@@ -1066,25 +1052,25 @@ export default function ManageClassPage() {
                 justifyContent: "space-between",
                 gap: "0.6rem",
                 padding: "0.6rem 0.9rem",
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-                background: "#fff",
+                borderRadius: radius.iconSquare,
+                background: colors.white,
+                boxShadow: solidShadow(3, colors.rosterCardShadow),
                 textAlign: "left",
                 fontSize: "0.9rem",
               }}
             >
               <div>
-                <div style={{ fontWeight: 700 }}>
+                <div style={{ fontWeight: 800 }}>
                   {lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id)}
                 </div>
-                <div style={{ fontSize: "0.75rem", opacity: 0.6 }}>
+                <div style={{ fontSize: "0.75rem", fontWeight: 600, opacity: 0.6 }}>
                   {a.student_id
                     ? `Assigned to: ${studentNameMap.get(a.student_id) || "Unknown student"}`
                     : "Whole class"}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexShrink: 0 }}>
-                <span style={{ opacity: 0.6, direction: "ltr" }}>
+                <span style={{ opacity: 0.6, fontWeight: 600, direction: "ltr" }}>
                   {a.due_at
                     ? `Due ${new Date(a.due_at).toLocaleDateString()}`
                     : "No due date"}
@@ -1094,12 +1080,12 @@ export default function ManageClassPage() {
                   title="Remove this assignment"
                   style={{
                     fontSize: "0.75rem",
-                    fontWeight: 700,
-                    padding: "0.2rem 0.5rem",
-                    borderRadius: "6px",
-                    border: "1px solid #ddd",
-                    background: "#fff",
-                    color: "#c00",
+                    fontWeight: 800,
+                    padding: "0.3rem 0.6rem",
+                    borderRadius: radius.button,
+                    border: "none",
+                    background: colors.coralText,
+                    color: colors.white,
                     cursor: "pointer",
                   }}
                 >
@@ -1115,6 +1101,7 @@ export default function ManageClassPage() {
         href="/teacher/classes"
         style={{
           fontSize: "0.9rem",
+          fontWeight: 700,
           opacity: 0.7,
           color: "inherit",
           textDecoration: "underline",

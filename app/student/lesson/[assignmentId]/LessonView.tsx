@@ -5,6 +5,7 @@ import type { LessonBlockData as LessonBlock } from "@/lib/lessonBlocks";
 import { resolveVideoSource, UNSUPPORTED_VIDEO_MESSAGE } from "@/lib/videoEmbed";
 import { normalizeQuestionData } from "@/lib/questionTypes";
 import QuestionRenderer from "@/components/QuestionRenderer";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 // Renders each block type the same way app/academy/teacher/create-lesson's
 // canvas editor does (text passage, image preview, video player, question
@@ -29,9 +30,11 @@ export default function LessonView({
         alignItems: "center",
         padding: "2rem",
         gap: "1rem",
+        background: colors.background,
+        color: colors.textPrimary,
       }}
     >
-      <h1 style={{ fontSize: "2.25rem", fontWeight: 800, margin: 0 }}>
+      <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
         {title}
       </h1>
 
@@ -48,10 +51,10 @@ export default function LessonView({
           <div
             key={block.id}
             style={{
-              border: "1px solid #ddd",
-              borderRadius: "10px",
+              borderRadius: radius.card,
               padding: "1.1rem",
-              background: "#fff",
+              background: colors.white,
+              boxShadow: solidShadow(4, colors.rosterCardShadow),
               textAlign: "left",
             }}
           >
@@ -99,7 +102,7 @@ export default function LessonView({
 
               if (source.kind === "needs-embed-link") {
                 return (
-                  <p style={{ fontSize: "0.85rem", color: "#a66300" }}>
+                  <p style={{ fontSize: "0.85rem", color: colors.classesText, fontWeight: 600 }}>
                     This video link isn't playable yet (needs a {source.provider} Embed
                     link).
                   </p>
@@ -107,7 +110,7 @@ export default function LessonView({
               }
 
               return (
-                <p style={{ fontSize: "0.85rem", color: "#c00" }}>
+                <p style={{ fontSize: "0.85rem", color: colors.coralText, fontWeight: 600 }}>
                   {UNSUPPORTED_VIDEO_MESSAGE}
                 </p>
               );
@@ -128,6 +131,7 @@ export default function LessonView({
         href={backHref}
         style={{
           fontSize: "0.9rem",
+          fontWeight: 700,
           opacity: 0.7,
           color: "inherit",
           textDecoration: "underline",

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { forkLesson } from "@/lib/forkLesson";
 import type { LessonBlockData } from "@/lib/lessonBlocks";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 interface MyLesson {
   id: string;
@@ -114,19 +115,20 @@ export default function MyLessonsPage() {
     justifyContent: "space-between",
     gap: "0.75rem",
     padding: "0.9rem 1.1rem",
-    border: "1px solid #ddd",
-    borderRadius: "10px",
-    background: "#fff",
+    borderRadius: radius.card,
+    background: colors.white,
+    boxShadow: solidShadow(4, colors.rosterCardShadow),
   };
 
   const primaryButtonStyle: React.CSSProperties = {
     fontSize: "0.85rem",
-    fontWeight: 700,
-    padding: "0.45rem 0.8rem",
-    borderRadius: "8px",
+    fontWeight: 800,
+    padding: "0.5rem 0.9rem",
+    borderRadius: radius.button,
     border: "none",
-    background: "#111",
-    color: "#fff",
+    background: colors.orange,
+    boxShadow: solidShadow(3, colors.orangeShadow),
+    color: colors.white,
     cursor: "pointer",
     textDecoration: "none",
     whiteSpace: "nowrap",
@@ -134,9 +136,8 @@ export default function MyLessonsPage() {
 
   const secondaryButtonStyle: React.CSSProperties = {
     ...primaryButtonStyle,
-    background: "#fff",
-    color: "#111",
-    border: "1px solid #ddd",
+    background: colors.neutralGray,
+    boxShadow: solidShadow(3, colors.neutralGrayShadow),
   };
 
   return (
@@ -148,24 +149,27 @@ export default function MyLessonsPage() {
         alignItems: "center",
         padding: "2rem",
         gap: "1.5rem",
+        background: colors.background,
+        color: colors.textPrimary,
       }}
     >
-      <h1 style={{ fontSize: "2.25rem", fontWeight: 800, margin: 0 }}>
+      <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
         My Lessons
       </h1>
 
-      {loadError && <p style={{ color: "#c00", fontSize: "0.9rem" }}>{loadError}</p>}
+      {loadError && <p style={{ color: colors.coralText, fontSize: "0.9rem", fontWeight: 600 }}>{loadError}</p>}
 
       <Link
         href="/academy/teacher/create-lesson"
         style={{
           fontSize: "1rem",
-          fontWeight: 700,
-          padding: "0.7rem 1.3rem",
-          borderRadius: "8px",
+          fontWeight: 800,
+          padding: "0.85rem 1.4rem",
+          borderRadius: radius.button,
           border: "none",
-          background: "#111",
-          color: "#fff",
+          background: colors.orange,
+          boxShadow: solidShadow(5, colors.orangeShadow),
+          color: colors.white,
           textDecoration: "none",
         }}
       >
@@ -173,23 +177,23 @@ export default function MyLessonsPage() {
       </Link>
 
       <section style={{ width: "100%", maxWidth: "650px" }}>
-        <h2 style={{ fontSize: "1.4rem", fontWeight: 700, margin: "0 0 0.75rem" }}>
+        <h2 style={{ fontSize: "1.3rem", fontWeight: 800, margin: "0 0 0.75rem" }}>
           My Lessons
         </h2>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
           {myLessons === null && !loadError && (
-            <p style={{ opacity: 0.5 }}>Loading...</p>
+            <p style={{ opacity: 0.6, fontWeight: 600 }}>Loading...</p>
           )}
           {myLessons?.length === 0 && (
-            <p style={{ opacity: 0.5 }}>
+            <p style={{ opacity: 0.6, fontWeight: 600 }}>
               You haven't created any lessons yet.
             </p>
           )}
           {myLessons?.map((l) => (
             <div key={l.id} style={rowStyle}>
               <div style={{ textAlign: "left" }}>
-                <div style={{ fontWeight: 700 }}>{l.title}</div>
-                <div style={{ fontSize: "0.78rem", opacity: 0.6 }}>
+                <div style={{ fontWeight: 800 }}>{l.title}</div>
+                <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
                   {l.is_public ? "Public" : "Private"} · used {l.usage_count} time
                   {l.usage_count === 1 ? "" : "s"}
                 </div>
@@ -206,30 +210,30 @@ export default function MyLessonsPage() {
       </section>
 
       <section style={{ width: "100%", maxWidth: "650px" }}>
-        <h2 style={{ fontSize: "1.4rem", fontWeight: 700, margin: "0 0 0.75rem" }}>
+        <h2 style={{ fontSize: "1.3rem", fontWeight: 800, margin: "0 0 0.75rem" }}>
           Community Lessons
         </h2>
 
         {copyError && (
-          <p style={{ color: "#c00", fontSize: "0.85rem", marginBottom: "0.5rem" }}>
+          <p style={{ color: colors.coralText, fontSize: "0.85rem", marginBottom: "0.5rem" }}>
             {copyError}
           </p>
         )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
           {communityLessons === null && !loadError && (
-            <p style={{ opacity: 0.5 }}>Loading...</p>
+            <p style={{ opacity: 0.6, fontWeight: 600 }}>Loading...</p>
           )}
           {communityLessons?.length === 0 && (
-            <p style={{ opacity: 0.5 }}>
+            <p style={{ opacity: 0.6, fontWeight: 600 }}>
               No public lessons from other teachers yet.
             </p>
           )}
           {communityLessons?.map((l) => (
             <div key={l.id} style={rowStyle}>
               <div style={{ textAlign: "left" }}>
-                <div style={{ fontWeight: 700 }}>{l.title}</div>
-                <div style={{ fontSize: "0.78rem", opacity: 0.6 }}>
+                <div style={{ fontWeight: 800 }}>{l.title}</div>
+                <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
                   by {ownerNameOf(l) || "another teacher"} · used {l.usage_count} time
                   {l.usage_count === 1 ? "" : "s"}
                 </div>
@@ -255,6 +259,7 @@ export default function MyLessonsPage() {
         href="/academy/teacher"
         style={{
           fontSize: "0.9rem",
+          fontWeight: 700,
           opacity: 0.7,
           color: "inherit",
           textDecoration: "underline",
