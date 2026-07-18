@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 type ActivityType = "piano" | "rhythm" | "custom";
 
@@ -127,9 +128,11 @@ export default function ActivitiesPage() {
         alignItems: "center",
         padding: "2rem",
         gap: "1rem",
+        background: colors.background,
+        color: colors.textPrimary,
       }}
     >
-      <h1 style={{ fontSize: "2.25rem", fontWeight: 800, margin: 0 }}>
+      <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
         Activities Library
       </h1>
 
@@ -138,12 +141,13 @@ export default function ActivitiesPage() {
           onClick={() => setPickerOpen((v) => !v)}
           style={{
             fontSize: "0.95rem",
-            fontWeight: 700,
+            fontWeight: 800,
             padding: "0.6rem 1rem",
-            borderRadius: "8px",
-            border: "1px dashed #999",
-            background: "#fafafa",
-            color: "#111",
+            borderRadius: radius.button,
+            border: "none",
+            background: colors.greenButton,
+            boxShadow: solidShadow(3, colors.greenButtonShadow),
+            color: colors.white,
             cursor: "pointer",
           }}
         >
@@ -324,6 +328,7 @@ export default function ActivitiesPage() {
         href="/academy/teacher"
         style={{
           fontSize: "0.9rem",
+          fontWeight: 700,
           opacity: 0.7,
           color: "inherit",
           textDecoration: "underline",

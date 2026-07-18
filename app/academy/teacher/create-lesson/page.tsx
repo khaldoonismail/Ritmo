@@ -12,6 +12,7 @@ import {
   normalizeQuestionData,
 } from "@/lib/questionTypes";
 import QuestionEditor from "@/components/QuestionEditor";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 type BlockType = "text" | "question" | "image" | "video" | "audio" | "ai";
 
@@ -53,7 +54,7 @@ const typeLabels: Record<BlockType, string> = {
 
 export default function CreateLessonPage() {
   return (
-    <Suspense fallback={<main style={{ minHeight: "100vh" }} />}>
+    <Suspense fallback={<main style={{ minHeight: "100vh", background: colors.background }} />}>
       <CreateLessonEditor />
     </Suspense>
   );
@@ -320,7 +321,7 @@ function CreateLessonEditor() {
   };
 
   if (loading) {
-    return <main style={{ minHeight: "100vh" }} />;
+    return <main style={{ minHeight: "100vh", background: colors.background }} />;
   }
 
   if (loadError) {
@@ -335,10 +336,12 @@ function CreateLessonEditor() {
           gap: "1rem",
           padding: "2rem",
           textAlign: "center",
+          background: colors.background,
+          color: colors.textPrimary,
         }}
       >
         <h1 style={{ fontSize: "1.75rem", fontWeight: 800, margin: 0 }}>{loadError}</h1>
-        <Link href="/teacher/lessons" style={{ color: "inherit", textDecoration: "underline" }}>
+        <Link href="/teacher/lessons" style={{ color: "inherit", textDecoration: "underline", fontWeight: 700 }}>
           ← Back to My Lessons
         </Link>
       </main>
@@ -357,16 +360,18 @@ function CreateLessonEditor() {
           gap: "1rem",
           padding: "2rem",
           textAlign: "center",
+          background: colors.background,
+          color: colors.textPrimary,
         }}
       >
         <h1 style={{ fontSize: "1.75rem", fontWeight: 800, margin: 0 }}>
           You don't own this lesson
         </h1>
-        <p style={{ opacity: 0.7, maxWidth: "420px" }}>
+        <p style={{ opacity: 0.7, fontWeight: 600, maxWidth: "420px" }}>
           You can't edit a lesson that belongs to another teacher. Use "Copy &amp; Edit"
           from the Assign Lesson picker to make your own editable copy instead.
         </p>
-        <Link href="/teacher/lessons" style={{ color: "inherit", textDecoration: "underline" }}>
+        <Link href="/teacher/lessons" style={{ color: "inherit", textDecoration: "underline", fontWeight: 700 }}>
           ← Back to My Lessons
         </Link>
       </main>
@@ -382,9 +387,11 @@ function CreateLessonEditor() {
         alignItems: "center",
         padding: "2rem",
         gap: "1rem",
+        background: colors.background,
+        color: colors.textPrimary,
       }}
     >
-      <h1 style={{ fontSize: "2.25rem", fontWeight: 800, margin: 0 }}>
+      <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
         {lessonId ? "Edit Lesson" : "Create a Lesson"}
       </h1>
 
@@ -408,12 +415,13 @@ function CreateLessonEditor() {
           onClick={openPublishConfirm}
           style={{
             fontSize: "0.95rem",
-            fontWeight: 700,
+            fontWeight: 800,
             padding: "0.6rem 1.2rem",
-            borderRadius: "8px",
+            borderRadius: radius.button,
             border: "none",
-            background: "#111",
-            color: "#fff",
+            background: colors.orange,
+            boxShadow: solidShadow(4, colors.orangeShadow),
+            color: colors.white,
             cursor: "pointer",
             whiteSpace: "nowrap",
           }}
@@ -423,7 +431,7 @@ function CreateLessonEditor() {
       </div>
 
       {saveError && (
-        <p style={{ color: "#c00", fontSize: "0.85rem", margin: 0 }}>{saveError}</p>
+        <p style={{ color: colors.coralText, fontSize: "0.85rem", margin: 0 }}>{saveError}</p>
       )}
 
       <div style={{ position: "relative", width: "100%", maxWidth: "700px" }}>
@@ -431,12 +439,13 @@ function CreateLessonEditor() {
           onClick={() => setPickerOpen((v) => !v)}
           style={{
             fontSize: "0.95rem",
-            fontWeight: 700,
+            fontWeight: 800,
             padding: "0.6rem 1rem",
-            borderRadius: "8px",
-            border: "1px dashed #999",
-            background: "#fafafa",
-            color: "#111",
+            borderRadius: radius.button,
+            border: "none",
+            background: colors.greenButton,
+            boxShadow: solidShadow(3, colors.greenButtonShadow),
+            color: colors.white,
             cursor: "pointer",
           }}
         >
@@ -879,6 +888,7 @@ function CreateLessonEditor() {
         href="/teacher/lessons"
         style={{
           fontSize: "0.9rem",
+          fontWeight: 700,
           opacity: 0.7,
           color: "inherit",
           textDecoration: "underline",
@@ -903,8 +913,8 @@ function CreateLessonEditor() {
         >
           <div
             style={{
-              background: "#fff",
-              borderRadius: "12px",
+              background: colors.white,
+              borderRadius: radius.card,
               padding: "1.5rem",
               maxWidth: "380px",
               width: "100%",
@@ -914,7 +924,7 @@ function CreateLessonEditor() {
             <h2 style={{ fontSize: "1.2rem", fontWeight: 800, margin: "0 0 0.5rem" }}>
               Share this lesson to the public library?
             </h2>
-            <p style={{ fontSize: "0.85rem", opacity: 0.7, margin: "0 0 1.25rem" }}>
+            <p style={{ fontSize: "0.85rem", fontWeight: 600, opacity: 0.7, margin: "0 0 1.25rem" }}>
               Public lessons can be assigned or copied by any teacher. You can change
               this later.
             </p>
@@ -924,14 +934,15 @@ function CreateLessonEditor() {
                 disabled={saving}
                 style={{
                   fontSize: "0.95rem",
-                  fontWeight: 700,
-                  padding: "0.7rem 1rem",
-                  borderRadius: "8px",
+                  fontWeight: 800,
+                  padding: "0.8rem 1rem",
+                  borderRadius: radius.button,
                   border: "none",
-                  background: "#111",
-                  color: "#fff",
+                  background: colors.orange,
+                  boxShadow: saving ? "none" : solidShadow(4, colors.orangeShadow),
+                  color: colors.white,
                   cursor: saving ? "default" : "pointer",
-                  opacity: saving ? 0.6 : 1,
+                  opacity: saving ? 0.7 : 1,
                 }}
               >
                 Yes, share it
@@ -941,14 +952,15 @@ function CreateLessonEditor() {
                 disabled={saving}
                 style={{
                   fontSize: "0.95rem",
-                  fontWeight: 700,
-                  padding: "0.7rem 1rem",
-                  borderRadius: "8px",
-                  border: "1px solid #ddd",
-                  background: "#fff",
-                  color: "#111",
+                  fontWeight: 800,
+                  padding: "0.8rem 1rem",
+                  borderRadius: radius.button,
+                  border: "none",
+                  background: colors.neutralGray,
+                  boxShadow: saving ? "none" : solidShadow(4, colors.neutralGrayShadow),
+                  color: colors.white,
                   cursor: saving ? "default" : "pointer",
-                  opacity: saving ? 0.6 : 1,
+                  opacity: saving ? 0.7 : 1,
                 }}
               >
                 No, keep it private
@@ -958,6 +970,7 @@ function CreateLessonEditor() {
                 disabled={saving}
                 style={{
                   fontSize: "0.8rem",
+                  fontWeight: 700,
                   opacity: 0.6,
                   background: "none",
                   border: "none",
