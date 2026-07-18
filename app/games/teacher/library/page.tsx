@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 interface Game {
   id: string;
@@ -69,17 +70,19 @@ export default function GamesLibraryPage() {
         alignItems: "center",
         padding: "2rem",
         gap: "1rem",
+        background: colors.background,
+        color: colors.textPrimary,
       }}
     >
-      <h1 style={{ fontSize: "2.25rem", fontWeight: 800, margin: 0 }}>
+      <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
         My Games
       </h1>
-      <p style={{ fontSize: "1rem", opacity: 0.7, margin: 0 }}>
+      <p style={{ fontSize: "1rem", fontWeight: 600, opacity: 0.7, margin: 0 }}>
         Host a demo round of any game you've created
       </p>
 
-      {loadError && <p style={{ color: "#c00", fontSize: "0.9rem" }}>{loadError}</p>}
-      {deleteError && <p style={{ color: "#c00", fontSize: "0.9rem" }}>{deleteError}</p>}
+      {loadError && <p style={{ color: colors.coralText, fontSize: "0.9rem", fontWeight: 600 }}>{loadError}</p>}
+      {deleteError && <p style={{ color: colors.coralText, fontSize: "0.9rem", fontWeight: 600 }}>{deleteError}</p>}
 
       <div
         style={{
@@ -92,11 +95,11 @@ export default function GamesLibraryPage() {
         }}
       >
         {games === null && !loadError && (
-          <p style={{ opacity: 0.5, textAlign: "center" }}>Loading...</p>
+          <p style={{ opacity: 0.6, fontWeight: 600, textAlign: "center" }}>Loading...</p>
         )}
 
         {games?.length === 0 && (
-          <p style={{ opacity: 0.5, textAlign: "center" }}>
+          <p style={{ opacity: 0.6, fontWeight: 600, textAlign: "center" }}>
             No games yet. Create one to get started.
           </p>
         )}
@@ -110,14 +113,14 @@ export default function GamesLibraryPage() {
               justifyContent: "space-between",
               gap: "0.75rem",
               padding: "0.9rem 1.1rem",
-              border: "1px solid #ddd",
-              borderRadius: "10px",
-              background: "#fff",
+              borderRadius: radius.card,
+              background: colors.white,
+              boxShadow: solidShadow(4, colors.rosterCardShadow),
             }}
           >
             <div style={{ textAlign: "left" }}>
-              <div style={{ fontWeight: 700 }}>{g.title}</div>
-              <div style={{ fontSize: "0.8rem", opacity: 0.6 }}>
+              <div style={{ fontWeight: 800 }}>{g.title}</div>
+              <div style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.6 }}>
                 {g.questions.length} question
                 {g.questions.length === 1 ? "" : "s"}
               </div>
@@ -127,12 +130,13 @@ export default function GamesLibraryPage() {
                 href={`/games/play/${g.id}`}
                 style={{
                   fontSize: "0.9rem",
-                  fontWeight: 700,
+                  fontWeight: 800,
                   padding: "0.5rem 0.9rem",
-                  borderRadius: "8px",
+                  borderRadius: radius.button,
                   border: "none",
-                  background: "#111",
-                  color: "#fff",
+                  background: colors.orange,
+                  boxShadow: solidShadow(3, colors.orangeShadow),
+                  color: colors.white,
                   textDecoration: "none",
                 }}
               >
@@ -142,11 +146,12 @@ export default function GamesLibraryPage() {
                 onClick={() => deleteGame(g.id)}
                 style={{
                   fontSize: "0.9rem",
+                  fontWeight: 800,
                   padding: "0.5rem 0.9rem",
-                  borderRadius: "8px",
-                  border: "1px solid #ddd",
-                  background: "#fff",
-                  color: "#c00",
+                  borderRadius: radius.button,
+                  border: "none",
+                  background: colors.coralText,
+                  color: colors.white,
                   cursor: "pointer",
                 }}
               >
@@ -161,6 +166,7 @@ export default function GamesLibraryPage() {
         href="/games/teacher"
         style={{
           fontSize: "0.9rem",
+          fontWeight: 700,
           opacity: 0.7,
           color: "inherit",
           textDecoration: "underline",

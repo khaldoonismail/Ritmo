@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 export default function SignupPage() {
   const [name, setName] = useState("");
@@ -33,12 +34,13 @@ export default function SignupPage() {
   const inputStyle: React.CSSProperties = {
     fontSize: "1rem",
     padding: "0.75rem 1rem",
-    borderRadius: "8px",
-    border: "1px solid #ddd",
+    borderRadius: radius.iconSquare,
+    border: "1px solid #E5DFC8",
     outline: "none",
     direction: "ltr",
     textAlign: "left",
     fontFamily: "inherit",
+    background: colors.white,
   };
 
   if (done) {
@@ -53,18 +55,20 @@ export default function SignupPage() {
           gap: "1rem",
           textAlign: "center",
           padding: "2rem",
+          background: colors.background,
+          color: colors.textPrimary,
         }}
       >
         <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
           Check your email
         </h1>
-        <p style={{ opacity: 0.7, maxWidth: "360px" }}>
+        <p style={{ opacity: 0.7, fontWeight: 600, maxWidth: "360px" }}>
           We sent a confirmation link to {email}. Confirm your address, then
           log in.
         </p>
         <Link
           href="/accounts/login"
-          style={{ color: "inherit", textDecoration: "underline" }}
+          style={{ color: "inherit", textDecoration: "underline", fontWeight: 700 }}
         >
           ← Back to Log in
         </Link>
@@ -83,10 +87,26 @@ export default function SignupPage() {
         gap: "1rem",
         textAlign: "center",
         padding: "2rem",
+        background: colors.background,
+        color: colors.textPrimary,
       }}
     >
-      <h1 style={{ fontSize: "3rem", fontWeight: 800, margin: 0 }}>Ritmo</h1>
-      <p style={{ fontSize: "1.1rem", opacity: 0.7, margin: 0 }}>
+      <div
+        style={{
+          width: "64px",
+          height: "64px",
+          borderRadius: "20px",
+          background: colors.orange,
+          boxShadow: solidShadow(6, colors.orangeShadow),
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span style={{ fontSize: "2rem", color: colors.white, lineHeight: 1 }}>♪</span>
+      </div>
+      <h1 style={{ fontSize: "2.25rem", fontWeight: 800, margin: 0 }}>Ritmo</h1>
+      <p style={{ fontSize: "1.05rem", fontWeight: 600, opacity: 0.7, margin: 0 }}>
         Create a teacher account
       </p>
       <form
@@ -126,7 +146,7 @@ export default function SignupPage() {
           style={inputStyle}
         />
         {error && (
-          <p style={{ color: "#c00", fontSize: "0.85rem", margin: 0 }}>
+          <p style={{ color: colors.coralText, fontSize: "0.85rem", margin: 0 }}>
             {error}
           </p>
         )}
@@ -135,14 +155,15 @@ export default function SignupPage() {
           disabled={loading}
           style={{
             fontSize: "1rem",
-            fontWeight: 700,
-            padding: "0.75rem 1rem",
-            borderRadius: "8px",
+            fontWeight: 800,
+            padding: "0.85rem 1rem",
+            borderRadius: radius.button,
             border: "none",
-            background: "#111",
-            color: "#fff",
+            background: colors.orange,
+            boxShadow: loading ? "none" : solidShadow(6, colors.orangeShadow),
+            color: colors.white,
             cursor: loading ? "default" : "pointer",
-            opacity: loading ? 0.6 : 1,
+            opacity: loading ? 0.7 : 1,
             marginTop: "0.25rem",
           }}
         >
@@ -154,6 +175,7 @@ export default function SignupPage() {
         href="/accounts/login"
         style={{
           fontSize: "0.9rem",
+          fontWeight: 700,
           opacity: 0.7,
           color: "inherit",
           textDecoration: "underline",
