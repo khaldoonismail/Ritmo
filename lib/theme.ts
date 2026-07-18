@@ -25,6 +25,15 @@ export const colors = {
   neutralGrayShadow: "#93907F",
 
   white: "#FFFFFF",
+
+  // Lesson-list status card backgrounds (light tint, distinct from the
+  // solid badge/icon colors above).
+  completedCardBg: "#EAF8EF",
+  completedCardShadow: "#BFE6CC",
+  inProgressCardBg: "#FFF3DF",
+  inProgressCardShadow: "#F0D6A6",
+  notStartedCardBg: "#F0EEE4",
+  notStartedCardShadow: "#D6D3C4",
 } as const;
 
 export const radius = {
