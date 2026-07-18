@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 type Step = "details" | "pin";
 
@@ -18,13 +19,28 @@ export default function StudentLoginPage() {
   const inputStyle: React.CSSProperties = {
     fontSize: "1rem",
     padding: "0.75rem 1rem",
-    borderRadius: "8px",
-    border: "1px solid #ddd",
+    borderRadius: radius.iconSquare,
+    border: `1px solid #E5DFC8`,
     outline: "none",
     direction: "ltr",
     textAlign: "left",
     fontFamily: "inherit",
+    background: colors.white,
   };
+
+  const primaryButtonStyle = (busy: boolean): React.CSSProperties => ({
+    fontSize: "1rem",
+    fontWeight: 800,
+    padding: "0.85rem 1rem",
+    borderRadius: radius.button,
+    border: "none",
+    background: colors.orange,
+    boxShadow: busy ? "none" : solidShadow(6, colors.orangeShadow),
+    color: colors.white,
+    cursor: busy ? "default" : "pointer",
+    opacity: busy ? 0.7 : 1,
+    marginTop: "0.25rem",
+  });
 
   async function handleContinue(e: React.FormEvent) {
     e.preventDefault();
@@ -73,12 +89,15 @@ export default function StudentLoginPage() {
         gap: "1rem",
         textAlign: "center",
         padding: "2rem",
+        background: colors.background,
+        color: colors.textPrimary,
       }}
     >
       <Link
         href="/"
         style={{
           fontSize: "0.9rem",
+          fontWeight: 600,
           opacity: 0.7,
           color: "inherit",
           textDecoration: "underline",
@@ -86,8 +105,27 @@ export default function StudentLoginPage() {
       >
         ← Back to Home
       </Link>
-      <h1 style={{ fontSize: "3rem", fontWeight: 800, margin: 0 }}>Ritmo</h1>
-      <p style={{ fontSize: "1.1rem", opacity: 0.7, margin: 0 }}>
+
+      <div
+        style={{
+          width: "64px",
+          height: "64px",
+          borderRadius: "20px",
+          background: colors.orange,
+          boxShadow: solidShadow(6, colors.orangeShadow),
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginTop: "0.5rem",
+        }}
+      >
+        <span style={{ fontSize: "2rem", color: colors.white, lineHeight: 1 }}>
+          ♪
+        </span>
+      </div>
+
+      <h1 style={{ fontSize: "2.25rem", fontWeight: 800, margin: 0 }}>Ritmo</h1>
+      <p style={{ fontSize: "1.1rem", fontWeight: 600, opacity: 0.7, margin: 0 }}>
         Student Login
       </p>
 
@@ -120,26 +158,11 @@ export default function StudentLoginPage() {
             style={{ ...inputStyle, textTransform: "uppercase" }}
           />
           {error && (
-            <p style={{ color: "#c00", fontSize: "0.85rem", margin: 0 }}>
+            <p style={{ color: colors.coralText, fontSize: "0.85rem", margin: 0 }}>
               {error}
             </p>
           )}
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              fontSize: "1rem",
-              fontWeight: 700,
-              padding: "0.75rem 1rem",
-              borderRadius: "8px",
-              border: "none",
-              background: "#111",
-              color: "#fff",
-              cursor: loading ? "default" : "pointer",
-              opacity: loading ? 0.6 : 1,
-              marginTop: "0.25rem",
-            }}
-          >
+          <button type="submit" disabled={loading} style={primaryButtonStyle(loading)}>
             {loading ? "Checking..." : "Continue"}
           </button>
         </form>
@@ -157,7 +180,7 @@ export default function StudentLoginPage() {
             marginTop: "1rem",
           }}
         >
-          <p style={{ fontSize: "0.9rem", opacity: 0.7, margin: 0 }}>
+          <p style={{ fontSize: "0.9rem", fontWeight: 600, opacity: 0.7, margin: 0 }}>
             Hi <strong>{name}</strong> — enter your 4-digit PIN to confirm it's
             you.
           </p>
@@ -174,26 +197,11 @@ export default function StudentLoginPage() {
             style={{ ...inputStyle, textAlign: "center", letterSpacing: "0.3em" }}
           />
           {error && (
-            <p style={{ color: "#c00", fontSize: "0.85rem", margin: 0 }}>
+            <p style={{ color: colors.coralText, fontSize: "0.85rem", margin: 0 }}>
               {error}
             </p>
           )}
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              fontSize: "1rem",
-              fontWeight: 700,
-              padding: "0.75rem 1rem",
-              borderRadius: "8px",
-              border: "none",
-              background: "#111",
-              color: "#fff",
-              cursor: loading ? "default" : "pointer",
-              opacity: loading ? 0.6 : 1,
-              marginTop: "0.25rem",
-            }}
-          >
+          <button type="submit" disabled={loading} style={primaryButtonStyle(loading)}>
             {loading ? "Logging in..." : "Log in"}
           </button>
           <button
@@ -205,6 +213,7 @@ export default function StudentLoginPage() {
             }}
             style={{
               fontSize: "0.85rem",
+              fontWeight: 600,
               opacity: 0.7,
               background: "none",
               border: "none",
@@ -221,11 +230,15 @@ export default function StudentLoginPage() {
       <Link
         href="/accounts/login"
         style={{
-          fontSize: "0.9rem",
-          opacity: 0.7,
-          color: "inherit",
-          textDecoration: "underline",
-          marginTop: "0.5rem",
+          fontSize: "1rem",
+          fontWeight: 800,
+          padding: "0.85rem 1.5rem",
+          borderRadius: radius.button,
+          background: colors.greenButton,
+          boxShadow: solidShadow(6, colors.greenButtonShadow),
+          color: colors.white,
+          textDecoration: "none",
+          marginTop: "0.75rem",
         }}
       >
         Teacher? Log in here

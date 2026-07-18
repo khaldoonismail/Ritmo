@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,12 +33,13 @@ export default function LoginPage() {
   const inputStyle: React.CSSProperties = {
     fontSize: "1rem",
     padding: "0.75rem 1rem",
-    borderRadius: "8px",
-    border: "1px solid #ddd",
+    borderRadius: radius.iconSquare,
+    border: `1px solid #E5DFC8`,
     outline: "none",
     direction: "ltr",
     textAlign: "left",
     fontFamily: "inherit",
+    background: colors.white,
   };
 
   return (
@@ -51,12 +53,15 @@ export default function LoginPage() {
         gap: "1rem",
         textAlign: "center",
         padding: "2rem",
+        background: colors.background,
+        color: colors.textPrimary,
       }}
     >
       <Link
         href="/"
         style={{
           fontSize: "0.9rem",
+          fontWeight: 600,
           opacity: 0.7,
           color: "inherit",
           textDecoration: "underline",
@@ -64,7 +69,27 @@ export default function LoginPage() {
       >
         ← Back to Home
       </Link>
-      <h1 style={{ fontSize: "3rem", fontWeight: 800, margin: 0 }}>Ritmo</h1>
+
+      <div
+        style={{
+          width: "64px",
+          height: "64px",
+          borderRadius: "20px",
+          background: colors.orange,
+          boxShadow: solidShadow(6, colors.orangeShadow),
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginTop: "0.5rem",
+        }}
+      >
+        <span style={{ fontSize: "2rem", color: colors.white, lineHeight: 1 }}>
+          ♪
+        </span>
+      </div>
+
+      <h1 style={{ fontSize: "2.25rem", fontWeight: 800, margin: 0 }}>Ritmo</h1>
+
       <form
         onSubmit={handleLogin}
         style={{
@@ -93,7 +118,7 @@ export default function LoginPage() {
           style={inputStyle}
         />
         {error && (
-          <p style={{ color: "#c00", fontSize: "0.85rem", margin: 0 }}>
+          <p style={{ color: colors.coralText, fontSize: "0.85rem", margin: 0 }}>
             {error}
           </p>
         )}
@@ -102,14 +127,15 @@ export default function LoginPage() {
           disabled={loading}
           style={{
             fontSize: "1rem",
-            fontWeight: 700,
-            padding: "0.75rem 1rem",
-            borderRadius: "8px",
+            fontWeight: 800,
+            padding: "0.85rem 1rem",
+            borderRadius: radius.button,
             border: "none",
-            background: "#111",
-            color: "#fff",
+            background: colors.orange,
+            boxShadow: loading ? "none" : solidShadow(6, colors.orangeShadow),
+            color: colors.white,
             cursor: loading ? "default" : "pointer",
-            opacity: loading ? 0.6 : 1,
+            opacity: loading ? 0.7 : 1,
             marginTop: "0.25rem",
           }}
         >
@@ -120,11 +146,15 @@ export default function LoginPage() {
       <Link
         href="/accounts/signup"
         style={{
-          fontSize: "0.9rem",
-          opacity: 0.7,
-          color: "inherit",
-          textDecoration: "underline",
-          marginTop: "0.5rem",
+          fontSize: "1rem",
+          fontWeight: 800,
+          padding: "0.85rem 1.5rem",
+          borderRadius: radius.button,
+          background: colors.greenButton,
+          boxShadow: solidShadow(6, colors.greenButtonShadow),
+          color: colors.white,
+          textDecoration: "none",
+          marginTop: "0.75rem",
         }}
       >
         Create a teacher account
