@@ -34,6 +34,17 @@ export const colors = {
   inProgressCardShadow: "#F0D6A6",
   notStartedCardBg: "#F0EEE4",
   notStartedCardShadow: "#D6D3C4",
+
+  // Teacher dashboard section tiles.
+  classesText: "#B4650B",
+  lessonsText: "#2E7D46",
+  assessmentCardShadow: "#F0C3C3",
+  gamesCardShadow: "#BFCBF0",
+
+  // Assessment roster (per-student cards, score box).
+  rosterCardShadow: "#EEE9DA",
+  scoreBoxBg: "#F4F1E6",
+  scoreBoxShadow: "#E0DBC7",
 } as const;
 
 export const radius = {

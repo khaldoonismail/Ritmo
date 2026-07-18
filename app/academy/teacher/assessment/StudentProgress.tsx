@@ -4,25 +4,38 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { lessonTitle as legacyLessonTitle } from "@/lib/lessons";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 type ProgressStatus = "not_started" | "in_progress" | "completed";
 
 const STATUS_DISPLAY: Record<
   ProgressStatus,
-  { icon: string; label: string; color: string }
+  { icon: string; label: string; badgeBg: string }
 > = {
-  completed: { icon: "✅", label: "Completed", color: "#1a7f37" },
-  in_progress: { icon: "🔵", label: "In Progress", color: "#1a5fd6" },
-  not_started: { icon: "⚪", label: "Not Started", color: "#6b7280" },
+  completed: { icon: "✓", label: "Completed", badgeBg: colors.greenCard },
+  in_progress: { icon: "▶", label: "In progress", badgeBg: colors.orange },
+  not_started: { icon: "🔒", label: "Not started", badgeBg: colors.neutralGray },
 };
+
+const AVATAR_COLORS = [
+  { bg: colors.orange, shadow: colors.orangeShadow },
+  { bg: colors.greenCard, shadow: colors.greenCardShadow },
+];
 
 type PerformanceRating = "excellent" | "very_good" | "good" | "needs_practice";
 
-const RATING_DISPLAY: Record<PerformanceRating, { label: string; color: string }> = {
-  excellent: { label: "Excellent", color: "#1a7f37" },
-  very_good: { label: "Very Good", color: "#1a7f37" },
-  good: { label: "Good", color: "#a68b00" },
-  needs_practice: { label: "Needs Practice", color: "#c76a00" },
+const RATING_DISPLAY: Record<
+  PerformanceRating,
+  { label: string; bg: string; shadow: string }
+> = {
+  excellent: { label: "Excellent", bg: colors.greenCard, shadow: colors.greenCardShadow },
+  very_good: { label: "Very Good", bg: colors.greenButton, shadow: colors.greenButtonShadow },
+  good: { label: "Good", bg: colors.orange, shadow: colors.orangeShadow },
+  needs_practice: {
+    label: "Needs Practice",
+    bg: colors.neutralGray,
+    shadow: colors.neutralGrayShadow,
+  },
 };
 
 const RATING_OPTIONS: PerformanceRating[] = [
@@ -293,29 +306,34 @@ export default function StudentProgress() {
 
   const classNameById = new Map(classes.map((c) => [c.id, c.name]));
 
-  const inputStyle: React.CSSProperties = {
-    fontSize: "0.85rem",
-    padding: "0.35rem 0.5rem",
-    borderRadius: "6px",
-    border: "1px solid #ddd",
-    outline: "none",
-    direction: "ltr",
-    textAlign: "left",
-    fontFamily: "inherit",
-    width: "70px",
+  const ratingSelectStyle = (rating: PerformanceRating | null): React.CSSProperties => {
+    const display = rating ? RATING_DISPLAY[rating] : null;
+    return {
+      fontSize: "0.8rem",
+      fontWeight: 800,
+      fontFamily: "inherit",
+      padding: "0.4rem 0.6rem",
+      borderRadius: radius.pill,
+      border: "none",
+      outline: "none",
+      background: display?.bg ?? colors.neutralGray,
+      color: colors.white,
+      cursor: "pointer",
+      width: "140px",
+    };
   };
 
   if (loading) {
-    return <p style={{ opacity: 0.5 }}>Loading student progress...</p>;
+    return <p style={{ opacity: 0.6, fontWeight: 600 }}>Loading student progress...</p>;
   }
 
   if (error) {
-    return <p style={{ color: "#c00", fontSize: "0.9rem" }}>{error}</p>;
+    return <p style={{ color: colors.coralText, fontSize: "0.9rem", fontWeight: 600 }}>{error}</p>;
   }
 
   if (classes.length === 0) {
     return (
-      <p style={{ opacity: 0.5, textAlign: "center" }}>
+      <p style={{ opacity: 0.6, fontWeight: 600, textAlign: "center" }}>
         You don't have any classes yet.
       </p>
     );
@@ -323,7 +341,7 @@ export default function StudentProgress() {
 
   if (assignments.length === 0) {
     return (
-      <p style={{ opacity: 0.5, textAlign: "center" }}>
+      <p style={{ opacity: 0.6, fontWeight: 600, textAlign: "center" }}>
         No active assignments yet. Assign a lesson to a class to see student
         progress here.
       </p>
@@ -349,16 +367,16 @@ export default function StudentProgress() {
           <div
             key={a.id}
             style={{
-              border: "1px solid #ddd",
-              borderRadius: "10px",
-              padding: "1rem",
-              background: "#fff",
+              borderRadius: radius.card,
+              padding: "1.25rem",
+              background: colors.white,
+              boxShadow: solidShadow(4, colors.rosterCardShadow),
               textAlign: "left",
             }}
           >
-            <div style={{ marginBottom: "0.75rem" }}>
-              <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>{title}</div>
-              <div style={{ fontSize: "0.85rem", opacity: 0.7 }}>
+            <div style={{ marginBottom: "0.85rem" }}>
+              <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>{title}</div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 600, opacity: 0.7 }}>
                 Class: {className}
                 {a.due_at && (
                   <>
@@ -373,90 +391,134 @@ export default function StudentProgress() {
             </div>
 
             {entries.length === 0 ? (
-              <p style={{ opacity: 0.5, fontSize: "0.85rem" }}>
+              <p style={{ opacity: 0.6, fontWeight: 600, fontSize: "0.85rem" }}>
                 No students to show for this assignment.
               </p>
             ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid #eee" }}>
-                      <th style={{ textAlign: "left", padding: "0.4rem" }}>Student</th>
-                      <th style={{ textAlign: "left", padding: "0.4rem" }}>Status</th>
-                      <th style={{ textAlign: "left", padding: "0.4rem" }}>Score</th>
-                      <th style={{ textAlign: "left", padding: "0.4rem" }}>Rating</th>
-                      <th style={{ textAlign: "left", padding: "0.4rem" }}>Last updated</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {entries.map((entry) => {
-                      const key = `${a.id}:${entry.studentId}`;
-                      const { icon, label, color } = STATUS_DISPLAY[entry.status];
-                      return (
-                        <tr key={entry.studentId} style={{ borderBottom: "1px solid #f3f3f3" }}>
-                          <td style={{ padding: "0.4rem", fontWeight: 600 }}>
-                            {entry.studentName}
-                          </td>
-                          <td style={{ padding: "0.4rem", color, fontWeight: 600 }}>
-                            {icon} {label}
-                          </td>
-                          <td style={{ padding: "0.4rem" }}>
-                            <input
-                              type="number"
-                              value={scoreInputs[key] ?? ""}
-                              onChange={(e) =>
-                                setScoreInputs((prev) => ({ ...prev, [key]: e.target.value }))
-                              }
-                              onBlur={() => saveScore(a.id, entry.studentId)}
-                              disabled={savingKey === key}
-                              style={inputStyle}
-                            />
-                            {saveError[key] && (
-                              <div style={{ color: "#c00", fontSize: "0.75rem" }}>
-                                {saveError[key]}
-                              </div>
-                            )}
-                          </td>
-                          <td style={{ padding: "0.4rem" }}>
-                            <select
-                              value={entry.rating ?? ""}
-                              onChange={(e) =>
-                                saveRating(
-                                  a.id,
-                                  entry.studentId,
-                                  e.target.value === ""
-                                    ? null
-                                    : (e.target.value as PerformanceRating)
-                                )
-                              }
-                              disabled={savingKey === key}
-                              style={{
-                                ...inputStyle,
-                                width: "140px",
-                                color: entry.rating
-                                  ? RATING_DISPLAY[entry.rating].color
-                                  : undefined,
-                                fontWeight: entry.rating ? 600 : 400,
-                              }}
-                            >
-                              <option value="">—</option>
-                              {RATING_OPTIONS.map((r) => (
-                                <option key={r} value={r}>
-                                  {RATING_DISPLAY[r].label}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td style={{ padding: "0.4rem", opacity: 0.6, fontSize: "0.8rem" }}>
-                            {entry.updatedAt
-                              ? new Date(entry.updatedAt).toLocaleDateString()
-                              : "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                {entries.map((entry, i) => {
+                  const key = `${a.id}:${entry.studentId}`;
+                  const { icon, label, badgeBg } = STATUS_DISPLAY[entry.status];
+                  const avatar = AVATAR_COLORS[i % AVATAR_COLORS.length];
+                  return (
+                    <div
+                      key={entry.studentId}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: "0.6rem",
+                        padding: "0.6rem 0.75rem",
+                        borderRadius: radius.iconSquare,
+                        background: "#FCFAF3",
+                        boxShadow: solidShadow(3, colors.rosterCardShadow),
+                      }}
+                    >
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          width: "36px",
+                          height: "36px",
+                          minWidth: "36px",
+                          borderRadius: "50%",
+                          background: avatar.bg,
+                          boxShadow: solidShadow(3, avatar.shadow),
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontWeight: 800,
+                          color: colors.white,
+                        }}
+                      >
+                        {entry.studentName.charAt(0).toUpperCase()}
+                      </span>
+                      <span style={{ fontWeight: 700, marginRight: "auto" }}>
+                        {entry.studentName}
+                      </span>
+
+                      <span
+                        style={{
+                          fontWeight: 800,
+                          fontSize: "0.7rem",
+                          padding: "0.3rem 0.6rem",
+                          borderRadius: radius.pill,
+                          background: badgeBg,
+                          color: colors.white,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {icon} {label}
+                      </span>
+
+                      <span style={{ display: "flex", flexDirection: "column" }}>
+                        <input
+                          type="number"
+                          value={scoreInputs[key] ?? ""}
+                          onChange={(e) =>
+                            setScoreInputs((prev) => ({ ...prev, [key]: e.target.value }))
+                          }
+                          onBlur={() => saveScore(a.id, entry.studentId)}
+                          disabled={savingKey === key}
+                          placeholder="—"
+                          style={{
+                            fontSize: "0.85rem",
+                            fontWeight: 700,
+                            fontFamily: "inherit",
+                            width: "44px",
+                            height: "32px",
+                            padding: 0,
+                            borderRadius: "10px",
+                            border: "none",
+                            outline: "none",
+                            textAlign: "center",
+                            background: colors.scoreBoxBg,
+                            boxShadow: solidShadow(3, colors.scoreBoxShadow),
+                          }}
+                        />
+                        {saveError[key] && (
+                          <div style={{ color: colors.coralText, fontSize: "0.7rem" }}>
+                            {saveError[key]}
+                          </div>
+                        )}
+                      </span>
+
+                      <select
+                        value={entry.rating ?? ""}
+                        onChange={(e) =>
+                          saveRating(
+                            a.id,
+                            entry.studentId,
+                            e.target.value === ""
+                              ? null
+                              : (e.target.value as PerformanceRating)
+                          )
+                        }
+                        disabled={savingKey === key}
+                        style={ratingSelectStyle(entry.rating)}
+                      >
+                        <option value="">Rate…</option>
+                        {RATING_OPTIONS.map((r) => (
+                          <option key={r} value={r}>
+                            {RATING_DISPLAY[r].label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <span
+                        style={{
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          opacity: 0.55,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {entry.updatedAt
+                          ? new Date(entry.updatedAt).toLocaleDateString()
+                          : "—"}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 export default function LogoutButton() {
   const router = useRouter();
@@ -17,13 +18,15 @@ export default function LogoutButton() {
       onClick={handleLogout}
       style={{
         fontSize: "0.9rem",
-        fontWeight: 700,
-        padding: "0.6rem 1.2rem",
-        borderRadius: "8px",
-        border: "1px solid #ddd",
-        background: "#fff",
-        color: "#111",
+        fontWeight: 800,
+        padding: "0.7rem 1.4rem",
+        borderRadius: radius.button,
+        border: "none",
+        background: colors.neutralGray,
+        boxShadow: solidShadow(4, colors.neutralGrayShadow),
+        color: colors.white,
         cursor: "pointer",
+        marginTop: "0.5rem",
       }}
     >
       Log out

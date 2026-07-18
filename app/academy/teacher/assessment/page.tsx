@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { colors } from "@/lib/theme";
 import StudentProgress from "./StudentProgress";
 
 export default function AssessmentPage() {
@@ -13,13 +14,15 @@ export default function AssessmentPage() {
         alignItems: "center",
         padding: "2rem",
         gap: "1rem",
+        background: colors.background,
+        color: colors.textPrimary,
       }}
     >
-      <h1 style={{ fontSize: "2.25rem", fontWeight: 800, margin: 0 }}>
+      <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
         Assessment
       </h1>
 
-      <h2 style={{ fontSize: "1.4rem", fontWeight: 800, margin: "0.5rem 0 0" }}>
+      <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: "0.5rem 0 0" }}>
         Student Progress
       </h2>
       <StudentProgress />
@@ -28,6 +31,7 @@ export default function AssessmentPage() {
         href="/academy/teacher"
         style={{
           fontSize: "0.9rem",
+          fontWeight: 700,
           opacity: 0.7,
           color: "inherit",
           textDecoration: "underline",
