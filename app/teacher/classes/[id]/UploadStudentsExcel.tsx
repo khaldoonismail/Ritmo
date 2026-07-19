@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { parseRosterFile } from "@/lib/parseStudentRoster";
 import { generateUniquePins } from "@/lib/studentPin";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 type Stage = "idle" | "preview" | "success";
 
@@ -113,29 +114,30 @@ export default function UploadStudentsExcel({
   const inputStyle: React.CSSProperties = {
     fontSize: "0.95rem",
     padding: "0.55rem 0.75rem",
-    borderRadius: "8px",
-    border: "1px solid #ddd",
+    borderRadius: radius.iconSquare,
+    border: "1px solid #E5DFC8",
     outline: "none",
     fontFamily: "inherit",
     width: "100%",
+    background: colors.white,
   };
 
   const primaryButtonStyle: React.CSSProperties = {
     fontSize: "0.9rem",
-    fontWeight: 700,
-    padding: "0.55rem 1rem",
-    borderRadius: "8px",
+    fontWeight: 800,
+    padding: "0.6rem 1.1rem",
+    borderRadius: radius.button,
     border: "none",
-    background: "#111",
-    color: "#fff",
+    background: colors.orange,
+    boxShadow: solidShadow(3, colors.orangeShadow),
+    color: colors.white,
     cursor: "pointer",
   };
 
   const secondaryButtonStyle: React.CSSProperties = {
     ...primaryButtonStyle,
-    background: "#fff",
-    color: "#111",
-    border: "1px solid #ddd",
+    background: colors.neutralGray,
+    boxShadow: solidShadow(3, colors.neutralGrayShadow),
   };
 
   return (
@@ -144,11 +146,11 @@ export default function UploadStudentsExcel({
         display: "flex",
         flexDirection: "column",
         gap: "0.6rem",
-        border: "1px solid #ddd",
-        borderRadius: "10px",
+        borderRadius: radius.card,
         padding: "0.9rem",
         marginBottom: "0.75rem",
-        background: "#fff",
+        background: colors.white,
+        boxShadow: solidShadow(4, colors.rosterCardShadow),
         textAlign: "left",
         width: "100%",
         boxSizing: "border-box",
@@ -156,7 +158,7 @@ export default function UploadStudentsExcel({
     >
       {stage !== "success" && (
         <>
-          <label style={{ fontSize: "0.85rem", opacity: 0.7 }}>
+          <label style={{ fontSize: "0.85rem", fontWeight: 600, opacity: 0.7 }}>
             Upload a .xlsx or .csv file with a "Name" column (header row required)
           </label>
           <input
@@ -170,16 +172,16 @@ export default function UploadStudentsExcel({
       )}
 
       {error && (
-        <p style={{ color: "#c00", fontSize: "0.85rem", margin: 0 }}>{error}</p>
+        <p style={{ color: colors.coralText, fontSize: "0.85rem", fontWeight: 600, margin: 0 }}>{error}</p>
       )}
 
       {stage === "preview" && (
         <>
-          <p style={{ fontSize: "0.9rem", fontWeight: 700, margin: 0 }}>
+          <p style={{ fontSize: "0.9rem", fontWeight: 800, margin: 0 }}>
             {names.length} student{names.length === 1 ? "" : "s"} will be added
           </p>
           {duplicateCount > 0 && (
-            <p style={{ fontSize: "0.8rem", opacity: 0.7, margin: 0 }}>
+            <p style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.7, margin: 0 }}>
               Note: {duplicateCount} duplicate name{duplicateCount === 1 ? "" : "s"}{" "}
               found in this file — they'll be added separately.
             </p>
@@ -188,16 +190,16 @@ export default function UploadStudentsExcel({
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: "0.25rem",
+              gap: "0.3rem",
               maxHeight: "200px",
               overflowY: "auto",
-              border: "1px solid #eee",
-              borderRadius: "8px",
+              borderRadius: radius.iconSquare,
+              background: colors.background,
               padding: "0.5rem 0.7rem",
             }}
           >
             {names.map((name, i) => (
-              <span key={i} style={{ fontSize: "0.85rem" }}>
+              <span key={i} style={{ fontSize: "0.85rem", fontWeight: 600 }}>
                 {name}
               </span>
             ))}
@@ -206,7 +208,7 @@ export default function UploadStudentsExcel({
             <button
               onClick={handleConfirm}
               disabled={confirmBusy}
-              style={{ ...primaryButtonStyle, opacity: confirmBusy ? 0.6 : 1 }}
+              style={{ ...primaryButtonStyle, opacity: confirmBusy ? 0.7 : 1 }}
             >
               {confirmBusy ? "Adding..." : "Confirm & Add"}
             </button>
@@ -223,7 +225,7 @@ export default function UploadStudentsExcel({
 
       {stage === "success" && (
         <>
-          <p style={{ fontSize: "0.9rem", fontWeight: 700, margin: 0 }}>
+          <p style={{ fontSize: "0.9rem", fontWeight: 800, margin: 0 }}>
             Added {added.length} student{added.length === 1 ? "" : "s"} — give each
             one their PIN below.
           </p>
@@ -231,11 +233,11 @@ export default function UploadStudentsExcel({
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: "0.35rem",
+              gap: "0.4rem",
               maxHeight: "260px",
               overflowY: "auto",
-              border: "1px solid #eee",
-              borderRadius: "8px",
+              borderRadius: radius.iconSquare,
+              background: colors.background,
               padding: "0.6rem 0.8rem",
             }}
           >
@@ -246,6 +248,7 @@ export default function UploadStudentsExcel({
                   display: "flex",
                   justifyContent: "space-between",
                   fontSize: "0.9rem",
+                  fontWeight: 600,
                 }}
               >
                 <span>{s.name}</span>

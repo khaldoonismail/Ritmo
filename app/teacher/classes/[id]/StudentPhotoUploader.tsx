@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { uploadStudentAvatar } from "@/lib/studentAvatar";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 export default function StudentPhotoUploader({
   studentId,
@@ -40,12 +41,13 @@ export default function StudentPhotoUploader({
 
   const buttonStyle: React.CSSProperties = {
     fontSize: "0.9rem",
-    fontWeight: 700,
+    fontWeight: 800,
     padding: "0.55rem 1rem",
-    borderRadius: "8px",
-    border: "1px solid #ddd",
-    background: "#fff",
-    color: "#111",
+    borderRadius: radius.button,
+    border: "none",
+    background: colors.neutralGray,
+    boxShadow: solidShadow(3, colors.neutralGrayShadow),
+    color: colors.white,
     cursor: "pointer",
   };
 
@@ -55,23 +57,22 @@ export default function StudentPhotoUploader({
         display: "flex",
         flexDirection: "column",
         gap: "0.6rem",
-        border: "1px solid #ddd",
-        borderRadius: "10px",
+        borderRadius: radius.card,
         padding: "0.9rem",
         marginTop: "-0.25rem",
         marginBottom: "0.25rem",
-        background: "#fafafa",
+        background: colors.background,
         textAlign: "left",
         width: "100%",
         boxSizing: "border-box",
       }}
     >
-      <p style={{ fontSize: "0.85rem", fontWeight: 700, margin: 0 }}>
+      <p style={{ fontSize: "0.85rem", fontWeight: 800, margin: 0, color: colors.textPrimary }}>
         Photo for {studentName}
       </p>
 
       {error && (
-        <p style={{ color: "#c00", fontSize: "0.85rem", margin: 0 }}>{error}</p>
+        <p style={{ color: colors.coralText, fontSize: "0.85rem", fontWeight: 600, margin: 0 }}>{error}</p>
       )}
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -95,7 +96,7 @@ export default function StudentPhotoUploader({
       </div>
 
       {busy && (
-        <p style={{ fontSize: "0.8rem", opacity: 0.6, margin: 0 }}>Uploading...</p>
+        <p style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.6, margin: 0 }}>Uploading...</p>
       )}
 
       <input

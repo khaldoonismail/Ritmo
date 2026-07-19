@@ -3,15 +3,17 @@
 import { useState } from "react";
 import { QuestionData, gradeQuestion, BLANK_MARKER } from "@/lib/questionTypes";
 import { resolveVideoSource, UNSUPPORTED_VIDEO_MESSAGE } from "@/lib/videoEmbed";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 const submitButtonStyle: React.CSSProperties = {
   fontSize: "0.85rem",
-  fontWeight: 700,
-  padding: "0.45rem 0.9rem",
-  borderRadius: "8px",
+  fontWeight: 800,
+  padding: "0.5rem 1rem",
+  borderRadius: radius.button,
   border: "none",
-  background: "#111",
-  color: "#fff",
+  background: colors.orange,
+  boxShadow: solidShadow(3, colors.orangeShadow),
+  color: colors.white,
   cursor: "pointer",
 };
 
@@ -67,12 +69,16 @@ function Attachment({ question }: { question: QuestionData }) {
   }
   if (source.kind === "needs-embed-link") {
     return (
-      <p style={{ fontSize: "0.85rem", color: "#a66300" }}>
+      <p style={{ fontSize: "0.85rem", fontWeight: 600, color: colors.classesText }}>
         Video link needs a {source.provider} Embed link.
       </p>
     );
   }
-  return <p style={{ fontSize: "0.85rem", color: "#c00" }}>{UNSUPPORTED_VIDEO_MESSAGE}</p>;
+  return (
+    <p style={{ fontSize: "0.85rem", fontWeight: 600, color: colors.coralText }}>
+      {UNSUPPORTED_VIDEO_MESSAGE}
+    </p>
+  );
 }
 
 function ChoiceAnswer({ question }: { question: QuestionData }) {
@@ -80,16 +86,23 @@ function ChoiceAnswer({ question }: { question: QuestionData }) {
   const submitted = selected !== null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
       {(question.options || []).map((opt, i) => {
         const isSelected = selected === i;
         const isCorrectOption = question.correctIndex === i;
-        let background = "#f5f5f5";
+        let background: string = colors.white;
+        let border = "1px solid #E5DFC8";
         if (submitted && question.showCorrectAnswer) {
-          if (isCorrectOption) background = "#d7f5d7";
-          else if (isSelected) background = "#fbdada";
+          if (isCorrectOption) {
+            background = colors.completedCardBg;
+            border = `1px solid ${colors.completedCardShadow}`;
+          } else if (isSelected) {
+            background = colors.coralBackground;
+            border = `1px solid #F0C3C3`;
+          }
         } else if (submitted && isSelected) {
-          background = "#e5e5e5";
+          background = colors.notStartedCardBg;
+          border = `1px solid ${colors.notStartedCardShadow}`;
         }
         return (
           <button
@@ -99,10 +112,12 @@ function ChoiceAnswer({ question }: { question: QuestionData }) {
             style={{
               textAlign: "left",
               fontSize: "0.95rem",
-              padding: "0.6rem 0.9rem",
-              borderRadius: "8px",
-              border: "1px solid #ddd",
+              fontWeight: 600,
+              padding: "0.65rem 0.9rem",
+              borderRadius: radius.iconSquare,
+              border,
               background,
+              color: colors.textPrimary,
               cursor: submitted ? "default" : "pointer",
             }}
           >
@@ -114,8 +129,8 @@ function ChoiceAnswer({ question }: { question: QuestionData }) {
         <p
           style={{
             fontSize: "0.8rem",
-            fontWeight: 700,
-            color: selected === question.correctIndex ? "#0a0" : "#c00",
+            fontWeight: 800,
+            color: selected === question.correctIndex ? colors.greenCardShadow : colors.coralText,
             margin: "0.2rem 0 0",
           }}
         >
@@ -138,7 +153,7 @@ function FillBlankAnswer({ question }: { question: QuestionData }) {
 
   return (
     <div>
-      <p style={{ fontWeight: 700, lineHeight: 2, marginBottom: "0.6rem" }}>
+      <p style={{ fontWeight: 700, lineHeight: 2.2, marginBottom: "0.6rem" }}>
         {segments.map((seg, i) => (
           <span key={i}>
             {seg}
@@ -156,21 +171,21 @@ function FillBlankAnswer({ question }: { question: QuestionData }) {
                   display: "inline-block",
                   width: "130px",
                   margin: "0 0.3rem",
-                  padding: "0.25rem 0.5rem",
-                  borderRadius: "4px",
-                  border: "1px solid #ccc",
+                  padding: "0.3rem 0.6rem",
+                  borderRadius: radius.iconSquare,
+                  border: "1px solid #E5DFC8",
                   direction: "ltr",
                   textAlign: "left",
                   fontFamily: "inherit",
-                  fontWeight: 400,
+                  fontWeight: 600,
                   background: !submitted
-                    ? "#fff"
+                    ? colors.white
                     : question.showCorrectAnswer
                     ? (values[i] || "").trim().toLowerCase() ===
                       (question.blanks?.[i] || "").trim().toLowerCase()
-                      ? "#d7f5d7"
-                      : "#fbdada"
-                    : "#f5f5f5",
+                      ? colors.completedCardBg
+                      : colors.coralBackground
+                    : colors.notStartedCardBg,
                 }}
               />
             )}
@@ -186,8 +201,12 @@ function FillBlankAnswer({ question }: { question: QuestionData }) {
         <p
           style={{
             fontSize: "0.8rem",
-            fontWeight: 700,
-            color: question.showCorrectAnswer ? (correct ? "#0a0" : "#c00") : "#111",
+            fontWeight: 800,
+            color: question.showCorrectAnswer
+              ? correct
+                ? colors.greenCardShadow
+                : colors.coralText
+              : colors.textPrimary,
             opacity: question.showCorrectAnswer ? 1 : 0.6,
             margin: 0,
           }}
@@ -217,26 +236,27 @@ function ShortAnswerAnswer() {
         style={{
           width: "100%",
           minHeight: "70px",
-          padding: "0.5rem 0.6rem",
-          borderRadius: "6px",
-          border: "1px solid #ddd",
+          padding: "0.6rem 0.7rem",
+          borderRadius: radius.iconSquare,
+          border: "1px solid #E5DFC8",
           outline: "none",
           direction: "ltr",
           textAlign: "left",
           fontFamily: "inherit",
+          background: colors.white,
           resize: "vertical",
         }}
       />
       {!submitted && (
         <button
           onClick={() => setSubmitted(true)}
-          style={{ ...submitButtonStyle, marginTop: "0.4rem" }}
+          style={{ ...submitButtonStyle, marginTop: "0.5rem" }}
         >
           Submit
         </button>
       )}
       {submitted && (
-        <p style={{ fontSize: "0.8rem", opacity: 0.6, marginTop: "0.4rem" }}>
+        <p style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.6, marginTop: "0.4rem" }}>
           Answer submitted.
         </p>
       )}

@@ -573,7 +573,7 @@ function CreateLessonEditor() {
                 style={{
                   border: "none",
                   background: "none",
-                  color: "#c00",
+                  color: colors.coralText,
                   cursor: "pointer",
                   fontSize: "0.8rem",
                 }}
@@ -647,13 +647,13 @@ function CreateLessonEditor() {
                   style={{
                     flex: 1,
                     minHeight: "120px",
-                    borderRadius: "8px",
+                    borderRadius: radius.card,
                     border:
                       dragOverImageId === block.id
-                        ? "2px dashed #111"
-                        : "2px dashed #ccc",
+                        ? `2px dashed ${colors.orangeShadow}`
+                        : "2px dashed #E5DFC8",
                     background:
-                      dragOverImageId === block.id ? "#eef5ff" : "#fafafa",
+                      dragOverImageId === block.id ? colors.inProgressCardBg : colors.background,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -684,8 +684,8 @@ function CreateLessonEditor() {
                           height: "22px",
                           borderRadius: "50%",
                           border: "none",
-                          background: "rgba(0,0,0,0.65)",
-                          color: "#fff",
+                          background: colors.coralText,
+                          color: colors.white,
                           fontSize: "0.7rem",
                           lineHeight: 1,
                           cursor: "pointer",
@@ -697,19 +697,20 @@ function CreateLessonEditor() {
                     </div>
                   ) : (
                     <div style={{ textAlign: "center", padding: "0.75rem" }}>
-                      <p style={{ fontSize: "0.78rem", opacity: 0.6, margin: "0 0 0.5rem" }}>
+                      <p style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6, margin: "0 0 0.5rem" }}>
                         Drag an image here, paste (⌘+V), or click to upload
                       </p>
                       <label
                         style={{
                           display: "inline-block",
                           fontSize: "0.8rem",
-                          fontWeight: 700,
-                          padding: "0.4rem 0.8rem",
-                          borderRadius: "6px",
-                          border: "1px solid #111",
-                          background: "#fff",
-                          color: "#111",
+                          fontWeight: 800,
+                          padding: "0.45rem 0.9rem",
+                          borderRadius: radius.button,
+                          border: "none",
+                          background: colors.neutralGray,
+                          boxShadow: solidShadow(3, colors.neutralGrayShadow),
+                          color: colors.white,
                           cursor: "pointer",
                         }}
                       >
@@ -726,7 +727,7 @@ function CreateLessonEditor() {
                         />
                       </label>
                       {imageErrors[block.id] && (
-                        <p style={{ color: "#c00", fontSize: "0.72rem", margin: "0.4rem 0 0" }}>
+                        <p style={{ color: colors.coralText, fontSize: "0.72rem", margin: "0.4rem 0 0" }}>
                           {imageErrors[block.id]}
                         </p>
                       )}
@@ -788,7 +789,7 @@ function CreateLessonEditor() {
                     }
 
                     return (
-                      <p style={{ fontSize: "0.8rem", color: "#c00", marginTop: "0.2rem" }}>
+                      <p style={{ fontSize: "0.8rem", color: colors.coralText, marginTop: "0.2rem" }}>
                         {UNSUPPORTED_VIDEO_MESSAGE}
                       </p>
                     );

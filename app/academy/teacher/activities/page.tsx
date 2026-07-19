@@ -269,7 +269,7 @@ export default function ActivitiesPage() {
                 style={{
                   border: "none",
                   background: "none",
-                  color: "#c00",
+                  color: colors.coralText,
                   cursor: "pointer",
                   fontSize: "0.8rem",
                 }}
