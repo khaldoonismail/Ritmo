@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 type MediaType = "text" | "image" | "video" | "audio";
 
@@ -175,6 +176,8 @@ export default function PlayGamePage() {
           gap: "1rem",
           textAlign: "center",
           padding: "2rem",
+          background: colors.background,
+          color: colors.textPrimary,
         }}
       >
         <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
@@ -182,7 +185,7 @@ export default function PlayGamePage() {
         </h1>
         <Link
           href="/games/teacher/library"
-          style={{ color: "inherit", textDecoration: "underline" }}
+          style={{ color: "inherit", textDecoration: "underline", fontWeight: 700 }}
         >
           ← Back to My Games
         </Link>
@@ -192,6 +195,8 @@ export default function PlayGamePage() {
 
   const q = game!.questions[currentIndex];
   const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+
+  const isLobby = stage === "lobby";
 
   return (
     <main
@@ -204,30 +209,48 @@ export default function PlayGamePage() {
         gap: "1.25rem",
         textAlign: "center",
         padding: "2rem",
-        background: "#26890c",
-        color: "#fff",
+        background: isLobby ? colors.background : "#26890c",
+        color: isLobby ? colors.textPrimary : "#fff",
       }}
     >
       {stage === "lobby" && (
         <>
-          <h1 style={{ fontSize: "2.5rem", fontWeight: 800, margin: 0 }}>
-            {game!.title}
-          </h1>
-          <p style={{ fontSize: "1.1rem", opacity: 0.85 }}>Game PIN</p>
           <div
             style={{
-              fontSize: "3rem",
+              width: "64px",
+              height: "64px",
+              borderRadius: "20px",
+              background: colors.orange,
+              boxShadow: solidShadow(6, colors.orangeShadow),
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <span style={{ fontSize: "2rem", color: colors.white, lineHeight: 1 }}>♪</span>
+          </div>
+          <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
+            {game!.title}
+          </h1>
+          <p style={{ fontSize: "1rem", fontWeight: 700, opacity: 0.7, margin: 0 }}>
+            Game PIN
+          </p>
+          <div
+            style={{
+              fontSize: "1.75rem",
               fontWeight: 800,
               letterSpacing: "0.1em",
               direction: "ltr",
-              background: "rgba(255,255,255,0.15)",
-              padding: "0.5rem 1.5rem",
-              borderRadius: "12px",
+              background: colors.blueBackground,
+              boxShadow: solidShadow(5, colors.gamesCardShadow),
+              color: colors.blueText,
+              padding: "0.6rem 1.75rem",
+              borderRadius: radius.card,
             }}
           >
             {pin}
           </div>
-          <p style={{ opacity: 0.8, maxWidth: "420px" }}>
+          <p style={{ opacity: 0.7, fontWeight: 600, maxWidth: "420px" }}>
             {game!.questions.length} question
             {game!.questions.length === 1 ? "" : "s"} · This is a single-device
             demo — you'll play alongside 3 simulated players.
@@ -236,12 +259,13 @@ export default function PlayGamePage() {
             onClick={startGame}
             style={{
               fontSize: "1.1rem",
-              fontWeight: 700,
-              padding: "0.8rem 2rem",
-              borderRadius: "10px",
+              fontWeight: 800,
+              padding: "0.85rem 2rem",
+              borderRadius: radius.button,
               border: "none",
-              background: "#fff",
-              color: "#111",
+              background: colors.greenButton,
+              boxShadow: solidShadow(5, colors.greenButtonShadow),
+              color: colors.white,
               cursor: "pointer",
             }}
           >
