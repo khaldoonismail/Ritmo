@@ -29,8 +29,16 @@ interface Player {
   score: number;
 }
 
-const answerColors = ["#e21b3c", "#1368ce", "#d89e00", "#26890c"];
+// Kept intentionally distinct from the Ritmo palette (colors.*) — these
+// mimic Kahoot's answer-tile colors for game recognizability. Shadow
+// variants are darker shades of each fill for the app-wide "3D" solid
+// offset-shadow treatment.
+const answerColors = ["#e21b3c", "#1368ce", "#d89e00", "#2ca30f"];
+const answerShadowColors = ["#a8112c", "#0d4a8f", "#a67800", "#1f7a0b"];
 const answerShapes = ["▲", "◆", "●", "■"];
+const stageBg = "#1b6b0a";
+const cardShadowOnGreen = "#124e07";
+const whiteElementShadow = "#c7cdbf";
 
 type Stage = "loading" | "notfound" | "lobby" | "question" | "reveal" | "leaderboard" | "final";
 
@@ -209,8 +217,8 @@ export default function PlayGamePage() {
         gap: "1.25rem",
         textAlign: "center",
         padding: "2rem",
-        background: isLobby ? colors.background : "#26890c",
-        color: isLobby ? colors.textPrimary : "#fff",
+        background: isLobby ? colors.background : stageBg,
+        color: isLobby ? colors.textPrimary : colors.white,
       }}
     >
       {stage === "lobby" && (
@@ -292,9 +300,11 @@ export default function PlayGamePage() {
                 fontSize: "1.5rem",
                 fontWeight: 800,
                 direction: "ltr",
-                background: "rgba(255,255,255,0.15)",
-                padding: "0.2rem 0.9rem",
-                borderRadius: "999px",
+                background: colors.white,
+                boxShadow: solidShadow(3, whiteElementShadow),
+                color: stageBg,
+                padding: "0.25rem 1rem",
+                borderRadius: radius.pill,
               }}
             >
               {timeLeft}s
@@ -303,9 +313,10 @@ export default function PlayGamePage() {
 
           <div
             style={{
-              background: "#fff",
-              color: "#111",
-              borderRadius: "14px",
+              background: colors.white,
+              color: colors.textPrimary,
+              borderRadius: radius.card,
+              boxShadow: solidShadow(5, cardShadowOnGreen),
               padding: "1.5rem",
               marginBottom: "1.25rem",
             }}
@@ -350,12 +361,16 @@ export default function PlayGamePage() {
                 disabled={locked}
                 style={{
                   fontSize: "1.05rem",
-                  fontWeight: 700,
+                  fontWeight: 800,
                   padding: "1.1rem",
-                  borderRadius: "10px",
+                  borderRadius: radius.button,
                   border: "none",
                   background: answerColors[i],
-                  color: "#fff",
+                  boxShadow:
+                    selected !== null && selected !== i
+                      ? "none"
+                      : solidShadow(4, answerShadowColors[i]),
+                  color: colors.white,
                   cursor: locked ? "default" : "pointer",
                   opacity: selected !== null && selected !== i ? 0.5 : 1,
                   display: "flex",
@@ -390,25 +405,26 @@ export default function PlayGamePage() {
                   display: "flex",
                   alignItems: "center",
                   gap: "0.6rem",
-                  background: "rgba(255,255,255,0.15)",
-                  borderRadius: "8px",
-                  padding: "0.5rem 0.75rem",
-                  border: i === q.correctIndex ? "2px solid #fff" : "none",
+                  background:
+                    i === q.correctIndex ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.12)",
+                  borderRadius: radius.iconSquare,
+                  padding: "0.6rem 0.85rem",
                 }}
               >
                 <span
                   style={{
-                    width: "18px",
-                    height: "18px",
-                    borderRadius: "4px",
+                    width: "20px",
+                    height: "20px",
+                    borderRadius: "6px",
                     background: answerColors[i],
+                    boxShadow: solidShadow(2, answerShadowColors[i]),
                     flexShrink: 0,
                   }}
                 />
-                <span style={{ flex: 1, textAlign: "left" }}>
+                <span style={{ flex: 1, textAlign: "left", fontWeight: 600 }}>
                   {opt || `Answer ${i + 1}`}
                 </span>
-                <span style={{ fontWeight: 700, direction: "ltr" }}>
+                <span style={{ fontWeight: 800, direction: "ltr" }}>
                   {answerCounts[i]}
                 </span>
               </div>
@@ -420,12 +436,13 @@ export default function PlayGamePage() {
             style={{
               marginTop: "1.5rem",
               fontSize: "1rem",
-              fontWeight: 700,
-              padding: "0.7rem 1.6rem",
-              borderRadius: "10px",
+              fontWeight: 800,
+              padding: "0.8rem 1.8rem",
+              borderRadius: radius.button,
               border: "none",
-              background: "#fff",
-              color: "#111",
+              background: colors.white,
+              boxShadow: solidShadow(4, whiteElementShadow),
+              color: stageBg,
               cursor: "pointer",
             }}
           >
@@ -440,36 +457,41 @@ export default function PlayGamePage() {
             Leaderboard
           </h2>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {sortedPlayers.map((p, i) => (
-              <div
-                key={p.name}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.75rem",
-                  background: "rgba(255,255,255,0.15)",
-                  borderRadius: "8px",
-                  padding: "0.6rem 1rem",
-                  fontWeight: p.name === "You" ? 800 : 500,
-                }}
-              >
-                <span style={{ width: "1.5rem", direction: "ltr" }}>{i + 1}</span>
-                <span style={{ flex: 1, textAlign: "left" }}>{p.name}</span>
-                <span style={{ direction: "ltr" }}>{p.score}</span>
-              </div>
-            ))}
+            {sortedPlayers.map((p, i) => {
+              const isYou = p.name === "You";
+              return (
+                <div
+                  key={p.name}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.75rem",
+                    background: isYou ? colors.orange : "rgba(255,255,255,0.15)",
+                    boxShadow: isYou ? solidShadow(3, colors.orangeShadow) : "none",
+                    borderRadius: radius.iconSquare,
+                    padding: "0.65rem 1rem",
+                    fontWeight: isYou ? 800 : 600,
+                  }}
+                >
+                  <span style={{ width: "1.5rem", direction: "ltr" }}>{i + 1}</span>
+                  <span style={{ flex: 1, textAlign: "left" }}>{p.name}</span>
+                  <span style={{ direction: "ltr" }}>{p.score}</span>
+                </div>
+              );
+            })}
           </div>
           <button
             onClick={nextQuestion}
             style={{
               marginTop: "1.5rem",
               fontSize: "1rem",
-              fontWeight: 700,
-              padding: "0.7rem 1.6rem",
-              borderRadius: "10px",
+              fontWeight: 800,
+              padding: "0.8rem 1.8rem",
+              borderRadius: radius.button,
               border: "none",
-              background: "#fff",
-              color: "#111",
+              background: colors.white,
+              boxShadow: solidShadow(4, whiteElementShadow),
+              color: stageBg,
               cursor: "pointer",
             }}
           >
@@ -486,24 +508,28 @@ export default function PlayGamePage() {
             Final Results
           </h2>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {sortedPlayers.map((p, i) => (
-              <div
-                key={p.name}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.75rem",
-                  background: i === 0 ? "#d89e00" : "rgba(255,255,255,0.15)",
-                  borderRadius: "8px",
-                  padding: "0.7rem 1rem",
-                  fontWeight: p.name === "You" ? 800 : 500,
-                }}
-              >
-                <span style={{ width: "1.5rem", direction: "ltr" }}>{i + 1}</span>
-                <span style={{ flex: 1, textAlign: "left" }}>{p.name}</span>
-                <span style={{ direction: "ltr" }}>{p.score}</span>
-              </div>
-            ))}
+            {sortedPlayers.map((p, i) => {
+              const isWinner = i === 0;
+              return (
+                <div
+                  key={p.name}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.75rem",
+                    background: isWinner ? "#d89e00" : "rgba(255,255,255,0.15)",
+                    boxShadow: isWinner ? solidShadow(4, "#a67800") : "none",
+                    borderRadius: radius.iconSquare,
+                    padding: "0.75rem 1rem",
+                    fontWeight: p.name === "You" ? 800 : 600,
+                  }}
+                >
+                  <span style={{ width: "1.5rem", direction: "ltr" }}>{i + 1}</span>
+                  <span style={{ flex: 1, textAlign: "left" }}>{p.name}</span>
+                  <span style={{ direction: "ltr" }}>{p.score}</span>
+                </div>
+              );
+            })}
           </div>
           <Link
             href="/games/teacher/library"
@@ -511,7 +537,8 @@ export default function PlayGamePage() {
               display: "inline-block",
               marginTop: "1.5rem",
               fontSize: "0.9rem",
-              color: "#fff",
+              fontWeight: 700,
+              color: colors.white,
               textDecoration: "underline",
             }}
           >
