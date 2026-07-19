@@ -11,28 +11,31 @@ import {
 } from "@/lib/questionTypes";
 import { validateAndReadImage } from "@/lib/imageUpload";
 import { resolveVideoSource, UNSUPPORTED_VIDEO_MESSAGE } from "@/lib/videoEmbed";
+import { colors, radius, solidShadow } from "@/lib/theme";
 
 const inputStyle: React.CSSProperties = {
   fontSize: "0.9rem",
-  padding: "0.4rem 0.6rem",
-  borderRadius: "6px",
-  border: "1px solid #ddd",
+  padding: "0.5rem 0.7rem",
+  borderRadius: radius.iconSquare,
+  border: "1px solid #E5DFC8",
   outline: "none",
   direction: "ltr",
   textAlign: "left",
   fontFamily: "inherit",
   width: "100%",
+  background: colors.white,
 };
 
 const smallButtonStyle: React.CSSProperties = {
   display: "inline-block",
   fontSize: "0.75rem",
-  fontWeight: 700,
-  padding: "0.3rem 0.6rem",
-  borderRadius: "6px",
-  border: "1px solid #111",
-  background: "#fff",
-  color: "#111",
+  fontWeight: 800,
+  padding: "0.4rem 0.75rem",
+  borderRadius: radius.button,
+  border: "none",
+  background: colors.neutralGray,
+  boxShadow: solidShadow(3, colors.neutralGrayShadow),
+  color: colors.white,
   cursor: "pointer",
 };
 
@@ -96,10 +99,20 @@ export default function QuestionEditor({
         ))}
       </select>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.7rem", fontSize: "0.75rem" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.9rem", fontSize: "0.78rem" }}>
           {(["none", "image", "video", "audio"] as const).map((opt) => (
-            <label key={opt} style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+            <label
+              key={opt}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                fontWeight: 600,
+                color: colors.textPrimary,
+                cursor: "pointer",
+              }}
+            >
               <input
                 type="radio"
                 checked={opt === "none" ? !value.attachmentType : value.attachmentType === opt}
@@ -144,9 +157,9 @@ export default function QuestionEditor({
             }}
             style={{
               minHeight: "90px",
-              border: dragOver ? "2px dashed #111" : "2px dashed #ccc",
-              background: dragOver ? "#eef5ff" : "#fafafa",
-              borderRadius: "8px",
+              border: dragOver ? `2px dashed ${colors.orangeShadow}` : "2px dashed #E5DFC8",
+              background: dragOver ? colors.inProgressCardBg : colors.background,
+              borderRadius: radius.card,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -171,8 +184,8 @@ export default function QuestionEditor({
                     height: "20px",
                     borderRadius: "50%",
                     border: "none",
-                    background: "rgba(0,0,0,0.65)",
-                    color: "#fff",
+                    background: colors.coralText,
+                    color: colors.white,
                     fontSize: "0.65rem",
                     cursor: "pointer",
                   }}
@@ -183,7 +196,7 @@ export default function QuestionEditor({
               </div>
             ) : (
               <div style={{ textAlign: "center", padding: "0.5rem" }}>
-                <p style={{ fontSize: "0.72rem", opacity: 0.6, margin: "0 0 0.4rem" }}>
+                <p style={{ fontSize: "0.72rem", fontWeight: 600, opacity: 0.6, margin: "0 0 0.4rem" }}>
                   Drag an image, paste (⌘+V), or upload
                 </p>
                 <label style={smallButtonStyle}>
@@ -200,7 +213,7 @@ export default function QuestionEditor({
                   />
                 </label>
                 {imageError && (
-                  <p style={{ color: "#c00", fontSize: "0.7rem", margin: "0.3rem 0 0" }}>
+                  <p style={{ color: colors.coralText, fontSize: "0.7rem", fontWeight: 600, margin: "0.3rem 0 0" }}>
                     {imageError}
                   </p>
                 )}
@@ -243,13 +256,13 @@ export default function QuestionEditor({
                 }
                 if (source.kind === "needs-embed-link") {
                   return (
-                    <p style={{ fontSize: "0.75rem", color: "#a66300" }}>
+                    <p style={{ fontSize: "0.75rem", fontWeight: 600, color: colors.classesText }}>
                       Needs a {source.provider} Embed link.
                     </p>
                   );
                 }
                 return (
-                  <p style={{ fontSize: "0.75rem", color: "#c00" }}>{UNSUPPORTED_VIDEO_MESSAGE}</p>
+                  <p style={{ fontSize: "0.75rem", fontWeight: 600, color: colors.coralText }}>{UNSUPPORTED_VIDEO_MESSAGE}</p>
                 );
               })()}
           </>
@@ -293,7 +306,7 @@ export default function QuestionEditor({
 
       {value.questionType === "multiple_choice" &&
         (value.options || []).map((opt, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
             <input
               type="radio"
               checked={value.correctIndex === i}
@@ -314,11 +327,19 @@ export default function QuestionEditor({
         ))}
 
       {value.questionType === "true_false" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
           {["True", "False"].map((label, i) => (
             <label
               key={label}
-              style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem" }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.45rem",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                color: colors.textPrimary,
+                cursor: "pointer",
+              }}
             >
               <input
                 type="radio"
@@ -332,9 +353,9 @@ export default function QuestionEditor({
       )}
 
       {value.questionType === "fill_blank" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
           {(value.blanks || []).length === 0 && (
-            <p style={{ fontSize: "0.75rem", opacity: 0.5, margin: 0 }}>
+            <p style={{ fontSize: "0.75rem", fontWeight: 600, opacity: 0.55, margin: 0 }}>
               Add {BLANK_MARKER} to the question text above to create a blank.
             </p>
           )}
@@ -356,7 +377,17 @@ export default function QuestionEditor({
       )}
 
       {value.questionType !== "short_answer" && (
-        <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem" }}>
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.45rem",
+            fontSize: "0.8rem",
+            fontWeight: 600,
+            color: colors.textPrimary,
+            cursor: "pointer",
+          }}
+        >
           <input
             type="checkbox"
             checked={!!value.showCorrectAnswer}

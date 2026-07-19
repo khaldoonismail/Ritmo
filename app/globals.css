@@ -23,3 +23,21 @@ textarea,
 select {
   font-family: inherit;
 }
+
+/* Theme colors.orange (#FFB94D) from lib/theme.ts — CSS can't import the TS
+   constants, so this is kept in sync by hand. */
+input[type="radio"],
+input[type="checkbox"] {
+  accent-color: #ffb94d;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.theme-picker-item {
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.theme-picker-item:hover {
+  background: #fff3df !important;
+  color: #b4650b !important;
+}
