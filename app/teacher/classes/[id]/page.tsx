@@ -866,13 +866,13 @@ export default function ManageClassPage() {
                     gap: "0.3rem",
                     maxHeight: "150px",
                     overflowY: "auto",
-                    border: "1px solid #eee",
-                    borderRadius: "8px",
+                    borderRadius: radius.iconSquare,
+                    background: colors.background,
                     padding: "0.5rem 0.7rem",
                   }}
                 >
                   {sortedStudents.length === 0 && (
-                    <span style={{ fontSize: "0.8rem", opacity: 0.5 }}>
+                    <span style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.55 }}>
                       No students in this class yet.
                     </span>
                   )}

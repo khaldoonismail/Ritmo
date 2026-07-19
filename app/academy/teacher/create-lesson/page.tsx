@@ -780,7 +780,7 @@ function CreateLessonEditor() {
 
                     if (source.kind === "needs-embed-link") {
                       return (
-                        <p style={{ fontSize: "0.8rem", color: "#a66300", marginTop: "0.2rem" }}>
+                        <p style={{ fontSize: "0.8rem", fontWeight: 600, color: colors.classesText, marginTop: "0.2rem" }}>
                           This looks like a {source.provider} link, but it needs to be an
                           "Embed" link. Use the Embed option when sharing from Microsoft,
                           then paste that link here instead.

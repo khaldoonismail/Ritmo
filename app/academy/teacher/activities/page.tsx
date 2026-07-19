@@ -160,14 +160,15 @@ export default function ActivitiesPage() {
               position: "absolute",
               top: "100%",
               left: 0,
-              marginTop: "0.4rem",
+              marginTop: "0.5rem",
               display: "flex",
               flexDirection: "column",
-              gap: "0.3rem",
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              padding: "0.4rem",
-              background: "#fff",
+              gap: "0.25rem",
+              borderRadius: radius.card,
+              padding: "0.5rem",
+              background: colors.white,
+              boxShadow: solidShadow(4, colors.rosterCardShadow),
+              minWidth: "200px",
               zIndex: 9999,
             }}
           >
@@ -175,12 +176,15 @@ export default function ActivitiesPage() {
               <button
                 key={t}
                 onClick={() => addActivity(t)}
+                className="theme-picker-item"
                 style={{
                   fontSize: "0.85rem",
-                  padding: "0.4rem 0.7rem",
-                  borderRadius: "6px",
+                  fontWeight: 700,
+                  padding: "0.55rem 0.8rem",
+                  borderRadius: radius.iconSquare,
                   border: "none",
-                  background: "#f0f0f0",
+                  background: "transparent",
+                  color: colors.textPrimary,
                   cursor: "pointer",
                   textAlign: "left",
                 }}

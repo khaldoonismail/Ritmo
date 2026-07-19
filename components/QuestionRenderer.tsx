@@ -98,7 +98,7 @@ function ChoiceAnswer({ question }: { question: QuestionData }) {
             border = `1px solid ${colors.completedCardShadow}`;
           } else if (isSelected) {
             background = colors.coralBackground;
-            border = `1px solid #F0C3C3`;
+            border = `1px solid ${colors.assessmentCardShadow}`;
           }
         } else if (submitted && isSelected) {
           background = colors.notStartedCardBg;
