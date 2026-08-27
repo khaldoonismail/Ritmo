@@ -115,7 +115,7 @@ export default function UploadStudentsExcel({
     fontSize: "0.95rem",
     padding: "0.55rem 0.75rem",
     borderRadius: radius.iconSquare,
-    border: "1px solid #E5DFC8",
+    border: `1px solid ${colors.inputBorder}`,
     outline: "none",
     fontFamily: "inherit",
     width: "100%",

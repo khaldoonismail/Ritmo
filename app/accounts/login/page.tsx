@@ -34,7 +34,7 @@ export default function LoginPage() {
     fontSize: "1rem",
     padding: "0.75rem 1rem",
     borderRadius: radius.iconSquare,
-    border: `1px solid #E5DFC8`,
+    border: `1px solid ${colors.inputBorder}`,
     outline: "none",
     direction: "ltr",
     textAlign: "left",

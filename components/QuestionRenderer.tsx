@@ -91,7 +91,7 @@ function ChoiceAnswer({ question }: { question: QuestionData }) {
         const isSelected = selected === i;
         const isCorrectOption = question.correctIndex === i;
         let background: string = colors.white;
-        let border = "1px solid #E5DFC8";
+        let border = `1px solid ${colors.inputBorder}`;
         if (submitted && question.showCorrectAnswer) {
           if (isCorrectOption) {
             background = colors.completedCardBg;
@@ -173,7 +173,7 @@ function FillBlankAnswer({ question }: { question: QuestionData }) {
                   margin: "0 0.3rem",
                   padding: "0.3rem 0.6rem",
                   borderRadius: radius.iconSquare,
-                  border: "1px solid #E5DFC8",
+                  border: `1px solid ${colors.inputBorder}`,
                   direction: "ltr",
                   textAlign: "left",
                   fontFamily: "inherit",
@@ -238,7 +238,7 @@ function ShortAnswerAnswer() {
           minHeight: "70px",
           padding: "0.6rem 0.7rem",
           borderRadius: radius.iconSquare,
-          border: "1px solid #E5DFC8",
+          border: `1px solid ${colors.inputBorder}`,
           outline: "none",
           direction: "ltr",
           textAlign: "left",

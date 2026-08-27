@@ -17,7 +17,7 @@ const inputStyle: React.CSSProperties = {
   fontSize: "0.9rem",
   padding: "0.5rem 0.7rem",
   borderRadius: radius.iconSquare,
-  border: "1px solid #E5DFC8",
+  border: `1px solid ${colors.inputBorder}`,
   outline: "none",
   direction: "ltr",
   textAlign: "left",
@@ -157,7 +157,7 @@ export default function QuestionEditor({
             }}
             style={{
               minHeight: "90px",
-              border: dragOver ? `2px dashed ${colors.orangeShadow}` : "2px dashed #E5DFC8",
+              border: dragOver ? `2px dashed ${colors.orangeShadow}` : `2px dashed ${colors.inputBorder}`,
               background: dragOver ? colors.inProgressCardBg : colors.background,
               borderRadius: radius.card,
               display: "flex",

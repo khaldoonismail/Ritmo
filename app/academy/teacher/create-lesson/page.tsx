@@ -312,7 +312,7 @@ function CreateLessonEditor() {
     fontSize: "0.9rem",
     padding: "0.5rem 0.7rem",
     borderRadius: radius.iconSquare,
-    border: "1px solid #E5DFC8",
+    border: `1px solid ${colors.inputBorder}`,
     outline: "none",
     direction: "ltr",
     textAlign: "left",
@@ -651,7 +651,7 @@ function CreateLessonEditor() {
                     border:
                       dragOverImageId === block.id
                         ? `2px dashed ${colors.orangeShadow}`
-                        : "2px dashed #E5DFC8",
+                        : `2px dashed ${colors.inputBorder}`,
                     background:
                       dragOverImageId === block.id ? colors.inProgressCardBg : colors.background,
                     display: "flex",

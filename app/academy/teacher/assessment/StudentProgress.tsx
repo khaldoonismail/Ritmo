@@ -410,7 +410,7 @@ export default function StudentProgress() {
                         gap: "0.6rem",
                         padding: "0.6rem 0.75rem",
                         borderRadius: radius.iconSquare,
-                        background: "#FCFAF3",
+                        background: colors.listRowBg,
                         boxShadow: solidShadow(3, colors.rosterCardShadow),
                       }}
                     >

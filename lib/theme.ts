@@ -45,6 +45,11 @@ export const colors = {
   rosterCardShadow: "#EEE9DA",
   scoreBoxBg: "#F4F1E6",
   scoreBoxShadow: "#E0DBC7",
+
+  // Text input border (login/signup forms, question editor fields).
+  inputBorder: "#E5DFC8",
+  // Subtle off-white row background (lesson picker rows, student progress rows).
+  listRowBg: "#FCFAF3",
 } as const;
 
 export const radius = {
