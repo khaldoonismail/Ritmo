@@ -50,3 +50,11 @@ phrase — not a single held note) from the original source.
 - bass_drum — "Bass drum (bdrum_roll_short_1.wav)" by sgossner, VSCO2
   Community Edition (CC0)
   https://freesound.org/people/sgossner/sounds/375285/
+- classical_guitar — "Gangsta Solo.mp3" by alurosu (CC0)
+  https://freesound.org/people/alurosu/sounds/430799/
+- acoustic_guitar — "Guitar 1.mp3" by BILLARAS299 (CC0)
+  https://freesound.org/people/BILLARAS299/sounds/641033/
+- bass_guitar — "Simple Bass.wav" by HojnyTomasz (CC0)
+  https://freesound.org/people/HojnyTomasz/sounds/177146/
+- electric_guitar — "SimpleGuitarRiff" by shawn200110 (CC0)
+  https://freesound.org/people/shawn200110/sounds/805916/

@@ -1,6 +1,6 @@
 // One-off setup script: uploads real orchestra instrument recordings
 // (scripts/orchestra_audio/*.mp3, ~5s each) to a public Supabase Storage
-// bucket and creates an "Instrument Recognition" game (19 audio questions,
+// bucket and creates an "Instrument Recognition" game (23 audio questions,
 // one per instrument) owned by the demo teacher account.
 //
 // Sources (see scripts/orchestra_audio/ATTRIBUTION.md for full credits):
@@ -62,6 +62,10 @@ const LABELS = {
   bass_drum: "Bass Drum",
   snare_drum: "Snare Drum",
   cymbal: "Cymbal",
+  classical_guitar: "Classical Guitar",
+  acoustic_guitar: "Acoustic Guitar",
+  bass_guitar: "Bass Guitar",
+  electric_guitar: "Electric Guitar",
 };
 
 async function ensureBucket() {
