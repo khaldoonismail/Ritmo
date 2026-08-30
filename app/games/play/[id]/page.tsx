@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { QRCodeSVG } from "qrcode.react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, solidShadow } from "@/lib/theme";
 
@@ -64,6 +65,7 @@ export default function PlayGamePage() {
   const [game, setGame] = useState<Game | null>(null);
   const [stage, setStage] = useState<Stage>("loading");
   const [pin] = useState(() => Math.floor(100000 + Math.random() * 900000));
+  const [gameUrl, setGameUrl] = useState("");
   const [activeQuestions, setActiveQuestions] = useState<Question[]>([]);
   const [labels, setLabels] = useState<string[]>([]);
   const [selectedLabels, setSelectedLabels] = useState<Set<string>>(new Set());
@@ -82,6 +84,10 @@ export default function PlayGamePage() {
   const timeLeftRef = useRef(0);
   timeLeftRef.current = timeLeft;
   const roundEndedRef = useRef(false);
+
+  useEffect(() => {
+    setGameUrl(window.location.href);
+  }, []);
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -314,9 +320,23 @@ export default function PlayGamePage() {
           >
             {pin}
           </div>
+
+          {gameUrl && (
+            <div
+              style={{
+                background: colors.white,
+                boxShadow: solidShadow(5, colors.gamesCardShadow),
+                borderRadius: radius.card,
+                padding: "0.75rem",
+              }}
+            >
+              <QRCodeSVG value={gameUrl} size={128} />
+            </div>
+          )}
+
           <p style={{ opacity: 0.7, fontWeight: 600, maxWidth: "420px", margin: 0 }}>
-            This is a single-device demo — you'll play alongside 3 simulated
-            players.
+            Scan the QR code or open this page on another device — this is a
+            single-device demo, so you'll play alongside 3 simulated players.
           </p>
 
           {labels.length > 1 && (
