@@ -2,10 +2,16 @@ Real instrument recordings used by `scripts/create_instrument_game.mjs`. Each
 clip is trimmed to ~5 seconds of actual playing (a scale, run, or short
 phrase — not a single held note) from the original source.
 
+## University of Iowa Musical Instrument Samples (theremin.music.uiowa.edu)
+
+- tuba — Tuba.ff.C2B2.aiff (public domain — "freely available ... and may be
+  downloaded and used for any projects, without restrictions")
+  https://theremin.music.uiowa.edu/MIStuba.html
+
 ## Freesound.org
 
-- violin — "080313 fiddle run on G major scale.wav" by BoilingSand (CC BY 3.0)
-  https://freesound.org/people/BoilingSand/sounds/49783/
+- violin — "d_scale_violin.wav" by oleviolin (CC0)
+  https://freesound.org/people/oleviolin/sounds/557469/
 - viola — "Somber Viola.wav" by DeVern (CC BY 3.0)
   https://freesound.org/people/DeVern/sounds/437033/
 - cello — "LastMan.wav" by calpomatt (CC BY 4.0)
@@ -23,16 +29,14 @@ phrase — not a single held note) from the original source.
   https://freesound.org/people/MTG/sounds/357316/
 - bassoon — "100 bassons battle.wav" by Thirsk (CC BY 4.0)
   https://freesound.org/people/Thirsk/sounds/120963/
-- trumpet — "hikmet_hminor2" (trumpet improvisation by Hikmet Altunbaşlıer,
-  uploaded by emirdemirel) (CC BY 4.0)
-  https://freesound.org/people/emirdemirel/sounds/424880/
+- trumpet — "Trumpet - B major" (good-sounds.org / MTG, Universitat Pompeu
+  Fabra) (CC BY 3.0)
+  https://freesound.org/people/MTG/sounds/357896/
 - french_horn — "horncall_bozza_enforet2_Fmajor.wav" by TaranP, from Eugène
   Bozza's "En Forêt" (CC BY 4.0)
   https://freesound.org/people/TaranP/sounds/361682/
 - trombone — "t-bone 5 Cmaj.wav" by Fedor_Ogon (CC0)
   https://freesound.org/people/Fedor_Ogon/sounds/569820/
-- tuba — "Tuba Practice Outside Music Hall" by adina.trx (CC0)
-  https://freesound.org/people/adina.trx/sounds/856379/
 - cymbal — "cymbal swells kevinsticks.mp3" by hallkev (CC0)
   https://freesound.org/people/hallkev/sounds/428614/
 - piccolo — "A5-E7_piccolo" by Maria_Mannone (CC BY 4.0)
