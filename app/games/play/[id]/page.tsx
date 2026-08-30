@@ -40,7 +40,7 @@ const stageBg = "#1b6b0a";
 const cardShadowOnGreen = "#124e07";
 const whiteElementShadow = "#c7cdbf";
 
-type Stage = "loading" | "notfound" | "lobby" | "question" | "leaderboard" | "final";
+type Stage = "loading" | "notfound" | "lobby" | "question" | "final";
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -189,13 +189,9 @@ export default function PlayGamePage() {
       })
     );
 
-    setLocked(false);
-    setStage("leaderboard");
-  }
-
-  function nextQuestion() {
     const next = currentIndex + 1;
     if (next >= activeQuestions.length) {
+      setLocked(false);
       setStage("final");
       return;
     }
@@ -548,57 +544,6 @@ export default function PlayGamePage() {
               );
             })}
           </div>
-        </div>
-      )}
-
-      {stage === "leaderboard" && (
-        <div style={{ width: "100%", maxWidth: "500px" }}>
-          <h2 style={{ fontSize: "1.9rem", fontWeight: 800, margin: "0 0 1rem" }}>
-            Leaderboard
-          </h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {sortedPlayers.map((p, i) => {
-              const isYou = p.name === "You";
-              return (
-                <div
-                  key={p.name}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.75rem",
-                    background: isYou ? colors.orange : "rgba(255,255,255,0.15)",
-                    boxShadow: isYou ? solidShadow(3, colors.orangeShadow) : "none",
-                    borderRadius: radius.iconSquare,
-                    padding: "0.65rem 1rem",
-                    fontWeight: isYou ? 800 : 600,
-                  }}
-                >
-                  <span style={{ width: "1.5rem", direction: "ltr" }}>{i + 1}</span>
-                  <span style={{ flex: 1, textAlign: "left" }}>{p.name}</span>
-                  <span style={{ direction: "ltr" }}>{p.score}</span>
-                </div>
-              );
-            })}
-          </div>
-          <button
-            onClick={nextQuestion}
-            style={{
-              marginTop: "1.5rem",
-              fontSize: "1rem",
-              fontWeight: 800,
-              padding: "0.8rem 1.8rem",
-              borderRadius: radius.button,
-              border: "none",
-              background: colors.white,
-              boxShadow: solidShadow(4, whiteElementShadow),
-              color: stageBg,
-              cursor: "pointer",
-            }}
-          >
-            {currentIndex + 1 >= activeQuestions.length
-              ? "See Final Results"
-              : "Next Question"}
-          </button>
         </div>
       )}
 
