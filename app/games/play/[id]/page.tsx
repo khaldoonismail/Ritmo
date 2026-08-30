@@ -40,7 +40,7 @@ const stageBg = "#1b6b0a";
 const cardShadowOnGreen = "#124e07";
 const whiteElementShadow = "#c7cdbf";
 
-type Stage = "loading" | "notfound" | "lobby" | "question" | "reveal" | "leaderboard" | "final";
+type Stage = "loading" | "notfound" | "lobby" | "question" | "leaderboard" | "final";
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -72,8 +72,6 @@ export default function PlayGamePage() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
-  const [answerCounts, setAnswerCounts] = useState([0, 0, 0, 0]);
-  const [roundGain, setRoundGain] = useState(0);
   const [players, setPlayers] = useState<Player[]>([
     { name: "You", score: 0 },
     { name: "RhythmRex", score: 0 },
@@ -182,26 +180,17 @@ export default function PlayGamePage() {
       ? Math.round(500 + 500 * (timeUsed / q.timeLimit))
       : 0;
 
-    const counts = [0, 0, 0, 0];
-    if (chosen !== null) counts[chosen]++;
-
     setPlayers((prev) =>
       prev.map((p, idx) => {
         if (idx === 0) return { ...p, score: p.score + playerPoints };
         const botCorrect = Math.random() < 0.65;
-        const botChoice = botCorrect
-          ? q.correctIndex
-          : Math.floor(Math.random() * q.options.length);
-        counts[botChoice]++;
         const gain = botCorrect ? 300 + Math.floor(Math.random() * 650) : 0;
         return { ...p, score: p.score + gain };
       })
     );
 
-    setAnswerCounts(counts);
-    setRoundGain(playerPoints);
     setLocked(false);
-    setStage("reveal");
+    setStage("leaderboard");
   }
 
   function nextQuestion() {
@@ -559,70 +548,6 @@ export default function PlayGamePage() {
               );
             })}
           </div>
-        </div>
-      )}
-
-      {stage === "reveal" && (
-        <div style={{ width: "100%", maxWidth: "700px" }}>
-          <h2 style={{ fontSize: "1.75rem", fontWeight: 800, margin: "0 0 0.5rem" }}>
-            {roundGain > 0 ? `+${roundGain} points!` : "No points this round"}
-          </h2>
-          <p style={{ opacity: 0.85, marginBottom: "1.25rem" }}>
-            Correct answer: {answerShapes[q.correctIndex]}{" "}
-            {q.options[q.correctIndex] || `Answer ${q.correctIndex + 1}`}
-          </p>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {q.options.map((opt, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.6rem",
-                  background:
-                    i === q.correctIndex ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.12)",
-                  borderRadius: radius.iconSquare,
-                  padding: "0.6rem 0.85rem",
-                }}
-              >
-                <span
-                  style={{
-                    width: "20px",
-                    height: "20px",
-                    borderRadius: "6px",
-                    background: answerColors[i],
-                    boxShadow: solidShadow(2, answerShadowColors[i]),
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{ flex: 1, textAlign: "left", fontWeight: 600 }}>
-                  {opt || `Answer ${i + 1}`}
-                </span>
-                <span style={{ fontWeight: 800, direction: "ltr" }}>
-                  {answerCounts[i]}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <button
-            onClick={() => setStage("leaderboard")}
-            style={{
-              marginTop: "1.5rem",
-              fontSize: "1rem",
-              fontWeight: 800,
-              padding: "0.8rem 1.8rem",
-              borderRadius: radius.button,
-              border: "none",
-              background: colors.white,
-              boxShadow: solidShadow(4, whiteElementShadow),
-              color: stageBg,
-              cursor: "pointer",
-            }}
-          >
-            See Leaderboard
-          </button>
         </div>
       )}
 
