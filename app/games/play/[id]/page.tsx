@@ -256,6 +256,27 @@ export default function PlayGamePage() {
         color: isLobby ? colors.textPrimary : colors.white,
       }}
     >
+      {stage !== "final" && (
+        <Link
+          href="/games/teacher/library"
+          style={{
+            position: "fixed",
+            top: "1.25rem",
+            left: "1.25rem",
+            fontSize: "0.85rem",
+            fontWeight: 700,
+            padding: "0.4rem 0.8rem",
+            borderRadius: radius.pill,
+            background: isLobby ? colors.white : "rgba(255,255,255,0.15)",
+            boxShadow: isLobby ? solidShadow(3, colors.gamesCardShadow) : "none",
+            color: isLobby ? colors.textPrimary : colors.white,
+            textDecoration: "none",
+          }}
+        >
+          ✕ Exit
+        </Link>
+      )}
+
       {stage === "lobby" && (
         <>
           <div
