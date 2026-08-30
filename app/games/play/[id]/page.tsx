@@ -42,6 +42,20 @@ const whiteElementShadow = "#c7cdbf";
 
 type Stage = "loading" | "notfound" | "lobby" | "question" | "reveal" | "leaderboard" | "final";
 
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function playSound(kind: "correct" | "wrong") {
+  const audio = new Audio(`/sounds/${kind}.mp3`);
+  audio.play().catch(() => {});
+}
+
 export default function PlayGamePage() {
   const params = useParams();
   const router = useRouter();
@@ -50,6 +64,10 @@ export default function PlayGamePage() {
   const [game, setGame] = useState<Game | null>(null);
   const [stage, setStage] = useState<Stage>("loading");
   const [pin] = useState(() => Math.floor(100000 + Math.random() * 900000));
+  const [activeQuestions, setActiveQuestions] = useState<Question[]>([]);
+  const [labels, setLabels] = useState<string[]>([]);
+  const [selectedLabels, setSelectedLabels] = useState<Set<string>>(new Set());
+  const [questionCount, setQuestionCount] = useState(1);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -87,11 +105,38 @@ export default function PlayGamePage() {
         .maybeSingle();
 
       setGame(data);
+      if (data) {
+        const questions = (data as Game).questions;
+        const uniqueLabels: string[] = Array.from(
+          new Set(questions.map((q) => q.options[q.correctIndex]).filter(Boolean))
+        ).sort((a, b) => a.localeCompare(b));
+        setLabels(uniqueLabels);
+        setSelectedLabels(new Set(uniqueLabels));
+        setQuestionCount(questions.length);
+      }
       setStage(data ? "lobby" : "notfound");
     }
 
     load();
   }, [id, router]);
+
+  const poolSize = game
+    ? game.questions.filter((q) => selectedLabels.has(q.options[q.correctIndex])).length
+    : 0;
+
+  useEffect(() => {
+    setQuestionCount((prev) => Math.max(1, Math.min(prev, Math.max(poolSize, 1))));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poolSize]);
+
+  function toggleLabel(label: string) {
+    setSelectedLabels((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (stage !== "question") return;
@@ -106,9 +151,13 @@ export default function PlayGamePage() {
 
   function startGame() {
     if (!game) return;
+    const pool = game.questions.filter((q) => selectedLabels.has(q.options[q.correctIndex]));
+    const picked = shuffle(pool).slice(0, Math.min(questionCount, pool.length));
+    if (picked.length === 0) return;
+    setActiveQuestions(picked);
     roundEndedRef.current = false;
     setCurrentIndex(0);
-    setTimeLeft(game.questions[0].timeLimit);
+    setTimeLeft(picked[0].timeLimit);
     setSelected(null);
     setLocked(false);
     setStage("question");
@@ -118,13 +167,15 @@ export default function PlayGamePage() {
     if (locked) return;
     setLocked(true);
     setSelected(i);
-    setTimeout(() => finishQuestion(i), 600);
+    const q = activeQuestions[currentIndex];
+    playSound(i === q.correctIndex ? "correct" : "wrong");
+    setTimeout(() => finishQuestion(i), 1400);
   }
 
   function finishQuestion(chosen: number | null) {
     if (!game || roundEndedRef.current) return;
     roundEndedRef.current = true;
-    const q = game.questions[currentIndex];
+    const q = activeQuestions[currentIndex];
     const timeUsed = timeLeftRef.current;
     const correct = chosen !== null && chosen === q.correctIndex;
     const playerPoints = correct
@@ -154,15 +205,14 @@ export default function PlayGamePage() {
   }
 
   function nextQuestion() {
-    if (!game) return;
     const next = currentIndex + 1;
-    if (next >= game.questions.length) {
+    if (next >= activeQuestions.length) {
       setStage("final");
       return;
     }
     roundEndedRef.current = false;
     setCurrentIndex(next);
-    setTimeLeft(game.questions[next].timeLimit);
+    setTimeLeft(activeQuestions[next].timeLimit);
     setSelected(null);
     setLocked(false);
     setStage("question");
@@ -201,7 +251,7 @@ export default function PlayGamePage() {
     );
   }
 
-  const q = game!.questions[currentIndex];
+  const q = activeQuestions[currentIndex];
   const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
 
   const isLobby = stage === "lobby";
@@ -258,13 +308,128 @@ export default function PlayGamePage() {
           >
             {pin}
           </div>
-          <p style={{ opacity: 0.7, fontWeight: 600, maxWidth: "420px" }}>
-            {game!.questions.length} question
-            {game!.questions.length === 1 ? "" : "s"} · This is a single-device
-            demo — you'll play alongside 3 simulated players.
+          <p style={{ opacity: 0.7, fontWeight: 600, maxWidth: "420px", margin: 0 }}>
+            This is a single-device demo — you'll play alongside 3 simulated
+            players.
           </p>
+
+          {labels.length > 1 && (
+            <div
+              style={{
+                width: "100%",
+                maxWidth: "500px",
+                background: colors.white,
+                borderRadius: radius.card,
+                boxShadow: solidShadow(4, colors.gamesCardShadow),
+                padding: "1rem 1.25rem",
+                textAlign: "left",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "0.6rem",
+                }}
+              >
+                <span style={{ fontWeight: 800 }}>Include in this round</span>
+                <span style={{ display: "flex", gap: "0.6rem" }}>
+                  <button
+                    onClick={() => setSelectedLabels(new Set(labels))}
+                    style={{
+                      fontSize: "0.8rem",
+                      fontWeight: 700,
+                      background: "none",
+                      border: "none",
+                      color: colors.blueText,
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setSelectedLabels(new Set())}
+                    style={{
+                      fontSize: "0.8rem",
+                      fontWeight: 700,
+                      background: "none",
+                      border: "none",
+                      color: colors.coralText,
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  >
+                    None
+                  </button>
+                </span>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "0.4rem",
+                  marginBottom: "0.9rem",
+                }}
+              >
+                {labels.map((label) => {
+                  const on = selectedLabels.has(label);
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => toggleLabel(label)}
+                      style={{
+                        fontSize: "0.8rem",
+                        fontWeight: 700,
+                        padding: "0.35rem 0.7rem",
+                        borderRadius: radius.pill,
+                        border: "none",
+                        background: on ? colors.greenButton : colors.background,
+                        color: on ? colors.white : colors.textPrimary,
+                        opacity: on ? 1 : 0.6,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                <label htmlFor="questionCount" style={{ fontWeight: 800, fontSize: "0.9rem" }}>
+                  Number of questions
+                </label>
+                <input
+                  id="questionCount"
+                  type="number"
+                  min={1}
+                  max={Math.max(poolSize, 1)}
+                  value={questionCount}
+                  onChange={(e) =>
+                    setQuestionCount(
+                      Math.max(1, Math.min(Number(e.target.value) || 1, Math.max(poolSize, 1)))
+                    )
+                  }
+                  style={{
+                    width: "4rem",
+                    fontSize: "0.9rem",
+                    fontWeight: 700,
+                    padding: "0.3rem 0.5rem",
+                    borderRadius: "6px",
+                    border: `1px solid ${colors.gamesCardShadow}`,
+                    direction: "ltr",
+                  }}
+                />
+                <span style={{ fontSize: "0.8rem", opacity: 0.6 }}>of {poolSize} available</span>
+              </div>
+            </div>
+          )}
+
           <button
             onClick={startGame}
+            disabled={poolSize === 0}
             style={{
               fontSize: "1.1rem",
               fontWeight: 800,
@@ -274,7 +439,8 @@ export default function PlayGamePage() {
               background: colors.greenButton,
               boxShadow: solidShadow(5, colors.greenButtonShadow),
               color: colors.white,
-              cursor: "pointer",
+              cursor: poolSize === 0 ? "default" : "pointer",
+              opacity: poolSize === 0 ? 0.5 : 1,
             }}
           >
             Start Game
@@ -293,7 +459,7 @@ export default function PlayGamePage() {
             }}
           >
             <span style={{ fontWeight: 700, opacity: 0.85 }}>
-              Question {currentIndex + 1} / {game!.questions.length}
+              Question {currentIndex + 1} / {activeQuestions.length}
             </span>
             <span
               style={{
@@ -354,35 +520,44 @@ export default function PlayGamePage() {
               gap: "0.75rem",
             }}
           >
-            {q.options.map((opt, i) => (
-              <button
-                key={i}
-                onClick={() => handleAnswer(i)}
-                disabled={locked}
-                style={{
-                  fontSize: "1.05rem",
-                  fontWeight: 800,
-                  padding: "1.1rem",
-                  borderRadius: radius.button,
-                  border: "none",
-                  background: answerColors[i],
-                  boxShadow:
-                    selected !== null && selected !== i
-                      ? "none"
-                      : solidShadow(4, answerShadowColors[i]),
-                  color: colors.white,
-                  cursor: locked ? "default" : "pointer",
-                  opacity: selected !== null && selected !== i ? 0.5 : 1,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.6rem",
-                  textAlign: "left",
-                }}
-              >
-                <span style={{ fontSize: "1.2rem" }}>{answerShapes[i]}</span>
-                <span>{opt || `Answer ${i + 1}`}</span>
-              </button>
-            ))}
+            {q.options.map((opt, i) => {
+              const showFeedback = selected !== null;
+              const isCorrectTile = i === q.correctIndex;
+              const isWrongPick = showFeedback && selected === i && !isCorrectTile;
+              const highlight = showFeedback && (isCorrectTile || isWrongPick);
+              const dim = showFeedback && !isCorrectTile && !isWrongPick;
+              return (
+                <button
+                  key={i}
+                  onClick={() => handleAnswer(i)}
+                  disabled={locked}
+                  style={{
+                    fontSize: "1.05rem",
+                    fontWeight: 800,
+                    padding: "1.1rem",
+                    borderRadius: radius.button,
+                    border: highlight
+                      ? `4px solid ${isCorrectTile ? "#1fbf4d" : "#ff3b3b"}`
+                      : "none",
+                    background: answerColors[i],
+                    boxShadow: dim ? "none" : solidShadow(4, answerShadowColors[i]),
+                    color: colors.white,
+                    cursor: locked ? "default" : "pointer",
+                    opacity: dim ? 0.5 : 1,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.6rem",
+                    textAlign: "left",
+                    transition: "opacity 150ms ease, border-color 150ms ease",
+                  }}
+                >
+                  <span style={{ fontSize: "1.2rem" }}>{answerShapes[i]}</span>
+                  <span style={{ flex: 1 }}>{opt || `Answer ${i + 1}`}</span>
+                  {showFeedback && isCorrectTile && <span style={{ fontSize: "1.2rem" }}>✓</span>}
+                  {isWrongPick && <span style={{ fontSize: "1.2rem" }}>✕</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -495,7 +670,7 @@ export default function PlayGamePage() {
               cursor: "pointer",
             }}
           >
-            {currentIndex + 1 >= game!.questions.length
+            {currentIndex + 1 >= activeQuestions.length
               ? "See Final Results"
               : "Next Question"}
           </button>
