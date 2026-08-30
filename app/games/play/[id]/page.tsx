@@ -14,10 +14,13 @@ interface Question {
   mediaType: MediaType;
   prompt: string;
   mediaContent: string;
+  imageContent?: string;
   options: string[];
   correctIndex: number;
   timeLimit: number;
 }
+
+type MediaMode = "sound" | "photo" | "both";
 
 interface Game {
   id: string;
@@ -70,6 +73,7 @@ export default function PlayGamePage() {
   const [labels, setLabels] = useState<string[]>([]);
   const [selectedLabels, setSelectedLabels] = useState<Set<string>>(new Set());
   const [questionCount, setQuestionCount] = useState(1);
+  const [mediaMode, setMediaMode] = useState<MediaMode>("sound");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -127,6 +131,7 @@ export default function PlayGamePage() {
   const poolSize = game
     ? game.questions.filter((q) => selectedLabels.has(q.options[q.correctIndex])).length
     : 0;
+  const hasImages = game ? game.questions.some((q) => q.imageContent) : false;
 
   useEffect(() => {
     setQuestionCount((prev) => Math.max(1, Math.min(prev, Math.max(poolSize, 1))));
@@ -453,6 +458,54 @@ export default function PlayGamePage() {
             </div>
           )}
 
+          {hasImages && (
+            <div
+              style={{
+                width: "100%",
+                maxWidth: "500px",
+                background: colors.white,
+                borderRadius: radius.card,
+                boxShadow: solidShadow(4, colors.gamesCardShadow),
+                padding: "1rem 1.25rem",
+                textAlign: "left",
+              }}
+            >
+              <div style={{ fontWeight: 800, marginBottom: "0.6rem" }}>
+                Recognise the answer from
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                {(
+                  [
+                    { value: "sound", label: "🔊 Sound" },
+                    { value: "photo", label: "🖼️ Photo" },
+                    { value: "both", label: "🔊🖼️ Both" },
+                  ] as { value: MediaMode; label: string }[]
+                ).map((opt) => {
+                  const on = mediaMode === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => setMediaMode(opt.value)}
+                      style={{
+                        flex: 1,
+                        fontSize: "0.85rem",
+                        fontWeight: 700,
+                        padding: "0.5rem 0.4rem",
+                        borderRadius: radius.button,
+                        border: "none",
+                        background: on ? colors.greenButton : colors.background,
+                        color: on ? colors.white : colors.textPrimary,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <button
             onClick={startGame}
             disabled={poolSize === 0}
@@ -516,27 +569,61 @@ export default function PlayGamePage() {
             <p style={{ fontSize: "1.3rem", fontWeight: 700, margin: "0 0 0.75rem" }}>
               {q.prompt || "Question"}
             </p>
-            {q.mediaType === "text" && q.mediaContent && (
-              <p style={{ fontSize: "1.1rem", lineHeight: 1.5 }}>{q.mediaContent}</p>
-            )}
-            {q.mediaType === "image" && q.mediaContent && (
-              <img
-                src={q.mediaContent}
-                alt="Question media"
-                style={{ maxWidth: "100%", maxHeight: "260px", borderRadius: "8px" }}
-              />
-            )}
-            {q.mediaType === "video" && q.mediaContent && (
-              <video
-                src={q.mediaContent}
-                controls
-                autoPlay
-                style={{ maxWidth: "100%", maxHeight: "260px", borderRadius: "8px" }}
-              />
-            )}
-            {q.mediaType === "audio" && q.mediaContent && (
-              <audio src={q.mediaContent} controls autoPlay style={{ width: "100%" }} />
-            )}
+            {(() => {
+              const showImage = (mediaMode === "photo" || mediaMode === "both") && q.imageContent;
+              const showAudio =
+                (mediaMode === "sound" || mediaMode === "both") &&
+                q.mediaType === "audio" &&
+                q.mediaContent;
+
+              if (showImage || showAudio) {
+                return (
+                  <>
+                    {showImage && (
+                      <img
+                        src={q.imageContent}
+                        alt="Instrument"
+                        style={{
+                          maxWidth: "100%",
+                          maxHeight: "260px",
+                          borderRadius: "8px",
+                          marginBottom: showAudio ? "0.75rem" : 0,
+                        }}
+                      />
+                    )}
+                    {showAudio && (
+                      <audio src={q.mediaContent} controls autoPlay style={{ width: "100%" }} />
+                    )}
+                  </>
+                );
+              }
+
+              return (
+                <>
+                  {q.mediaType === "text" && q.mediaContent && (
+                    <p style={{ fontSize: "1.1rem", lineHeight: 1.5 }}>{q.mediaContent}</p>
+                  )}
+                  {q.mediaType === "image" && q.mediaContent && (
+                    <img
+                      src={q.mediaContent}
+                      alt="Question media"
+                      style={{ maxWidth: "100%", maxHeight: "260px", borderRadius: "8px" }}
+                    />
+                  )}
+                  {q.mediaType === "video" && q.mediaContent && (
+                    <video
+                      src={q.mediaContent}
+                      controls
+                      autoPlay
+                      style={{ maxWidth: "100%", maxHeight: "260px", borderRadius: "8px" }}
+                    />
+                  )}
+                  {q.mediaType === "audio" && q.mediaContent && (
+                    <audio src={q.mediaContent} controls autoPlay style={{ width: "100%" }} />
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           <div

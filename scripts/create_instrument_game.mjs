@@ -1,13 +1,14 @@
 // One-off setup script: uploads real orchestra instrument recordings
-// (scripts/orchestra_audio/*.mp3, ~5s each) to a public Supabase Storage
-// bucket and creates an "Instrument Recognition" game (23 audio questions,
-// one per instrument) owned by the demo teacher account.
+// (scripts/orchestra_audio/*.mp3, ~5s each) and real instrument photos
+// (scripts/orchestra_images/*.jpg) to public Supabase Storage buckets and
+// creates an "Instrument Recognition" game (23 questions, one per
+// instrument, each carrying both an audio clip and a photo) owned by the
+// demo teacher account. The play page lets the host choose whether each
+// round is recognised by sound, photo, or both.
 //
-// Sources (see scripts/orchestra_audio/ATTRIBUTION.md for full credits):
-// - 14 clips: University of Iowa Musical Instrument Samples
-//   (theremin.music.uiowa.edu) — public domain, no restrictions.
-// - 5 clips (piccolo, harp, timpani, bass_drum, snare_drum): Freesound.org,
-//   CC0 or CC-BY 4.0 (attribution required for the CC-BY ones).
+// Sources: see scripts/orchestra_audio/ATTRIBUTION.md (audio, mostly
+// University of Iowa / Freesound.org) and
+// scripts/orchestra_images/ATTRIBUTION.md (photos, Wikimedia Commons).
 //
 // Run locally (needs real network access to Supabase, which this project's
 // automation sandbox doesn't have):
@@ -39,8 +40,10 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-const BUCKET = "orchestra-audio";
+const AUDIO_BUCKET = "orchestra-audio";
 const AUDIO_DIR = path.join(__dirname, "orchestra_audio");
+const IMAGE_BUCKET = "orchestra-images";
+const IMAGE_DIR = path.join(__dirname, "orchestra_images");
 
 const LABELS = {
   violin: "Violin",
@@ -68,31 +71,31 @@ const LABELS = {
   electric_guitar: "Electric Guitar",
 };
 
-async function ensureBucket() {
+async function ensureBucket(bucket) {
   const { data: buckets, error } = await supabase.storage.listBuckets();
   if (error) throw error;
-  if (!buckets.find((b) => b.name === BUCKET)) {
-    const { error: createErr } = await supabase.storage.createBucket(BUCKET, { public: true });
+  if (!buckets.find((b) => b.name === bucket)) {
+    const { error: createErr } = await supabase.storage.createBucket(bucket, { public: true });
     if (createErr) throw createErr;
-    console.log("Created bucket", BUCKET);
+    console.log("Created bucket", bucket);
   } else {
-    console.log("Bucket already exists:", BUCKET);
+    console.log("Bucket already exists:", bucket);
   }
 }
 
-async function uploadAll() {
-  const files = fs.readdirSync(AUDIO_DIR).filter((f) => f.endsWith(".mp3"));
+async function uploadAll(bucket, dir, ext, contentType) {
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(ext));
   const urls = {};
   for (const f of files) {
-    const buf = fs.readFileSync(path.join(AUDIO_DIR, f));
+    const buf = fs.readFileSync(path.join(dir, f));
     const storagePath = `instruments/${f}`;
-    const { error } = await supabase.storage.from(BUCKET).upload(storagePath, buf, {
-      contentType: "audio/mpeg",
+    const { error } = await supabase.storage.from(bucket).upload(storagePath, buf, {
+      contentType,
       upsert: true,
     });
     if (error) throw error;
-    const { data } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
-    const name = f.replace(".mp3", "");
+    const { data } = supabase.storage.from(bucket).getPublicUrl(storagePath);
+    const name = f.replace(ext, "");
     urls[name] = data.publicUrl;
     console.log("Uploaded", name, "->", data.publicUrl);
   }
@@ -109,8 +112,11 @@ function shuffle(arr) {
 }
 
 async function main() {
-  await ensureBucket();
-  const urls = await uploadAll();
+  await ensureBucket(AUDIO_BUCKET);
+  const audioUrls = await uploadAll(AUDIO_BUCKET, AUDIO_DIR, ".mp3", "audio/mpeg");
+
+  await ensureBucket(IMAGE_BUCKET);
+  const imageUrls = await uploadAll(IMAGE_BUCKET, IMAGE_DIR, ".jpg", "image/jpeg");
 
   const { data: teacher, error: tErr } = await supabase
     .from("teachers")
@@ -123,7 +129,7 @@ async function main() {
     process.exit(1);
   }
 
-  const instruments = Object.keys(urls);
+  const instruments = Object.keys(audioUrls);
   const questions = instruments.map((instr, idx) => {
     const distractors = shuffle(instruments.filter((i) => i !== instr)).slice(0, 3);
     const optionKeys = shuffle([instr, ...distractors]);
@@ -136,8 +142,9 @@ async function main() {
       y: 40 + Math.floor(idx / 5) * 90,
       width: 320,
       height: 420,
-      prompt: "Listen to the clip. Which instrument is playing?",
-      mediaContent: urls[instr],
+      prompt: "Which instrument is this?",
+      mediaContent: audioUrls[instr],
+      imageContent: imageUrls[instr],
       options,
       correctIndex,
       timeLimit: 20,
