@@ -7,6 +7,8 @@ phrase — not a single held note) from the original source.
 - tuba — Tuba.ff.C2B2.aiff (public domain — "freely available ... and may be
   downloaded and used for any projects, without restrictions")
   https://theremin.music.uiowa.edu/MIStuba.html
+- bassoon — Bassoon.ff.C3Bb3.aiff (same public-domain license)
+  https://theremin.music.uiowa.edu/MISbassoon.html
 
 ## Freesound.org
 
@@ -27,8 +29,6 @@ phrase — not a single held note) from the original source.
 - clarinet — "Clarinet - C natural minor" (good-sounds.org / MTG, Universitat
   Pompeu Fabra) (CC BY 3.0)
   https://freesound.org/people/MTG/sounds/357316/
-- bassoon — "100 bassons battle.wav" by Thirsk (CC BY 4.0)
-  https://freesound.org/people/Thirsk/sounds/120963/
 - trumpet — "Trumpet - B major" (good-sounds.org / MTG, Universitat Pompeu
   Fabra) (CC BY 3.0)
   https://freesound.org/people/MTG/sounds/357896/
