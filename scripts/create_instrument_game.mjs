@@ -1,5 +1,5 @@
 // One-off setup script: uploads real orchestra instrument recordings
-// (scripts/orchestra_audio/*.mp3, ~5s each) and real instrument photos
+// (scripts/orchestra_audio/*.mp3, ~10s each) and real instrument photos
 // (scripts/orchestra_images/*.jpg) to public Supabase Storage buckets and
 // creates an "Instrument Recognition" game (23 questions, one per
 // instrument, each carrying both an audio clip and a photo) owned by the
@@ -147,7 +147,7 @@ async function main() {
       imageContent: imageUrls[instr],
       options,
       correctIndex,
-      timeLimit: 20,
+      timeLimit: 30,
     };
   });
 

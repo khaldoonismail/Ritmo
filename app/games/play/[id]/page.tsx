@@ -74,6 +74,8 @@ export default function PlayGamePage() {
   const [selectedLabels, setSelectedLabels] = useState<Set<string>>(new Set());
   const [questionCount, setQuestionCount] = useState(1);
   const [mediaMode, setMediaMode] = useState<MediaMode>("sound");
+  const [timerEnabled, setTimerEnabled] = useState(true);
+  const [timeLimitSeconds, setTimeLimitSeconds] = useState(20);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -121,6 +123,7 @@ export default function PlayGamePage() {
         setLabels(uniqueLabels);
         setSelectedLabels(new Set(uniqueLabels));
         setQuestionCount(questions.length);
+        setTimeLimitSeconds(questions[0]?.timeLimit || 20);
       }
       setStage(data ? "lobby" : "notfound");
     }
@@ -148,7 +151,7 @@ export default function PlayGamePage() {
   }
 
   useEffect(() => {
-    if (stage !== "question") return;
+    if (stage !== "question" || !timerEnabled) return;
     if (timeLeft <= 0) {
       finishQuestion(null);
       return;
@@ -156,7 +159,7 @@ export default function PlayGamePage() {
     const t = setTimeout(() => setTimeLeft((v) => v - 1), 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, timeLeft]);
+  }, [stage, timeLeft, timerEnabled]);
 
   function startGame() {
     if (!game) return;
@@ -166,7 +169,7 @@ export default function PlayGamePage() {
     setActiveQuestions(picked);
     roundEndedRef.current = false;
     setCurrentIndex(0);
-    setTimeLeft(picked[0].timeLimit);
+    setTimeLeft(timerEnabled ? timeLimitSeconds : 0);
     setSelected(null);
     setLocked(false);
     setStage("question");
@@ -188,7 +191,9 @@ export default function PlayGamePage() {
     const timeUsed = timeLeftRef.current;
     const correct = chosen !== null && chosen === q.correctIndex;
     const playerPoints = correct
-      ? Math.round(500 + 500 * (timeUsed / q.timeLimit))
+      ? timerEnabled
+        ? Math.round(500 + 500 * (timeUsed / timeLimitSeconds))
+        : 1000
       : 0;
 
     setPlayers((prev) =>
@@ -208,7 +213,7 @@ export default function PlayGamePage() {
     }
     roundEndedRef.current = false;
     setCurrentIndex(next);
-    setTimeLeft(activeQuestions[next].timeLimit);
+    setTimeLeft(timerEnabled ? timeLimitSeconds : 0);
     setSelected(null);
     setLocked(false);
     setStage("question");
@@ -458,6 +463,77 @@ export default function PlayGamePage() {
             </div>
           )}
 
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "500px",
+              background: colors.white,
+              borderRadius: radius.card,
+              boxShadow: solidShadow(4, colors.gamesCardShadow),
+              padding: "1rem 1.25rem",
+              textAlign: "left",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <span style={{ fontWeight: 800 }}>Time per question</span>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={!timerEnabled}
+                  onChange={(e) => setTimerEnabled(!e.target.checked)}
+                />
+                No time limit
+              </label>
+            </div>
+
+            {timerEnabled && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.6rem",
+                  marginTop: "0.75rem",
+                }}
+              >
+                <input
+                  id="timeLimit"
+                  type="number"
+                  min={5}
+                  max={120}
+                  value={timeLimitSeconds}
+                  onChange={(e) =>
+                    setTimeLimitSeconds(Math.max(5, Math.min(Number(e.target.value) || 5, 120)))
+                  }
+                  style={{
+                    width: "4rem",
+                    fontSize: "0.9rem",
+                    fontWeight: 700,
+                    padding: "0.3rem 0.5rem",
+                    borderRadius: "6px",
+                    border: `1px solid ${colors.gamesCardShadow}`,
+                    direction: "ltr",
+                  }}
+                />
+                <span style={{ fontSize: "0.85rem", opacity: 0.7 }}>seconds</span>
+              </div>
+            )}
+          </div>
+
           {hasImages && (
             <div
               style={{
@@ -542,7 +618,7 @@ export default function PlayGamePage() {
             </span>
             <span
               style={{
-                fontSize: "1.5rem",
+                fontSize: timerEnabled ? "1.5rem" : "1rem",
                 fontWeight: 800,
                 direction: "ltr",
                 background: colors.white,
@@ -552,7 +628,7 @@ export default function PlayGamePage() {
                 borderRadius: radius.pill,
               }}
             >
-              {timeLeft}s
+              {timerEnabled ? `${timeLeft}s` : "No limit"}
             </span>
           </div>
 
