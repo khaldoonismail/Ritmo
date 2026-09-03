@@ -14,8 +14,8 @@ phrase — not a single held note) from the original source.
 
 - violin — "d_scale_violin.wav" by oleviolin (CC0)
   https://freesound.org/people/oleviolin/sounds/557469/
-- viola — "Somber Viola.wav" by DeVern (CC BY 3.0)
-  https://freesound.org/people/DeVern/sounds/437033/
+- viola — "viola tunning.wav" by owstu (CC0)
+  https://freesound.org/people/owstu/sounds/628822/
 - cello — "LastMan.wav" by calpomatt (CC BY 4.0)
   https://freesound.org/people/calpomatt/sounds/124001/
 - double_bass — "Double bass" by elzozo (CC0)
