@@ -45,14 +45,14 @@ const AUDIO_BUCKET = "dynamics-audio";
 const AUDIO_DIR = path.join(__dirname, "dynamics_audio");
 
 const LABELS = {
-  ppp: "Pianississimo (ppp)",
-  pp: "Pianissimo (pp)",
-  p: "Piano (p)",
-  mp: "Mezzo-piano (mp)",
-  mf: "Mezzo-forte (mf)",
-  f: "Forte (f)",
-  ff: "Fortissimo (ff)",
-  fff: "Fortississimo (fff)",
+  ppp: "Pianississimo",
+  pp: "Pianissimo",
+  p: "Piano",
+  mp: "Mezzo-piano",
+  mf: "Mezzo-forte",
+  f: "Forte",
+  ff: "Fortissimo",
+  fff: "Fortississimo",
   crescendo: "Crescendo",
   decrescendo: "Decrescendo",
 };
