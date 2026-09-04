@@ -44,6 +44,21 @@ const stageBg = "#1b6b0a";
 const cardShadowOnGreen = "#124e07";
 const whiteElementShadow = "#c7cdbf";
 
+// Faint scattered shapes (echoing the answer-tile triangle/diamond/circle/
+// square) tiled across the plain green stage background, Kahoot-style.
+const stagePatternSvg = `<svg width="320" height="320" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="30,14 46,42 14,42" fill="rgba(255,255,255,0.06)"/>
+  <rect x="205" y="24" width="24" height="24" fill="rgba(255,255,255,0.05)" transform="rotate(20 217 36)"/>
+  <circle cx="270" cy="110" r="13" fill="rgba(255,255,255,0.06)"/>
+  <polygon points="90,150 108,168 90,186 72,168" fill="rgba(255,255,255,0.05)"/>
+  <polygon points="220,190 240,220 200,220" fill="rgba(255,255,255,0.045)"/>
+  <circle cx="30" cy="230" r="9" fill="rgba(255,255,255,0.05)"/>
+  <rect x="260" y="255" width="20" height="20" fill="rgba(255,255,255,0.045)" transform="rotate(-14 270 265)"/>
+  <polygon points="130,60 146,82 114,82" fill="rgba(255,255,255,0.045)"/>
+  <circle cx="150" cy="270" r="10" fill="rgba(255,255,255,0.05)"/>
+</svg>`;
+const stagePattern = `url("data:image/svg+xml,${encodeURIComponent(stagePatternSvg)}")`;
+
 type Stage = "loading" | "notfound" | "lobby" | "question" | "final";
 
 function shuffle<T>(arr: T[]): T[] {
@@ -268,7 +283,9 @@ export default function PlayGamePage() {
         gap: "1.25rem",
         textAlign: "center",
         padding: "2rem",
-        background: isLobby ? colors.background : stageBg,
+        backgroundColor: isLobby ? colors.background : stageBg,
+        backgroundImage: isLobby ? "none" : stagePattern,
+        backgroundSize: "320px 320px",
         color: isLobby ? colors.textPrimary : colors.white,
       }}
     >

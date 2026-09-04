@@ -28,6 +28,85 @@ function ownerNameOf(row: CommunityGame): string | null {
   return row.teachers?.name ?? null;
 }
 
+// "Musical Dynamics" gets a bespoke cover: a grid of its own dynamics
+// symbols, each in its own color. Everything else falls back to a
+// solid-color cover (picked deterministically from the title) with the
+// app's music-note glyph, matching the icon square already used in the
+// play-page lobby.
+const dynamicsCoverTiles = [
+  { symbol: "p", bg: "#3B5CC4" },
+  { symbol: "mf", bg: "#D9860F" },
+  { symbol: "f", bg: "#C24444" },
+  { symbol: "pp", bg: "#D85A30" },
+  { symbol: "ff", bg: "#7F77DD" },
+  { symbol: "mp", bg: "#2E9E8F" },
+];
+
+const coverPalette = [
+  colors.greenCard,
+  colors.blueText,
+  colors.coralText,
+  colors.classesText,
+  "#7F77DD",
+  "#2E9E8F",
+];
+
+function coverColorFor(title: string) {
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) hash = (hash * 31 + title.charCodeAt(i)) >>> 0;
+  return coverPalette[hash % coverPalette.length];
+}
+
+function GameCover({ title }: { title: string }) {
+  if (title === "Musical Dynamics") {
+    return (
+      <div
+        style={{
+          height: "96px",
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: "4px",
+          padding: "8px",
+          background: colors.background,
+        }}
+      >
+        {dynamicsCoverTiles.map((t) => (
+          <div
+            key={t.symbol}
+            style={{
+              borderRadius: "8px",
+              background: t.bg,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontStyle: "italic",
+              fontWeight: 800,
+              fontSize: "0.8rem",
+              color: colors.white,
+            }}
+          >
+            {t.symbol}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        height: "96px",
+        background: coverColorFor(title),
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <span style={{ fontSize: "2.2rem", color: colors.white, lineHeight: 1 }}>♪</span>
+    </div>
+  );
+}
+
 export default function GamesLibraryPage() {
   const router = useRouter();
   const [myTeacherId, setMyTeacherId] = useState<string | null>(null);
@@ -156,21 +235,34 @@ export default function GamesLibraryPage() {
     ]);
   }
 
-  const rowStyle: React.CSSProperties = {
+  const gridStyle: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+    gap: "1rem",
+    width: "100%",
+  };
+
+  const cardStyle: React.CSSProperties = {
     display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "0.75rem",
-    padding: "0.9rem 1.1rem",
+    flexDirection: "column",
     borderRadius: radius.card,
+    overflow: "hidden",
     background: colors.white,
     boxShadow: solidShadow(4, colors.rosterCardShadow),
   };
 
+  const cardBodyStyle: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.5rem",
+    padding: "0.7rem 0.85rem 0.85rem",
+    textAlign: "left",
+  };
+
   const primaryButtonStyle: React.CSSProperties = {
-    fontSize: "0.9rem",
+    fontSize: "0.82rem",
     fontWeight: 800,
-    padding: "0.5rem 0.9rem",
+    padding: "0.5rem 0.6rem",
     borderRadius: radius.button,
     border: "none",
     background: colors.orange,
@@ -178,11 +270,19 @@ export default function GamesLibraryPage() {
     color: colors.white,
     cursor: "pointer",
     textDecoration: "none",
+    textAlign: "center",
     whiteSpace: "nowrap",
   };
 
-  const dangerButtonStyle: React.CSSProperties = {
+  const secondaryButtonStyle: React.CSSProperties = {
     ...primaryButtonStyle,
+    flex: 1,
+    fontSize: "0.75rem",
+    padding: "0.4rem 0.4rem",
+  };
+
+  const dangerButtonStyle: React.CSSProperties = {
+    ...secondaryButtonStyle,
     background: colors.coralText,
     boxShadow: "none",
   };
@@ -228,7 +328,7 @@ export default function GamesLibraryPage() {
         Create New Game +
       </Link>
 
-      <section style={{ width: "100%", maxWidth: "650px" }}>
+      <section style={{ width: "100%", maxWidth: "1100px" }}>
         <h2 style={{ fontSize: "1.3rem", fontWeight: 800, margin: "0 0 0.75rem" }}>My Games</h2>
 
         {deleteError && (
@@ -238,7 +338,7 @@ export default function GamesLibraryPage() {
           <p style={{ color: colors.coralText, fontSize: "0.85rem", marginBottom: "0.5rem" }}>{publishError}</p>
         )}
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+        <div style={gridStyle}>
           {myGames === null && !loadError && (
             <p style={{ opacity: 0.6, fontWeight: 600, textAlign: "center" }}>Loading...</p>
           )}
@@ -250,42 +350,43 @@ export default function GamesLibraryPage() {
           )}
 
           {myGames?.map((g) => (
-            <div key={g.id} style={rowStyle}>
-              <div style={{ textAlign: "left" }}>
-                <div style={{ fontWeight: 800 }}>{g.title}</div>
-                <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
+            <div key={g.id} style={cardStyle}>
+              <GameCover title={g.title} />
+              <div style={cardBodyStyle}>
+                <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>{g.title}</div>
+                <div style={{ fontSize: "0.75rem", fontWeight: 600, opacity: 0.6 }}>
                   {g.is_public ? "Public" : "Private"} · {questionCountLabel(g.questions.length)} · used{" "}
                   {g.usage_count} time
                   {g.usage_count === 1 ? "" : "s"}
                 </div>
-              </div>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
                 <Link href={`/games/play/${g.id}`} style={primaryButtonStyle}>
                   Play Demo
                 </Link>
-                <button
-                  onClick={() => togglePublic(g)}
-                  disabled={publishBusyId === g.id}
-                  style={{
-                    ...primaryButtonStyle,
-                    background: g.is_public ? colors.white : colors.greenButton,
-                    boxShadow: g.is_public ? "none" : solidShadow(3, colors.greenButtonShadow),
-                    color: g.is_public ? colors.textPrimary : colors.white,
-                    border: g.is_public ? `1px solid ${colors.rosterCardShadow}` : "none",
-                  }}
-                >
-                  {publishBusyId === g.id ? "..." : g.is_public ? "Unpublish" : "Publish"}
-                </button>
-                <button onClick={() => deleteGame(g.id)} style={dangerButtonStyle}>
-                  Delete
-                </button>
+                <div style={{ display: "flex", gap: "0.4rem" }}>
+                  <button
+                    onClick={() => togglePublic(g)}
+                    disabled={publishBusyId === g.id}
+                    style={{
+                      ...secondaryButtonStyle,
+                      background: g.is_public ? colors.white : colors.greenButton,
+                      boxShadow: g.is_public ? "none" : solidShadow(3, colors.greenButtonShadow),
+                      color: g.is_public ? colors.textPrimary : colors.white,
+                      border: g.is_public ? `1px solid ${colors.rosterCardShadow}` : "none",
+                    }}
+                  >
+                    {publishBusyId === g.id ? "..." : g.is_public ? "Unpublish" : "Publish"}
+                  </button>
+                  <button onClick={() => deleteGame(g.id)} style={dangerButtonStyle}>
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      <section style={{ width: "100%", maxWidth: "650px" }}>
+      <section style={{ width: "100%", maxWidth: "1100px" }}>
         <h2 style={{ fontSize: "1.3rem", fontWeight: 800, margin: "0 0 0.75rem" }}>Community Games</h2>
         <p style={{ fontSize: "0.85rem", fontWeight: 600, opacity: 0.6, margin: "0 0 0.75rem" }}>
           Ready-made games shared by other teachers — copy one into My Games to keep and host your own.
@@ -295,7 +396,7 @@ export default function GamesLibraryPage() {
           <p style={{ color: colors.coralText, fontSize: "0.85rem", marginBottom: "0.5rem" }}>{copyError}</p>
         )}
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+        <div style={gridStyle}>
           {communityGames === null && !loadError && (
             <p style={{ opacity: 0.6, fontWeight: 600, textAlign: "center" }}>Loading...</p>
           )}
@@ -305,16 +406,15 @@ export default function GamesLibraryPage() {
           )}
 
           {communityGames?.map((g) => (
-            <div key={g.id} style={rowStyle}>
-              <div style={{ textAlign: "left" }}>
-                <div style={{ fontWeight: 800 }}>{g.title}</div>
-                <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
+            <div key={g.id} style={cardStyle}>
+              <GameCover title={g.title} />
+              <div style={cardBodyStyle}>
+                <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>{g.title}</div>
+                <div style={{ fontSize: "0.75rem", fontWeight: 600, opacity: 0.6 }}>
                   by {ownerNameOf(g) || "another teacher"} · {questionCountLabel(g.questions.length)} · used{" "}
                   {g.usage_count} time
                   {g.usage_count === 1 ? "" : "s"}
                 </div>
-              </div>
-              <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
                 <Link href={`/games/play/${g.id}`} style={primaryButtonStyle}>
                   Play Demo
                 </Link>
