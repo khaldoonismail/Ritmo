@@ -92,8 +92,14 @@ export default function CreateGamePage() {
   }, [router]);
 
   function addQuestion(mediaType: MediaType) {
-    const x = 40 + Math.random() * 60;
-    const y = 40 + Math.random() * 60;
+    // Place new cards in reading order (left-to-right, top-to-bottom)
+    // instead of stacked randomly, so the play order stays legible at a
+    // glance. Cards can still be dragged freely afterward — the numbered
+    // badge on each card always reflects its actual position in the game.
+    const col = questions.length % 2;
+    const row = Math.floor(questions.length / 2);
+    const x = 40 + col * 360;
+    const y = 40 + row * 450;
     const q = newQuestion(mediaType, x, y);
     setQuestions((prev) => [...prev, q]);
     setZOrder((prev) => ({ ...prev, [q.id]: zCounter++ }));
@@ -382,7 +388,7 @@ export default function CreateGamePage() {
           </span>
         )}
 
-        {questions.map((q) => (
+        {questions.map((q, index) => (
           <div
             key={q.id}
             onMouseDown={() => bringToFront(q.id)}
@@ -420,9 +426,25 @@ export default function CreateGamePage() {
                   color: colors.textPrimary,
                   display: "flex",
                   alignItems: "center",
-                  gap: "0.35rem",
+                  gap: "0.4rem",
                 }}
               >
+                <span
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "20px",
+                    height: "20px",
+                    borderRadius: radius.pill,
+                    background: colors.orange,
+                    color: colors.white,
+                    fontSize: "0.7rem",
+                    flexShrink: 0,
+                  }}
+                >
+                  {index + 1}
+                </span>
                 <span aria-hidden="true">{typeAccent[q.mediaType].icon}</span>
                 {typeLabels[q.mediaType]}
               </span>
