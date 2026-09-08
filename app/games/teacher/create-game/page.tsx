@@ -50,6 +50,13 @@ function newQuestion(mediaType: MediaType, x: number, y: number): Question {
 
 const answerColors = ["#e21b3c", "#1368ce", "#d89e00", "#26890c"];
 
+const typeAccent: Record<MediaType, { bg: string; icon: string }> = {
+  text: { bg: colors.blueBackground, icon: "📝" },
+  image: { bg: colors.completedCardBg, icon: "🖼️" },
+  video: { bg: colors.coralBackground, icon: "🎬" },
+  audio: { bg: colors.inProgressCardBg, icon: "🔊" },
+};
+
 export default function CreateGamePage() {
   const router = useRouter();
   const [gameTitle, setGameTitle] = useState("");
@@ -183,6 +190,8 @@ export default function CreateGamePage() {
     router.push("/games/teacher/library");
   }
 
+  // Kept as-is: this is the exact style already used by the answer-options
+  // inputs below, which are staying unchanged.
   const inputStyle: React.CSSProperties = {
     fontSize: "0.9rem",
     padding: "0.4rem 0.6rem",
@@ -193,6 +202,15 @@ export default function CreateGamePage() {
     textAlign: "left",
     fontFamily: "inherit",
     width: "100%",
+  };
+
+  // Theme-styled counterpart for everything else on the card (prompt, media
+  // URL, time limit) so those pick up the app's Kahoot-style look.
+  const fieldStyle: React.CSSProperties = {
+    ...inputStyle,
+    borderRadius: radius.button,
+    border: `1px solid ${colors.inputBorder}`,
+    background: colors.listRowBg,
   };
 
   return (
@@ -208,6 +226,21 @@ export default function CreateGamePage() {
         color: colors.textPrimary,
       }}
     >
+      <div
+        style={{
+          width: "56px",
+          height: "56px",
+          borderRadius: "18px",
+          background: colors.orange,
+          boxShadow: solidShadow(5, colors.orangeShadow),
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span style={{ fontSize: "1.7rem", color: colors.white, lineHeight: 1 }}>♪</span>
+      </div>
+
       <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
         Create a Game
       </h1>
@@ -226,7 +259,7 @@ export default function CreateGamePage() {
           value={gameTitle}
           onChange={(e) => setGameTitle(e.target.value)}
           style={{
-            ...inputStyle,
+            ...fieldStyle,
             fontSize: "1.1rem",
             fontWeight: 700,
             padding: "0.6rem 0.8rem",
@@ -325,10 +358,10 @@ export default function CreateGamePage() {
           width: "100%",
           maxWidth: "1000px",
           height: "600px",
-          border: "2px dashed #ddd",
-          borderRadius: "12px",
-          background:
-            "repeating-linear-gradient(0deg, #fafafa, #fafafa 24px, #f3f3f3 25px), repeating-linear-gradient(90deg, transparent, transparent 24px, #f0f0f0 25px)",
+          border: `2px dashed ${colors.inputBorder}`,
+          borderRadius: radius.card,
+          background: `radial-gradient(${colors.inputBorder} 1px, ${colors.listRowBg} 1.5px)`,
+          backgroundSize: "26px 26px",
           overflow: "hidden",
         }}
       >
@@ -339,8 +372,10 @@ export default function CreateGamePage() {
               top: "50%",
               left: "50%",
               transform: "translate(-50%, -50%)",
-              opacity: 0.4,
+              opacity: 0.5,
               fontSize: "0.9rem",
+              fontWeight: 700,
+              color: colors.textPrimary,
             }}
           >
             Click "+ Add Question" to place your first question
@@ -358,10 +393,9 @@ export default function CreateGamePage() {
               width: q.width,
               height: q.height,
               zIndex: zOrder[q.id] || 1,
-              background: "#fff",
-              border: "1px solid #ddd",
-              borderRadius: "10px",
-              boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
+              background: colors.white,
+              borderRadius: radius.card,
+              boxShadow: solidShadow(4, colors.gamesCardShadow),
               display: "flex",
               flexDirection: "column",
               overflow: "hidden",
@@ -371,9 +405,8 @@ export default function CreateGamePage() {
               onMouseDown={(e) => handleDragStart(e, q)}
               style={{
                 cursor: "grab",
-                padding: "0.4rem 0.6rem",
-                background: "#f5f5f5",
-                borderBottom: "1px solid #eee",
+                padding: "0.5rem 0.7rem",
+                background: typeAccent[q.mediaType].bg,
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
@@ -382,23 +415,32 @@ export default function CreateGamePage() {
             >
               <span
                 style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  opacity: 0.6,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.03em",
+                  fontSize: "0.78rem",
+                  fontWeight: 800,
+                  color: colors.textPrimary,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
                 }}
               >
+                <span aria-hidden="true">{typeAccent[q.mediaType].icon}</span>
                 {typeLabels[q.mediaType]}
               </span>
               <button
                 onClick={() => removeQuestion(q.id)}
                 style={{
+                  width: "22px",
+                  height: "22px",
+                  borderRadius: radius.pill,
                   border: "none",
-                  background: "none",
+                  background: "rgba(255,255,255,0.6)",
                   color: colors.coralText,
                   cursor: "pointer",
-                  fontSize: "0.8rem",
+                  fontSize: "0.75rem",
+                  fontWeight: 800,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
                 ✕
@@ -423,7 +465,7 @@ export default function CreateGamePage() {
                 onChange={(e) =>
                   updateQuestion(q.id, { prompt: e.target.value })
                 }
-                style={inputStyle}
+                style={{ ...fieldStyle, fontWeight: 700 }}
               />
 
               {q.mediaType === "text" && (
@@ -433,7 +475,7 @@ export default function CreateGamePage() {
                   onChange={(e) =>
                     updateQuestion(q.id, { mediaContent: e.target.value })
                   }
-                  style={{ ...inputStyle, minHeight: "60px", resize: "none" }}
+                  style={{ ...fieldStyle, minHeight: "60px", resize: "none" }}
                 />
               )}
 
@@ -446,7 +488,7 @@ export default function CreateGamePage() {
                     onChange={(e) =>
                       updateQuestion(q.id, { mediaContent: e.target.value })
                     }
-                    style={inputStyle}
+                    style={fieldStyle}
                   />
                   {q.mediaContent && (
                     <img
@@ -467,7 +509,7 @@ export default function CreateGamePage() {
                     onChange={(e) =>
                       updateQuestion(q.id, { mediaContent: e.target.value })
                     }
-                    style={inputStyle}
+                    style={fieldStyle}
                   />
                   {q.mediaContent && (
                     <video
@@ -488,7 +530,7 @@ export default function CreateGamePage() {
                     onChange={(e) =>
                       updateQuestion(q.id, { mediaContent: e.target.value })
                     }
-                    style={inputStyle}
+                    style={fieldStyle}
                   />
                   {q.mediaContent && (
                     <audio
@@ -536,7 +578,7 @@ export default function CreateGamePage() {
               <div
                 style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}
               >
-                <label style={{ fontSize: "0.8rem", opacity: 0.7 }}>
+                <label style={{ fontSize: "0.8rem", fontWeight: 700, opacity: 0.7 }}>
                   Time limit (sec)
                 </label>
                 <input
@@ -549,7 +591,7 @@ export default function CreateGamePage() {
                       timeLimit: Number(e.target.value) || 20,
                     })
                   }
-                  style={{ ...inputStyle, width: "70px" }}
+                  style={{ ...fieldStyle, width: "70px" }}
                 />
               </div>
             </div>
@@ -563,8 +605,7 @@ export default function CreateGamePage() {
                 width: "16px",
                 height: "16px",
                 cursor: "nwse-resize",
-                background:
-                  "linear-gradient(135deg, transparent 50%, #bbb 50%)",
+                background: `linear-gradient(135deg, transparent 50%, ${colors.neutralGray} 50%)`,
               }}
             />
           </div>
