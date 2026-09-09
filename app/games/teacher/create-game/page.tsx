@@ -11,18 +11,12 @@ type MediaType = "text" | "image" | "video" | "audio";
 interface Question {
   id: string;
   mediaType: MediaType;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
   prompt: string;
   mediaContent: string;
   options: string[];
   correctIndex: number;
   timeLimit: number;
 }
-
-let zCounter = 1;
 
 const typeLabels: Record<MediaType, string> = {
   text: "Text Question",
@@ -31,15 +25,11 @@ const typeLabels: Record<MediaType, string> = {
   audio: "Audio Question",
 };
 
-function newQuestion(mediaType: MediaType, x: number, y: number): Question {
+function newQuestion(mediaType: MediaType): Question {
   const id = Math.random().toString(36).slice(2);
   return {
     id,
     mediaType,
-    x,
-    y,
-    width: 320,
-    height: 420,
     prompt: "",
     mediaContent: "",
     options: ["", "", "", ""],
@@ -62,7 +52,6 @@ export default function CreateGamePage() {
   const [gameTitle, setGameTitle] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [zOrder, setZOrder] = useState<Record<string, number>>({});
   const [myTeacherId, setMyTeacherId] = useState<string | null>(null);
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -92,17 +81,8 @@ export default function CreateGamePage() {
   }, [router]);
 
   function addQuestion(mediaType: MediaType) {
-    // Place new cards in reading order (left-to-right, top-to-bottom)
-    // instead of stacked randomly, so the play order stays legible at a
-    // glance. Cards can still be dragged freely afterward — the numbered
-    // badge on each card always reflects its actual position in the game.
-    const col = questions.length % 2;
-    const row = Math.floor(questions.length / 2);
-    const x = 40 + col * 360;
-    const y = 40 + row * 450;
-    const q = newQuestion(mediaType, x, y);
+    const q = newQuestion(mediaType);
     setQuestions((prev) => [...prev, q]);
-    setZOrder((prev) => ({ ...prev, [q.id]: zCounter++ }));
     setPickerOpen(false);
   }
 
@@ -114,59 +94,6 @@ export default function CreateGamePage() {
     setQuestions((prev) =>
       prev.map((q) => (q.id === id ? { ...q, ...patch } : q))
     );
-  }
-
-  function bringToFront(id: string) {
-    setZOrder((prev) => ({ ...prev, [id]: zCounter++ }));
-  }
-
-  function handleDragStart(e: React.MouseEvent, q: Question) {
-    e.preventDefault();
-    bringToFront(q.id);
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const originX = q.x;
-    const originY = q.y;
-
-    function onMove(ev: MouseEvent) {
-      const dx = ev.clientX - startX;
-      const dy = ev.clientY - startY;
-      updateQuestion(q.id, {
-        x: Math.max(0, originX + dx),
-        y: Math.max(0, originY + dy),
-      });
-    }
-    function onUp() {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    }
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }
-
-  function handleResizeStart(e: React.MouseEvent, q: Question) {
-    e.preventDefault();
-    e.stopPropagation();
-    bringToFront(q.id);
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const originW = q.width;
-    const originH = q.height;
-
-    function onMove(ev: MouseEvent) {
-      const dx = ev.clientX - startX;
-      const dy = ev.clientY - startY;
-      updateQuestion(q.id, {
-        width: Math.max(240, originW + dx),
-        height: Math.max(300, originH + dy),
-      });
-    }
-    function onUp() {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    }
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
   }
 
   async function saveGame() {
@@ -358,47 +285,33 @@ export default function CreateGamePage() {
         )}
       </div>
 
+      {questions.length === 0 && (
+        <p
+          style={{
+            opacity: 0.6,
+            fontWeight: 700,
+            fontSize: "0.9rem",
+            margin: 0,
+          }}
+        >
+          Click "+ Add Question" to add your first question
+        </p>
+      )}
+
       <div
         style={{
-          position: "relative",
           width: "100%",
           maxWidth: "1000px",
-          height: "600px",
-          border: `2px dashed ${colors.inputBorder}`,
-          borderRadius: radius.card,
-          background: `radial-gradient(${colors.inputBorder} 1px, ${colors.listRowBg} 1.5px)`,
-          backgroundSize: "26px 26px",
-          overflow: "hidden",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "1rem",
         }}
       >
-        {questions.length === 0 && (
-          <span
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              opacity: 0.5,
-              fontSize: "0.9rem",
-              fontWeight: 700,
-              color: colors.textPrimary,
-            }}
-          >
-            Click "+ Add Question" to place your first question
-          </span>
-        )}
-
         {questions.map((q, index) => (
           <div
             key={q.id}
-            onMouseDown={() => bringToFront(q.id)}
             style={{
-              position: "absolute",
-              left: q.x,
-              top: q.y,
-              width: q.width,
-              height: q.height,
-              zIndex: zOrder[q.id] || 1,
+              width: "320px",
               background: colors.white,
               borderRadius: radius.card,
               boxShadow: solidShadow(4, colors.gamesCardShadow),
@@ -408,15 +321,12 @@ export default function CreateGamePage() {
             }}
           >
             <div
-              onMouseDown={(e) => handleDragStart(e, q)}
               style={{
-                cursor: "grab",
                 padding: "0.5rem 0.7rem",
                 background: typeAccent[q.mediaType].bg,
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                userSelect: "none",
               }}
             >
               <span
@@ -471,9 +381,7 @@ export default function CreateGamePage() {
 
             <div
               style={{
-                flex: 1,
                 padding: "0.6rem",
-                overflow: "auto",
                 display: "flex",
                 flexDirection: "column",
                 gap: "0.4rem",
@@ -617,19 +525,6 @@ export default function CreateGamePage() {
                 />
               </div>
             </div>
-
-            <div
-              onMouseDown={(e) => handleResizeStart(e, q)}
-              style={{
-                position: "absolute",
-                right: 0,
-                bottom: 0,
-                width: "16px",
-                height: "16px",
-                cursor: "nwse-resize",
-                background: `linear-gradient(135deg, transparent 50%, ${colors.neutralGray} 50%)`,
-              }}
-            />
           </div>
         ))}
       </div>
