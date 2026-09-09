@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, solidShadow } from "@/lib/theme";
+import GameCoverPicker from "./GameCoverPicker";
 
 type MediaType = "text" | "image" | "video" | "audio";
 
@@ -50,6 +51,7 @@ const typeAccent: Record<MediaType, { bg: string; icon: string }> = {
 export default function CreateGamePage() {
   const router = useRouter();
   const [gameTitle, setGameTitle] = useState("");
+  const [coverImage, setCoverImage] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [myTeacherId, setMyTeacherId] = useState<string | null>(null);
@@ -110,6 +112,7 @@ export default function CreateGamePage() {
     const { error } = await supabase.from("games").insert({
       teacher_id: myTeacherId,
       title: gameTitle.trim(),
+      cover_image: coverImage,
       questions,
     });
 
@@ -181,42 +184,52 @@ export default function CreateGamePage() {
       <div
         style={{
           display: "flex",
-          gap: "0.5rem",
+          gap: "0.75rem",
+          alignItems: "flex-start",
           width: "100%",
           maxWidth: "700px",
         }}
       >
-        <input
-          type="text"
-          placeholder="Game title"
-          value={gameTitle}
-          onChange={(e) => setGameTitle(e.target.value)}
-          style={{
-            ...fieldStyle,
-            fontSize: "1.1rem",
-            fontWeight: 700,
-            padding: "0.6rem 0.8rem",
-          }}
+        <GameCoverPicker
+          value={coverImage}
+          title={gameTitle}
+          teacherId={myTeacherId}
+          onChange={setCoverImage}
         />
-        <button
-          onClick={saveGame}
-          disabled={saveBusy}
-          style={{
-            fontSize: "0.95rem",
-            fontWeight: 800,
-            padding: "0.6rem 1.2rem",
-            borderRadius: radius.button,
-            border: "none",
-            background: colors.orange,
-            boxShadow: saveBusy ? "none" : solidShadow(4, colors.orangeShadow),
-            color: colors.white,
-            cursor: saveBusy ? "default" : "pointer",
-            opacity: saveBusy ? 0.7 : 1,
-            whiteSpace: "nowrap",
-          }}
-        >
-          {saveBusy ? "Saving..." : "Save Game"}
-        </button>
+
+        <div style={{ display: "flex", gap: "0.5rem", flex: 1 }}>
+          <input
+            type="text"
+            placeholder="Game title"
+            value={gameTitle}
+            onChange={(e) => setGameTitle(e.target.value)}
+            style={{
+              ...fieldStyle,
+              fontSize: "1.1rem",
+              fontWeight: 700,
+              padding: "0.6rem 0.8rem",
+            }}
+          />
+          <button
+            onClick={saveGame}
+            disabled={saveBusy}
+            style={{
+              fontSize: "0.95rem",
+              fontWeight: 800,
+              padding: "0.6rem 1.2rem",
+              borderRadius: radius.button,
+              border: "none",
+              background: colors.orange,
+              boxShadow: saveBusy ? "none" : solidShadow(4, colors.orangeShadow),
+              color: colors.white,
+              cursor: saveBusy ? "default" : "pointer",
+              opacity: saveBusy ? 0.7 : 1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {saveBusy ? "Saving..." : "Save Game"}
+          </button>
+        </div>
       </div>
 
       {saveError && (

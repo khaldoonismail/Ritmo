@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 interface ForkableGame {
   id: string;
   title: string;
+  cover_image?: string | null;
   questions: unknown[];
 }
 
@@ -21,6 +22,7 @@ export async function forkGame(
     .insert({
       teacher_id: teacherId,
       title: original.title,
+      cover_image: original.cover_image ?? null,
       questions: original.questions,
       is_public: false,
       forked_from: original.id,

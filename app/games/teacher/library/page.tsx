@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { forkGame } from "@/lib/forkGame";
+import { resolveCoverDisplay } from "@/lib/gameCover";
 import { colors, radius, solidShadow } from "@/lib/theme";
 
 interface MyGame {
   id: string;
   title: string;
+  cover_image: string | null;
   questions: unknown[];
   is_public: boolean;
   usage_count: number;
@@ -18,6 +20,7 @@ interface MyGame {
 interface CommunityGame {
   id: string;
   title: string;
+  cover_image: string | null;
   questions: unknown[];
   usage_count: number;
   teachers: { name: string } | { name: string }[] | null;
@@ -26,6 +29,37 @@ interface CommunityGame {
 function ownerNameOf(row: CommunityGame): string | null {
   if (Array.isArray(row.teachers)) return row.teachers[0]?.name ?? null;
   return row.teachers?.name ?? null;
+}
+
+// Same 400x300 cover a game was given on the Create Game page (an uploaded
+// image, a picked icon, or the title-hash fallback), shrunk to a row-sized
+// thumbnail so the list actually reflects what was chosen.
+function GameCoverThumb({ title, coverImage }: { title: string; coverImage: string | null }) {
+  const display = resolveCoverDisplay(coverImage, title);
+  return (
+    <div
+      style={{
+        width: "40px",
+        height: "40px",
+        borderRadius: radius.iconSquare,
+        flexShrink: 0,
+        overflow: "hidden",
+        background: display.kind === "icon" ? display.bg : colors.background,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {display.kind === "image" ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={display.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        <span style={{ fontSize: "1.2rem", lineHeight: 1 }} aria-hidden="true">
+          {display.emoji}
+        </span>
+      )}
+    </div>
+  );
 }
 
 export default function GamesLibraryPage() {
@@ -67,7 +101,7 @@ export default function GamesLibraryPage() {
 
       const { data: mine, error: mineError } = await supabase
         .from("games")
-        .select("id, title, questions, is_public, usage_count")
+        .select("id, title, cover_image, questions, is_public, usage_count")
         .eq("teacher_id", teacherRow.id)
         .order("created_at", { ascending: false });
 
@@ -79,7 +113,7 @@ export default function GamesLibraryPage() {
 
       const { data: community, error: communityError } = await supabase
         .from("games")
-        .select("id, title, questions, usage_count, teachers(name)")
+        .select("id, title, cover_image, questions, usage_count, teachers(name)")
         .eq("is_public", true)
         .neq("teacher_id", teacherRow.id)
         .order("created_at", { ascending: false });
@@ -148,6 +182,7 @@ export default function GamesLibraryPage() {
       {
         id: result.id,
         title: game.title,
+        cover_image: game.cover_image,
         questions: game.questions,
         is_public: false,
         usage_count: 0,
@@ -251,12 +286,15 @@ export default function GamesLibraryPage() {
 
           {myGames?.map((g) => (
             <div key={g.id} style={rowStyle}>
-              <div style={{ textAlign: "left" }}>
-                <div style={{ fontWeight: 800 }}>{g.title}</div>
-                <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
-                  {g.is_public ? "Public" : "Private"} · {questionCountLabel(g.questions.length)} · used{" "}
-                  {g.usage_count} time
-                  {g.usage_count === 1 ? "" : "s"}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", textAlign: "left" }}>
+                <GameCoverThumb title={g.title} coverImage={g.cover_image} />
+                <div>
+                  <div style={{ fontWeight: 800 }}>{g.title}</div>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
+                    {g.is_public ? "Public" : "Private"} · {questionCountLabel(g.questions.length)} · used{" "}
+                    {g.usage_count} time
+                    {g.usage_count === 1 ? "" : "s"}
+                  </div>
                 </div>
               </div>
               <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -306,12 +344,15 @@ export default function GamesLibraryPage() {
 
           {communityGames?.map((g) => (
             <div key={g.id} style={rowStyle}>
-              <div style={{ textAlign: "left" }}>
-                <div style={{ fontWeight: 800 }}>{g.title}</div>
-                <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
-                  by {ownerNameOf(g) || "another teacher"} · {questionCountLabel(g.questions.length)} · used{" "}
-                  {g.usage_count} time
-                  {g.usage_count === 1 ? "" : "s"}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", textAlign: "left" }}>
+                <GameCoverThumb title={g.title} coverImage={g.cover_image} />
+                <div>
+                  <div style={{ fontWeight: 800 }}>{g.title}</div>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
+                    by {ownerNameOf(g) || "another teacher"} · {questionCountLabel(g.questions.length)} · used{" "}
+                    {g.usage_count} time
+                    {g.usage_count === 1 ? "" : "s"}
+                  </div>
                 </div>
               </div>
               <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
