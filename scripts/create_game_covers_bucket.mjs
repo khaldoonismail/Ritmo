@@ -1,6 +1,9 @@
-// One-off setup script: creates the public "game-covers" Storage bucket used
-// by the Create Game page's cover-image uploader (app/games/teacher/create-game).
-// Safe to re-run — does nothing if the bucket already exists.
+// Fallback setup script: creates the public "game-covers" Storage bucket
+// used by the Create Game page's cover-image uploader
+// (app/games/teacher/create-game). Applying
+// supabase/migrations/0011_game_covers.sql already creates this bucket via
+// a plain SQL insert into storage.buckets — only run this script if that
+// insert isn't permitted in your Supabase setup. Safe to re-run either way.
 //
 // Run locally (needs real network access to Supabase, which this project's
 // automation sandbox doesn't have):
