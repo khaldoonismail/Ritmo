@@ -6,12 +6,14 @@ import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { forkGame } from "@/lib/forkGame";
 import { resolveCoverDisplay } from "@/lib/gameCover";
+import { gameTagGallery, tagLabel } from "@/lib/gameTags";
 import { colors, radius, solidShadow } from "@/lib/theme";
 
 interface MyGame {
   id: string;
   title: string;
   cover_image: string | null;
+  tags: string[] | null;
   questions: unknown[];
   is_public: boolean;
   usage_count: number;
@@ -21,9 +23,85 @@ interface CommunityGame {
   id: string;
   title: string;
   cover_image: string | null;
+  tags: string[] | null;
   questions: unknown[];
   usage_count: number;
   teachers: { name: string } | { name: string }[] | null;
+}
+
+// avg/count/my-own-rating for one game, keyed by game id.
+interface RatingSummary {
+  average: number;
+  count: number;
+  mine: number | null;
+}
+
+function TagChips({ tags }: { tags: string[] | null }) {
+  if (!tags || tags.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", marginTop: "0.25rem" }}>
+      {tags.map((t) => (
+        <span
+          key={t}
+          style={{
+            fontSize: "0.68rem",
+            fontWeight: 700,
+            padding: "0.15rem 0.5rem",
+            borderRadius: radius.pill,
+            background: colors.blueBackground,
+            color: colors.blueText,
+          }}
+        >
+          {tagLabel(t)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// Read-only average (used everywhere) with an optional interactive layer —
+// clicking a star calls onRate, which is omitted for a teacher's own games
+// since you can't rate yourself.
+function StarRating({
+  summary,
+  onRate,
+  busy,
+}: {
+  summary: RatingSummary | undefined;
+  onRate?: (rating: number) => void;
+  busy?: boolean;
+}) {
+  const average = summary?.average ?? 0;
+  const count = summary?.count ?? 0;
+  const mine = summary?.mine ?? 0;
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.15rem" }}>
+      {[1, 2, 3, 4, 5].map((n) => {
+        const filled = onRate ? n <= mine : n <= Math.round(average);
+        return (
+          <span
+            key={n}
+            role={onRate ? "button" : undefined}
+            aria-label={onRate ? `Rate ${n} star${n === 1 ? "" : "s"}` : undefined}
+            onClick={onRate && !busy ? () => onRate(n) : undefined}
+            style={{
+              fontSize: "0.85rem",
+              lineHeight: 1,
+              cursor: onRate && !busy ? "pointer" : "default",
+              color: filled ? colors.orange : colors.neutralGray,
+              opacity: busy ? 0.5 : 1,
+            }}
+          >
+            ★
+          </span>
+        );
+      })}
+      <span style={{ fontSize: "0.72rem", fontWeight: 700, opacity: 0.6, marginLeft: "0.2rem" }}>
+        {count > 0 ? `${average.toFixed(1)} (${count})` : onRate ? "Rate this" : "No ratings yet"}
+      </span>
+    </div>
+  );
 }
 
 function ownerNameOf(row: CommunityGame): string | null {
@@ -73,6 +151,11 @@ export default function GamesLibraryPage() {
   const [copyBusyId, setCopyBusyId] = useState<string | null>(null);
   const [publishError, setPublishError] = useState("");
   const [publishBusyId, setPublishBusyId] = useState<string | null>(null);
+  const [forkCounts, setForkCounts] = useState<Record<string, number>>({});
+  const [ratings, setRatings] = useState<Record<string, RatingSummary>>({});
+  const [rateBusyId, setRateBusyId] = useState<string | null>(null);
+  const [rateError, setRateError] = useState("");
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -101,7 +184,7 @@ export default function GamesLibraryPage() {
 
       const { data: mine, error: mineError } = await supabase
         .from("games")
-        .select("id, title, cover_image, questions, is_public, usage_count")
+        .select("id, title, cover_image, tags, questions, is_public, usage_count")
         .eq("teacher_id", teacherRow.id)
         .order("created_at", { ascending: false });
 
@@ -113,7 +196,7 @@ export default function GamesLibraryPage() {
 
       const { data: community, error: communityError } = await supabase
         .from("games")
-        .select("id, title, cover_image, questions, usage_count, teachers(name)")
+        .select("id, title, cover_image, tags, questions, usage_count, teachers(name)")
         .eq("is_public", true)
         .neq("teacher_id", teacherRow.id)
         .order("created_at", { ascending: false });
@@ -123,10 +206,89 @@ export default function GamesLibraryPage() {
       } else {
         setCommunityGames((community as unknown as CommunityGame[]) || []);
       }
+
+      const allIds = [
+        ...(mine || []).map((g) => g.id),
+        ...((community as unknown as CommunityGame[]) || []).map((g) => g.id),
+      ];
+
+      if (allIds.length > 0) {
+        const { data: forkRows } = await supabase.rpc("game_fork_counts", { game_ids: allIds });
+        if (forkRows) {
+          const map: Record<string, number> = {};
+          for (const row of forkRows as { game_id: string; fork_count: number }[]) {
+            map[row.game_id] = row.fork_count;
+          }
+          setForkCounts(map);
+        }
+
+        const { data: ratingRows } = await supabase
+          .from("game_ratings")
+          .select("game_id, teacher_id, rating")
+          .in("game_id", allIds);
+
+        if (ratingRows) {
+          const byGame: Record<string, { sum: number; count: number; mine: number | null }> = {};
+          for (const row of ratingRows as { game_id: string; teacher_id: string; rating: number }[]) {
+            const entry = byGame[row.game_id] || { sum: 0, count: 0, mine: null };
+            entry.sum += row.rating;
+            entry.count += 1;
+            if (row.teacher_id === teacherRow.id) entry.mine = row.rating;
+            byGame[row.game_id] = entry;
+          }
+          const summaries: Record<string, RatingSummary> = {};
+          for (const [gameId, entry] of Object.entries(byGame)) {
+            summaries[gameId] = {
+              average: entry.count > 0 ? entry.sum / entry.count : 0,
+              count: entry.count,
+              mine: entry.mine,
+            };
+          }
+          setRatings(summaries);
+        }
+      }
     }
 
     load();
   }, [router]);
+
+  async function rateGame(gameId: string, rating: number) {
+    if (!myTeacherId) return;
+    setRateError("");
+    setRateBusyId(gameId);
+
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase
+      .from("game_ratings")
+      .upsert(
+        { game_id: gameId, teacher_id: myTeacherId, rating, updated_at: new Date().toISOString() },
+        { onConflict: "game_id,teacher_id" }
+      );
+
+    setRateBusyId(null);
+
+    if (error) {
+      setRateError(error.message);
+      return;
+    }
+
+    setRatings((prev) => {
+      const existing = prev[gameId];
+      const prevMine = existing?.mine ?? null;
+      const sum = (existing?.average ?? 0) * (existing?.count ?? 0);
+      const hadRatingBefore = prevMine !== null;
+      const newCount = hadRatingBefore ? (existing?.count ?? 0) : (existing?.count ?? 0) + 1;
+      const newSum = hadRatingBefore ? sum - (prevMine ?? 0) + rating : sum + rating;
+      return {
+        ...prev,
+        [gameId]: {
+          average: newCount > 0 ? newSum / newCount : 0,
+          count: newCount,
+          mine: rating,
+        },
+      };
+    });
+  }
 
   async function deleteGame(id: string) {
     setDeleteError("");
@@ -183,12 +345,14 @@ export default function GamesLibraryPage() {
         id: result.id,
         title: game.title,
         cover_image: game.cover_image,
+        tags: game.tags,
         questions: game.questions,
         is_public: false,
         usage_count: 0,
       },
       ...(prev || []),
     ]);
+    setForkCounts((prev) => ({ ...prev, [game.id]: (prev[game.id] || 0) + 1 }));
   }
 
   const rowStyle: React.CSSProperties = {
@@ -294,7 +458,11 @@ export default function GamesLibraryPage() {
                     {g.is_public ? "Public" : "Private"} · {questionCountLabel(g.questions.length)} · used{" "}
                     {g.usage_count} time
                     {g.usage_count === 1 ? "" : "s"}
+                    {forkCounts[g.id] > 0 &&
+                      ` · copied by ${forkCounts[g.id]} teacher${forkCounts[g.id] === 1 ? "" : "s"}`}
                   </div>
+                  {g.is_public && <StarRating summary={ratings[g.id]} />}
+                  <TagChips tags={g.tags} />
                 </div>
               </div>
               <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -332,6 +500,49 @@ export default function GamesLibraryPage() {
         {copyError && (
           <p style={{ color: colors.coralText, fontSize: "0.85rem", marginBottom: "0.5rem" }}>{copyError}</p>
         )}
+        {rateError && (
+          <p style={{ color: colors.coralText, fontSize: "0.85rem", marginBottom: "0.5rem" }}>{rateError}</p>
+        )}
+
+        {communityGames && communityGames.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginBottom: "0.75rem" }}>
+            <button
+              type="button"
+              onClick={() => setActiveTagFilter(null)}
+              style={{
+                fontSize: "0.75rem",
+                fontWeight: 800,
+                padding: "0.3rem 0.7rem",
+                borderRadius: radius.pill,
+                border: activeTagFilter === null ? "none" : `1px solid ${colors.inputBorder}`,
+                background: activeTagFilter === null ? colors.blueText : colors.white,
+                color: activeTagFilter === null ? colors.white : colors.textPrimary,
+                cursor: "pointer",
+              }}
+            >
+              All
+            </button>
+            {gameTagGallery.map((tag) => (
+              <button
+                key={tag.key}
+                type="button"
+                onClick={() => setActiveTagFilter(tag.key)}
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 800,
+                  padding: "0.3rem 0.7rem",
+                  borderRadius: radius.pill,
+                  border: activeTagFilter === tag.key ? "none" : `1px solid ${colors.inputBorder}`,
+                  background: activeTagFilter === tag.key ? colors.blueText : colors.white,
+                  color: activeTagFilter === tag.key ? colors.white : colors.textPrimary,
+                  cursor: "pointer",
+                }}
+              >
+                {tag.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
           {communityGames === null && !loadError && (
@@ -342,33 +553,43 @@ export default function GamesLibraryPage() {
             <p style={{ opacity: 0.6, fontWeight: 600, textAlign: "center" }}>No public games yet.</p>
           )}
 
-          {communityGames?.map((g) => (
-            <div key={g.id} style={rowStyle}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", textAlign: "left" }}>
-                <GameCoverThumb title={g.title} coverImage={g.cover_image} />
-                <div>
-                  <div style={{ fontWeight: 800 }}>{g.title}</div>
-                  <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
-                    by {ownerNameOf(g) || "another teacher"} · {questionCountLabel(g.questions.length)} · used{" "}
-                    {g.usage_count} time
-                    {g.usage_count === 1 ? "" : "s"}
+          {communityGames
+            ?.filter((g) => !activeTagFilter || (g.tags || []).includes(activeTagFilter))
+            .map((g) => (
+              <div key={g.id} style={rowStyle}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", textAlign: "left" }}>
+                  <GameCoverThumb title={g.title} coverImage={g.cover_image} />
+                  <div>
+                    <div style={{ fontWeight: 800 }}>{g.title}</div>
+                    <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
+                      by {ownerNameOf(g) || "another teacher"} · {questionCountLabel(g.questions.length)} · used{" "}
+                      {g.usage_count} time
+                      {g.usage_count === 1 ? "" : "s"}
+                      {forkCounts[g.id] > 0 &&
+                        ` · copied by ${forkCounts[g.id]} teacher${forkCounts[g.id] === 1 ? "" : "s"}`}
+                    </div>
+                    <StarRating
+                      summary={ratings[g.id]}
+                      onRate={(rating) => rateGame(g.id, rating)}
+                      busy={rateBusyId === g.id}
+                    />
+                    <TagChips tags={g.tags} />
                   </div>
                 </div>
+                <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
+                  <Link href={`/games/play/${g.id}`} style={primaryButtonStyle}>
+                    Play Demo
+                  </Link>
+                  <button
+                    onClick={() => handleCopy(g)}
+                    disabled={copyBusyId === g.id}
+                    style={{ ...primaryButtonStyle, background: colors.greenButton, boxShadow: solidShadow(3, colors.greenButtonShadow) }}
+                  >
+                    {copyBusyId === g.id ? "Copying..." : "Copy to My Games"}
+                  </button>
+                </div>
               </div>
-              <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
-                <Link href={`/games/play/${g.id}`} style={primaryButtonStyle}>
-                  Play Demo
-                </Link>
-                <button
-                  onClick={() => handleCopy(g)}
-                  disabled={copyBusyId === g.id}
-                  style={{ ...primaryButtonStyle, background: colors.greenButton, boxShadow: solidShadow(3, colors.greenButtonShadow) }}
-                >
-                  {copyBusyId === g.id ? "Copying..." : "Copy to My Games"}
-                </button>
-              </div>
-            </div>
-          ))}
+            ))}
         </div>
       </section>
 

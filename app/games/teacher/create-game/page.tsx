@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, solidShadow } from "@/lib/theme";
+import { gameTagGallery } from "@/lib/gameTags";
 import GameCoverPicker from "./GameCoverPicker";
 
 type MediaType = "text" | "image" | "video" | "audio";
@@ -52,6 +53,7 @@ export default function CreateGamePage() {
   const router = useRouter();
   const [gameTitle, setGameTitle] = useState("");
   const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [myTeacherId, setMyTeacherId] = useState<string | null>(null);
@@ -92,6 +94,12 @@ export default function CreateGamePage() {
     setQuestions((prev) => prev.filter((q) => q.id !== id));
   }
 
+  function toggleTag(key: string) {
+    setTags((prev) =>
+      prev.includes(key) ? prev.filter((t) => t !== key) : [...prev, key]
+    );
+  }
+
   function updateQuestion(id: string, patch: Partial<Question>) {
     setQuestions((prev) =>
       prev.map((q) => (q.id === id ? { ...q, ...patch } : q))
@@ -113,6 +121,7 @@ export default function CreateGamePage() {
       teacher_id: myTeacherId,
       title: gameTitle.trim(),
       cover_image: coverImage,
+      tags,
       questions,
     });
 
@@ -237,6 +246,39 @@ export default function CreateGamePage() {
           {saveError}
         </p>
       )}
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.4rem",
+          width: "100%",
+          maxWidth: "700px",
+        }}
+      >
+        {gameTagGallery.map((tag) => {
+          const active = tags.includes(tag.key);
+          return (
+            <button
+              key={tag.key}
+              type="button"
+              onClick={() => toggleTag(tag.key)}
+              style={{
+                fontSize: "0.78rem",
+                fontWeight: 800,
+                padding: "0.35rem 0.75rem",
+                borderRadius: radius.pill,
+                border: active ? "none" : `1px solid ${colors.inputBorder}`,
+                background: active ? colors.blueText : colors.listRowBg,
+                color: active ? colors.white : colors.textPrimary,
+                cursor: "pointer",
+              }}
+            >
+              {tag.label}
+            </button>
+          );
+        })}
+      </div>
 
       <div style={{ position: "relative", width: "100%", maxWidth: "700px" }}>
         <button

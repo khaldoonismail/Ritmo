@@ -4,6 +4,7 @@ interface ForkableGame {
   id: string;
   title: string;
   cover_image?: string | null;
+  tags?: string[] | null;
   questions: unknown[];
 }
 
@@ -23,6 +24,7 @@ export async function forkGame(
       teacher_id: teacherId,
       title: original.title,
       cover_image: original.cover_image ?? null,
+      tags: original.tags ?? [],
       questions: original.questions,
       is_public: false,
       forked_from: original.id,
