@@ -8,6 +8,7 @@ import {
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { lessonTitle as legacyLessonTitle } from "@/lib/lessons";
 import { colors, radius, solidShadow } from "@/lib/theme";
+import { levelForPoints, scoreBadge } from "@/lib/studentLevels";
 import LogoutButton from "./LogoutButton";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -94,18 +95,32 @@ export default async function StudentDashboardPage() {
 
   // Scoped to this student's own id (never another student's) to prevent
   // leaking another student's progress via this join.
-  let progressMap = new Map<string, ProgressStatus>();
+  let progressMap = new Map<string, { status: ProgressStatus; score: number | null }>();
   const assignmentIds = (assignments || []).map((a) => a.id);
   if (assignmentIds.length > 0) {
     const { data: progressRows } = await supabase
       .from("student_progress")
-      .select("assignment_id, status")
+      .select("assignment_id, status, score")
       .eq("student_id", session.studentId)
       .in("assignment_id", assignmentIds);
     progressMap = new Map(
-      (progressRows || []).map((p) => [p.assignment_id, p.status as ProgressStatus])
+      (progressRows || []).map((p) => [
+        p.assignment_id,
+        { status: p.status as ProgressStatus, score: p.score },
+      ])
     );
   }
+
+  // Total points = sum of every graded score this student has, and drives
+  // the level badge below (see lib/studentLevels.ts). Completed count feeds
+  // the same banner's subtext.
+  let totalPoints = 0;
+  let completedCount = 0;
+  for (const { status, score } of progressMap.values()) {
+    if (status === "completed") completedCount += 1;
+    if (score !== null) totalPoints += score;
+  }
+  const { level, next, pointsToNext } = levelForPoints(totalPoints);
 
   return (
     <main
@@ -137,6 +152,46 @@ export default async function StudentDashboardPage() {
       <div
         style={{
           display: "flex",
+          alignItems: "center",
+          gap: "0.85rem",
+          width: "100%",
+          maxWidth: "480px",
+          padding: "1rem 1.25rem",
+          borderRadius: radius.card,
+          background: colors.inProgressCardBg,
+          boxShadow: solidShadow(5, colors.inProgressCardShadow),
+          textAlign: "left",
+        }}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            width: "46px",
+            height: "46px",
+            minWidth: "46px",
+            borderRadius: "50%",
+            background: colors.orange,
+            boxShadow: solidShadow(3, colors.orangeShadow),
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "1.5rem",
+          }}
+        >
+          {level.icon}
+        </span>
+        <span style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+          <span style={{ fontWeight: 800, fontSize: "1.05rem" }}>{level.label}</span>
+          <span style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.7 }}>
+            {totalPoints} pts · {completedCount} lesson{completedCount === 1 ? "" : "s"} completed
+            {next && pointsToNext !== null && ` · ${pointsToNext} pts to ${next.label}`}
+          </span>
+        </span>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
           flexDirection: "column",
           gap: "0.85rem",
           width: "100%",
@@ -150,7 +205,10 @@ export default async function StudentDashboardPage() {
           </p>
         )}
         {assignments?.map((a) => {
-          const status = progressMap.get(a.id) ?? "not_started";
+          const progress = progressMap.get(a.id);
+          const status = progress?.status ?? "not_started";
+          const score = progress?.score ?? null;
+          const badge = scoreBadge(score);
           const { icon, label, cardBg, cardShadow, iconFill, iconShadow, badgeBg, cardOpacity } =
             STATUS_DISPLAY[status];
           return (
@@ -202,18 +260,26 @@ export default async function StudentDashboardPage() {
                   )}
                 </span>
               </span>
-              <span
-                style={{
-                  fontWeight: 800,
-                  fontSize: "0.75rem",
-                  padding: "0.35rem 0.75rem",
-                  borderRadius: radius.pill,
-                  background: badgeBg,
-                  color: colors.white,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {label}
+              <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.3rem" }}>
+                <span
+                  style={{
+                    fontWeight: 800,
+                    fontSize: "0.75rem",
+                    padding: "0.35rem 0.75rem",
+                    borderRadius: radius.pill,
+                    background: badgeBg,
+                    color: colors.white,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {label}
+                </span>
+                {score !== null && (
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, opacity: 0.7, whiteSpace: "nowrap" }}>
+                    {badge ? `${badge.icon} ` : ""}
+                    {score} pts
+                  </span>
+                )}
               </span>
             </Link>
           );

@@ -35,6 +35,14 @@ const sections = [
     shadow: colors.gamesCardShadow,
     text: colors.blueText,
   },
+  {
+    label: "Weekly Report",
+    href: "/academy/teacher/weekly-report",
+    icon: "📅",
+    bg: colors.notStartedCardBg,
+    shadow: colors.notStartedCardShadow,
+    text: colors.textPrimary,
+  },
 ];
 
 export default function TeacherDashboard() {

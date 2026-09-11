@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { colors } from "@/lib/theme";
-import StudentProgress from "./StudentProgress";
+import WeeklyReport from "./WeeklyReport";
 
-export default function AssessmentPage() {
+export default function WeeklyReportPage() {
   return (
     <main
       style={{
@@ -19,31 +19,16 @@ export default function AssessmentPage() {
       }}
     >
       <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
-        Assessment
+        Weekly Report
       </h1>
+      <p style={{ fontSize: "1rem", fontWeight: 600, opacity: 0.7, margin: 0 }}>
+        A quick summary of each class's activity over the last 7 days.
+      </p>
+
+      <WeeklyReport />
 
       <Link
-        href="/academy/teacher/weekly-report"
-        style={{
-          fontSize: "0.85rem",
-          fontWeight: 800,
-          padding: "0.5rem 1rem",
-          borderRadius: "999px",
-          border: `1px solid ${colors.inputBorder}`,
-          color: colors.textPrimary,
-          textDecoration: "none",
-        }}
-      >
-        📅 Weekly Report
-      </Link>
-
-      <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: "0.5rem 0 0" }}>
-        Student Progress
-      </h2>
-      <StudentProgress />
-
-      <Link
-        href="/academy/teacher"
+        href="/academy/teacher/assessment"
         style={{
           fontSize: "0.9rem",
           fontWeight: 700,
@@ -53,7 +38,7 @@ export default function AssessmentPage() {
           marginTop: "0.5rem",
         }}
       >
-        ← Back to Teacher Dashboard
+        ← Back to Assessment
       </Link>
     </main>
   );
