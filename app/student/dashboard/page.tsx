@@ -161,6 +161,16 @@ export default async function StudentDashboardPage() {
   );
   const notificationCount = newAssignmentIds.size + dueSoonIds.size;
 
+  // Notes from the teacher: whole-class notes (student_id is null) plus any
+  // aimed directly at this student. One-way, no replies.
+  const { data: notes } = await supabase
+    .from("teacher_notes")
+    .select("id, message, created_at")
+    .eq("class_id", session.classId)
+    .or(`student_id.is.null,student_id.eq.${session.studentId}`)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
   return (
     <main
       style={{
@@ -249,6 +259,32 @@ export default async function StudentDashboardPage() {
             `${newAssignmentIds.size} new assignment${newAssignmentIds.size === 1 ? "" : "s"}`}
           {newAssignmentIds.size > 0 && dueSoonIds.size > 0 && " · "}
           {dueSoonIds.size > 0 && `${dueSoonIds.size} due soon`}
+        </div>
+      )}
+
+      {notes && notes.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.5rem",
+            width: "100%",
+            maxWidth: "480px",
+            padding: "1rem 1.25rem",
+            borderRadius: radius.card,
+            background: colors.blueBackground,
+            textAlign: "left",
+          }}
+        >
+          <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>📝 Notes from your teacher</div>
+          {notes.map((n) => (
+            <div key={n.id} style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+              <span style={{ opacity: 0.6, fontWeight: 700, fontSize: "0.75rem" }}>
+                {new Date(n.created_at).toLocaleDateString()}
+              </span>
+              <div>{n.message}</div>
+            </div>
+          ))}
         </div>
       )}
 

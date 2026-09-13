@@ -13,6 +13,7 @@ import UploadStudentsExcel from "./UploadStudentsExcel";
 import StudentThumbnail from "./StudentThumbnail";
 import StudentPhotoUploader from "./StudentPhotoUploader";
 import Attendance from "./Attendance";
+import Notes from "./Notes";
 import { colors, radius, solidShadow } from "@/lib/theme";
 
 interface ClassInfo {
@@ -25,6 +26,7 @@ interface Student {
   id: string;
   name: string;
   avatar_url: string | null;
+  parent_token: string;
 }
 
 interface Assignment {
@@ -103,6 +105,7 @@ export default function ManageClassPage() {
     null
   );
   const [removeStudentError, setRemoveStudentError] = useState("");
+  const [copiedParentId, setCopiedParentId] = useState<string | null>(null);
 
   const [showAssignLesson, setShowAssignLesson] = useState(false);
   const [assignKind, setAssignKind] = useState<"lesson" | "game">("lesson");
@@ -154,7 +157,7 @@ export default function ManageClassPage() {
 
     const { data: studentRows, error: studentsError } = await supabase
       .from("students")
-      .select("id, name, avatar_url")
+      .select("id, name, avatar_url, parent_token")
       .eq("class_id", classId)
       .order("name", { ascending: true });
 
@@ -238,7 +241,7 @@ export default function ManageClassPage() {
         name: newStudentName.trim(),
         pin: newStudentPin,
       })
-      .select("id, name, avatar_url")
+      .select("id, name, avatar_url, parent_token")
       .single();
 
     setAddStudentBusy(false);
@@ -292,6 +295,17 @@ export default function ManageClassPage() {
         prev?.map((s) => (s.id === studentId ? { ...s, name: data.name } : s)) ?? prev
     );
     setEditingStudentId(null);
+  }
+
+  async function copyParentLink(student: Student) {
+    const url = `${window.location.origin}/parent/${student.parent_token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedParentId(student.id);
+      setTimeout(() => setCopiedParentId((v) => (v === student.id ? null : v)), 2000);
+    } catch {
+      window.prompt("Copy this link to share with a parent:", url);
+    }
   }
 
   async function regenerateStudentPin(student: Student) {
@@ -930,6 +944,9 @@ export default function ManageClassPage() {
                       <button onClick={() => startEditStudent(s)} style={secondaryButtonStyle}>
                         Edit
                       </button>
+                      <button onClick={() => copyParentLink(s)} style={secondaryButtonStyle}>
+                        {copiedParentId === s.id ? "Copied!" : "👪 Parent Link"}
+                      </button>
                       <button
                         onClick={() => regenerateStudentPin(s)}
                         disabled={regenPinBusyId === s.id}
@@ -1106,6 +1123,18 @@ export default function ManageClassPage() {
           students={(students || []).map((s) => ({ id: s.id, name: s.name }))}
         />
       </section>
+
+      {/* Notes section */}
+      {myTeacherId && (
+        <section style={{ width: "100%", maxWidth: "600px" }}>
+          <h2 style={{ fontSize: "1.3rem", fontWeight: 800, margin: "0 0 0.75rem" }}>Notes</h2>
+          <Notes
+            classId={classId}
+            teacherId={myTeacherId}
+            students={(students || []).map((s) => ({ id: s.id, name: s.name }))}
+          />
+        </section>
+      )}
 
       {/* Assignments section */}
       <section style={{ width: "100%", maxWidth: "600px" }}>

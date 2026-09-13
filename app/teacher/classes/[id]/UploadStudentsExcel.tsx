@@ -12,6 +12,7 @@ interface NewStudent {
   id: string;
   name: string;
   pin: string;
+  parent_token: string;
 }
 
 export default function UploadStudentsExcel({
@@ -20,7 +21,7 @@ export default function UploadStudentsExcel({
   onDone,
 }: {
   classId: string;
-  onAdded: (students: { id: string; name: string }[]) => void;
+  onAdded: (students: { id: string; name: string; parent_token: string }[]) => void;
   onDone: () => void;
 }) {
   const [stage, setStage] = useState<Stage>("idle");
@@ -90,7 +91,7 @@ export default function UploadStudentsExcel({
     const { data, error: insertError } = await supabase
       .from("students")
       .insert(rows)
-      .select("id, name, pin");
+      .select("id, name, pin, parent_token");
 
     setConfirmBusy(false);
 
@@ -101,7 +102,7 @@ export default function UploadStudentsExcel({
 
     setAdded(data);
     setStage("success");
-    onAdded(data.map((s) => ({ id: s.id, name: s.name })));
+    onAdded(data.map((s) => ({ id: s.id, name: s.name, parent_token: s.parent_token })));
   }
 
   async function handleCopyList() {
