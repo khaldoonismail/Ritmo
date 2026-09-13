@@ -156,6 +156,7 @@ export default function GamesLibraryPage() {
   const [rateBusyId, setRateBusyId] = useState<string | null>(null);
   const [rateError, setRateError] = useState("");
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -390,6 +391,18 @@ export default function GamesLibraryPage() {
     return `${count} question${count === 1 ? "" : "s"}`;
   }
 
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  function matchesSearch(title: string, tags: string[] | null): boolean {
+    if (!normalizedQuery) return true;
+    if (title.toLowerCase().includes(normalizedQuery)) return true;
+    return (tags || []).some((t) => tagLabel(t).toLowerCase().includes(normalizedQuery));
+  }
+
+  const visibleMyGames = (myGames || []).filter((g) => matchesSearch(g.title, g.tags));
+  const visibleCommunityGames = (communityGames || [])
+    .filter((g) => !activeTagFilter || (g.tags || []).includes(activeTagFilter))
+    .filter((g) => matchesSearch(g.title, g.tags));
+
   return (
     <main
       style={{
@@ -427,6 +440,26 @@ export default function GamesLibraryPage() {
         Create New Game +
       </Link>
 
+      <div style={{ width: "100%", maxWidth: "650px" }}>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search games by title or tag..."
+          style={{
+            width: "100%",
+            fontSize: "0.95rem",
+            fontWeight: 600,
+            padding: "0.75rem 1rem",
+            borderRadius: radius.button,
+            border: `1px solid ${colors.inputBorder}`,
+            background: colors.white,
+            color: colors.textPrimary,
+            boxSizing: "border-box",
+          }}
+        />
+      </div>
+
       <section style={{ width: "100%", maxWidth: "650px" }}>
         <h2 style={{ fontSize: "1.3rem", fontWeight: 800, margin: "0 0 0.75rem" }}>My Games</h2>
 
@@ -448,7 +481,13 @@ export default function GamesLibraryPage() {
             </p>
           )}
 
-          {myGames?.map((g) => (
+          {myGames && myGames.length > 0 && visibleMyGames.length === 0 && (
+            <p style={{ opacity: 0.6, fontWeight: 600, textAlign: "center" }}>
+              No games match &quot;{searchQuery}&quot;.
+            </p>
+          )}
+
+          {visibleMyGames.map((g) => (
             <div key={g.id} style={rowStyle}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", textAlign: "left" }}>
                 <GameCoverThumb title={g.title} coverImage={g.cover_image} />
@@ -553,9 +592,13 @@ export default function GamesLibraryPage() {
             <p style={{ opacity: 0.6, fontWeight: 600, textAlign: "center" }}>No public games yet.</p>
           )}
 
-          {communityGames
-            ?.filter((g) => !activeTagFilter || (g.tags || []).includes(activeTagFilter))
-            .map((g) => (
+          {communityGames && communityGames.length > 0 && visibleCommunityGames.length === 0 && (
+            <p style={{ opacity: 0.6, fontWeight: 600, textAlign: "center" }}>
+              No community games match your filters.
+            </p>
+          )}
+
+          {visibleCommunityGames.map((g) => (
               <div key={g.id} style={rowStyle}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", textAlign: "left" }}>
                   <GameCoverThumb title={g.title} coverImage={g.cover_image} />

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import LogoutButton from "./LogoutButton";
+import DashboardSummary from "./DashboardSummary";
 
 const sections = [
   {
@@ -75,6 +76,8 @@ export default function TeacherDashboard() {
       <p style={{ fontSize: "1.05rem", fontWeight: 600, opacity: 0.7, margin: 0 }}>
         Manage your lessons, assessments, and activities
       </p>
+
+      <DashboardSummary />
 
       <div
         style={{
