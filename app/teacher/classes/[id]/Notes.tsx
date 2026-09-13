@@ -29,7 +29,8 @@ export default function Notes({
   students: StudentLite[];
 }) {
   const [notes, setNotes] = useState<NoteRow[] | null>(null);
-  const [target, setTarget] = useState<string>("class"); // "class" or a student id
+  const [wholeClass, setWholeClass] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -56,20 +57,30 @@ export default function Notes({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classId]);
 
+  function toggleStudent(id: string) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
   async function sendNote() {
     const trimmed = message.trim();
     if (!trimmed) return;
+    if (!wholeClass && selectedIds.length === 0) return;
 
     setSending(true);
     setError("");
 
     const supabase = createBrowserSupabaseClient();
-    const { error: insertError } = await supabase.from("teacher_notes").insert({
-      class_id: classId,
-      teacher_id: teacherId,
-      student_id: target === "class" ? null : target,
-      message: trimmed,
-    });
+    const rows: { class_id: string; teacher_id: string; student_id: string | null; message: string }[] =
+      wholeClass
+        ? [{ class_id: classId, teacher_id: teacherId, student_id: null, message: trimmed }]
+        : selectedIds.map((studentId) => ({
+            class_id: classId,
+            teacher_id: teacherId,
+            student_id: studentId,
+            message: trimmed,
+          }));
+
+    const { error: insertError } = await supabase.from("teacher_notes").insert(rows);
 
     setSending(false);
 
@@ -79,6 +90,7 @@ export default function Notes({
     }
 
     setMessage("");
+    setSelectedIds([]);
     load();
   }
 
@@ -124,14 +136,59 @@ export default function Notes({
           boxShadow: solidShadow(4, colors.rosterCardShadow),
         }}
       >
-        <select value={target} onChange={(e) => setTarget(e.target.value)} style={inputStyle}>
-          <option value="class">Whole class</option>
-          {students.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+          <button
+            type="button"
+            onClick={() => {
+              setWholeClass(true);
+              setSelectedIds([]);
+            }}
+            style={{
+              fontSize: "0.78rem",
+              fontWeight: 800,
+              padding: "0.3rem 0.7rem",
+              borderRadius: radius.pill,
+              border: wholeClass ? "none" : `1px solid ${colors.inputBorder}`,
+              background: wholeClass ? colors.blueText : colors.white,
+              color: wholeClass ? colors.white : colors.textPrimary,
+              cursor: "pointer",
+            }}
+          >
+            Whole class
+          </button>
+          {students.map((s) => {
+            const active = !wholeClass && selectedIds.includes(s.id);
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  setWholeClass(false);
+                  toggleStudent(s.id);
+                }}
+                style={{
+                  fontSize: "0.78rem",
+                  fontWeight: 800,
+                  padding: "0.3rem 0.7rem",
+                  borderRadius: radius.pill,
+                  border: active ? "none" : `1px solid ${colors.inputBorder}`,
+                  background: active ? colors.blueText : colors.white,
+                  color: active ? colors.white : colors.textPrimary,
+                  cursor: "pointer",
+                }}
+              >
+                {s.name}
+              </button>
+            );
+          })}
+        </div>
+        {!wholeClass && (
+          <p style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6, margin: 0 }}>
+            {selectedIds.length === 0
+              ? "Pick one or more students above."
+              : `Sending to ${selectedIds.length} student${selectedIds.length === 1 ? "" : "s"}.`}
+          </p>
+        )}
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -140,25 +197,34 @@ export default function Notes({
           style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }}
         />
         {error && <p style={{ color: colors.coralText, fontSize: "0.85rem", margin: 0 }}>{error}</p>}
-        <button
-          onClick={sendNote}
-          disabled={sending || !message.trim()}
-          style={{
-            alignSelf: "flex-start",
-            fontSize: "0.9rem",
-            fontWeight: 800,
-            padding: "0.55rem 1.1rem",
-            borderRadius: radius.button,
-            border: "none",
-            background: colors.orange,
-            boxShadow: sending || !message.trim() ? "none" : solidShadow(3, colors.orangeShadow),
-            color: colors.white,
-            cursor: sending || !message.trim() ? "default" : "pointer",
-            opacity: sending || !message.trim() ? 0.6 : 1,
-          }}
-        >
-          {sending ? "Sending..." : "Send Note"}
-        </button>
+        {(() => {
+          const disabled = sending || !message.trim() || (!wholeClass && selectedIds.length === 0);
+          return (
+            <button
+              onClick={sendNote}
+              disabled={disabled}
+              style={{
+                alignSelf: "flex-start",
+                fontSize: "0.9rem",
+                fontWeight: 800,
+                padding: "0.55rem 1.1rem",
+                borderRadius: radius.button,
+                border: "none",
+                background: colors.orange,
+                boxShadow: disabled ? "none" : solidShadow(3, colors.orangeShadow),
+                color: colors.white,
+                cursor: disabled ? "default" : "pointer",
+                opacity: disabled ? 0.6 : 1,
+              }}
+            >
+              {sending
+                ? "Sending..."
+                : !wholeClass && selectedIds.length > 1
+                  ? `Send Note (${selectedIds.length})`
+                  : "Send Note"}
+            </button>
+          );
+        })()}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
