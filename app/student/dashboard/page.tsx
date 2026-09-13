@@ -9,7 +9,10 @@ import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { lessonTitle as legacyLessonTitle } from "@/lib/lessons";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import { levelForPoints, scoreBadge } from "@/lib/studentLevels";
+import { activityDateSet, computeStreak } from "@/lib/studentStreak";
 import LogoutButton from "./LogoutButton";
+import Leaderboard from "./Leaderboard";
+import CertificateButton from "./CertificateButton";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -137,6 +140,72 @@ export default async function StudentDashboardPage() {
   }
   const { level, next, pointsToNext } = levelForPoints(totalPoints);
 
+  // Daily streak: every non-"not_started" progress row this student has
+  // ever had (any assignment, active or not), not just the currently
+  // active ones queried above.
+  const { data: allProgressRows } = await supabase
+    .from("student_progress")
+    .select("updated_at")
+    .eq("student_id", session.studentId)
+    .neq("status", "not_started");
+  const streak = computeStreak(activityDateSet((allProgressRows || []).map((r) => r.updated_at)));
+
+  // Class leaderboard: total points earned in the last 7 / 30 days, across
+  // every student in this class. Computed here (not per-student in a
+  // client component) so no student can query another's data directly.
+  const { data: classmates } = await supabase
+    .from("students")
+    .select("id, name")
+    .eq("class_id", session.classId);
+
+  const { data: classAssignmentRows } = await supabase
+    .from("assignments")
+    .select("id")
+    .eq("class_id", session.classId);
+  const classAssignmentIds = (classAssignmentRows || []).map((a) => a.id);
+
+  const monthCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const weekCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  let monthlyScoreRows: { student_id: string; score: number | null; updated_at: string }[] = [];
+  if (classAssignmentIds.length > 0) {
+    const { data } = await supabase
+      .from("student_progress")
+      .select("student_id, score, updated_at")
+      .in("assignment_id", classAssignmentIds)
+      .not("score", "is", null)
+      .gte("updated_at", monthCutoff);
+    monthlyScoreRows = data || [];
+  }
+
+  const weeklyPoints = new Map<string, number>();
+  const monthlyPoints = new Map<string, number>();
+  for (const row of monthlyScoreRows) {
+    const score = row.score ?? 0;
+    monthlyPoints.set(row.student_id, (monthlyPoints.get(row.student_id) || 0) + score);
+    if (row.updated_at >= weekCutoff) {
+      weeklyPoints.set(row.student_id, (weeklyPoints.get(row.student_id) || 0) + score);
+    }
+  }
+
+  function buildBoard(pointsMap: Map<string, number>) {
+    return (classmates || [])
+      .map((c) => ({ studentId: c.id, name: c.name, points: pointsMap.get(c.id) || 0 }))
+      .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+  }
+
+  const weeklyBoard = buildBoard(weeklyPoints);
+  const monthlyBoard = buildBoard(monthlyPoints);
+
+  const { data: classRow } = await supabase
+    .from("classes")
+    .select("name")
+    .eq("id", session.classId)
+    .maybeSingle();
+  const className = classRow?.name ?? "your class";
+  const totalAssignmentCount = assignments?.length ?? 0;
+  const classCompleted = totalAssignmentCount > 0 && completedCount >= totalAssignmentCount;
+
   // Lightweight, computed-at-load notifications (no persisted/dismissible
   // state) — "new" means assigned in the last 3 days, "due soon" means due
   // within the next 2 days and not yet completed.
@@ -236,6 +305,21 @@ export default async function StudentDashboardPage() {
             {next && pointsToNext !== null && ` · ${pointsToNext} pts to ${next.label}`}
           </span>
         </span>
+        {streak > 0 && (
+          <span
+            style={{
+              marginLeft: "auto",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.3rem",
+              fontSize: "0.9rem",
+              fontWeight: 800,
+              whiteSpace: "nowrap",
+            }}
+          >
+            🔥 {streak}
+          </span>
+        )}
       </div>
 
       {notificationCount > 0 && (
@@ -287,6 +371,12 @@ export default async function StudentDashboardPage() {
           ))}
         </div>
       )}
+
+      <Leaderboard
+        weeklyBoard={weeklyBoard}
+        monthlyBoard={monthlyBoard}
+        currentStudentId={session.studentId}
+      />
 
       <div
         style={{
@@ -399,6 +489,27 @@ export default async function StudentDashboardPage() {
           );
         })}
       </div>
+
+      {(totalPoints > 0 || classCompleted) && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem", justifyContent: "center", marginTop: "0.5rem" }}>
+          {totalPoints > 0 && (
+            <CertificateButton
+              kind="level"
+              studentName={session.name}
+              className={className}
+              levelLabel={level.label}
+            />
+          )}
+          {classCompleted && (
+            <CertificateButton
+              kind="class"
+              studentName={session.name}
+              className={className}
+              levelLabel={level.label}
+            />
+          )}
+        </div>
+      )}
 
       <div style={{ marginTop: "1rem", marginBottom: "2rem" }}>
         <LogoutButton />
