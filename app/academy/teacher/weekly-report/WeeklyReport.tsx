@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import ExcelJS from "exceljs";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { lessonTitle as legacyLessonTitle } from "@/lib/lessons";
 import { colors, radius, solidShadow } from "@/lib/theme";
@@ -53,6 +54,10 @@ interface ClassSummary {
   students: StudentWeekly[];
 }
 
+function todayIso(): string {
+  return new Date().toLocaleDateString("en-CA");
+}
+
 const AVATAR_COLORS = [
   { bg: colors.orange, shadow: colors.orangeShadow },
   { bg: colors.greenCard, shadow: colors.greenCardShadow },
@@ -64,6 +69,7 @@ export default function WeeklyReport() {
   const [error, setError] = useState("");
   const [summaries, setSummaries] = useState<ClassSummary[]>([]);
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
+  const [exporting, setExporting] = useState(false);
   const cutoff = new Date(Date.now() - WEEK_MS);
 
   useEffect(() => {
@@ -263,6 +269,71 @@ export default function WeeklyReport() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
+  async function exportToExcel() {
+    setExporting(true);
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Ritmo Academy";
+    workbook.created = new Date();
+
+    const weekSheet = workbook.addWorksheet("Weekly Report");
+    weekSheet.columns = [
+      { header: "Class", key: "className", width: 20 },
+      { header: "Student", key: "studentName", width: 22 },
+      { header: "Completed This Week", key: "completed", width: 20 },
+      { header: "Average Score", key: "avgScore", width: 16 },
+      { header: "Last Activity", key: "lastActivity", width: 20 },
+    ];
+    weekSheet.getRow(1).font = { bold: true };
+
+    for (const c of summaries) {
+      for (const s of c.students) {
+        weekSheet.addRow({
+          className: c.className,
+          studentName: s.studentName,
+          completed: s.completedThisWeek,
+          avgScore: s.averageScore !== null ? Number(s.averageScore.toFixed(1)) : "",
+          lastActivity: s.lastActivity ? new Date(s.lastActivity).toLocaleDateString() : "No activity this week",
+        });
+      }
+    }
+
+    if (upcoming.length > 0) {
+      const upcomingSheet = workbook.addWorksheet("Due Soon");
+      upcomingSheet.columns = [
+        { header: "Assignment", key: "title", width: 26 },
+        { header: "Class", key: "className", width: 20 },
+        { header: "Due Date", key: "dueAt", width: 16 },
+        { header: "Completed", key: "completed", width: 12 },
+        { header: "Total", key: "total", width: 10 },
+      ];
+      upcomingSheet.getRow(1).font = { bold: true };
+
+      for (const u of upcoming) {
+        upcomingSheet.addRow({
+          title: u.title,
+          className: u.className,
+          dueAt: new Date(u.dueAt).toLocaleDateString(),
+          completed: u.completedCount,
+          total: u.totalApplicable,
+        });
+      }
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `ritmo-weekly-report-${todayIso()}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    setExporting(false);
+  }
+
   if (loading) {
     return <p style={{ opacity: 0.6, fontWeight: 600 }}>Loading weekly report...</p>;
   }
@@ -341,13 +412,42 @@ export default function WeeklyReport() {
         </div>
       )}
 
-      <p style={{ fontSize: "0.85rem", fontWeight: 600, opacity: 0.6, margin: 0, textAlign: "left" }}>
-        Activity since{" "}
-        <span style={{ direction: "ltr", display: "inline-block" }}>
-          {cutoff.toLocaleDateString()}
-        </span>
-        .
-      </p>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "0.5rem",
+        }}
+      >
+        <p style={{ fontSize: "0.85rem", fontWeight: 600, opacity: 0.6, margin: 0, textAlign: "left" }}>
+          Activity since{" "}
+          <span style={{ direction: "ltr", display: "inline-block" }}>
+            {cutoff.toLocaleDateString()}
+          </span>
+          .
+        </p>
+        <button
+          onClick={exportToExcel}
+          disabled={exporting}
+          style={{
+            fontSize: "0.8rem",
+            fontWeight: 800,
+            padding: "0.5rem 0.9rem",
+            borderRadius: radius.button,
+            border: "none",
+            background: colors.greenButton,
+            boxShadow: exporting ? "none" : solidShadow(3, colors.greenButtonShadow),
+            color: colors.white,
+            cursor: exporting ? "default" : "pointer",
+            opacity: exporting ? 0.7 : 1,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {exporting ? "Exporting..." : "⬇ Export to Excel"}
+        </button>
+      </div>
 
       {summaries.map((c) => (
         <div

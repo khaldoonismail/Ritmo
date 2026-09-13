@@ -52,6 +52,14 @@ const sections = [
     shadow: colors.assessmentCardShadow,
     text: colors.coralText,
   },
+  {
+    label: "Analytics",
+    href: "/academy/teacher/analytics",
+    icon: "📈",
+    bg: colors.blueBackground,
+    shadow: colors.gamesCardShadow,
+    text: colors.blueText,
+  },
 ];
 
 export default function TeacherDashboard() {

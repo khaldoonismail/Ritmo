@@ -12,6 +12,7 @@ import { DAY_NAMES, formatTime } from "@/lib/classSchedule";
 import UploadStudentsExcel from "./UploadStudentsExcel";
 import StudentThumbnail from "./StudentThumbnail";
 import StudentPhotoUploader from "./StudentPhotoUploader";
+import Attendance from "./Attendance";
 import { colors, radius, solidShadow } from "@/lib/theme";
 
 interface ClassInfo {
@@ -1095,6 +1096,15 @@ export default function ManageClassPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Attendance section */}
+      <section style={{ width: "100%", maxWidth: "600px" }}>
+        <h2 style={{ fontSize: "1.3rem", fontWeight: 800, margin: "0 0 0.75rem" }}>Attendance</h2>
+        <Attendance
+          classId={classId}
+          students={(students || []).map((s) => ({ id: s.id, name: s.name }))}
+        />
       </section>
 
       {/* Assignments section */}

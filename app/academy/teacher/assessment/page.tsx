@@ -22,20 +22,36 @@ export default function AssessmentPage() {
         Assessment
       </h1>
 
-      <Link
-        href="/academy/teacher/weekly-report"
-        style={{
-          fontSize: "0.85rem",
-          fontWeight: 800,
-          padding: "0.5rem 1rem",
-          borderRadius: "999px",
-          border: `1px solid ${colors.inputBorder}`,
-          color: colors.textPrimary,
-          textDecoration: "none",
-        }}
-      >
-        📅 Weekly Report
-      </Link>
+      <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", justifyContent: "center" }}>
+        <Link
+          href="/academy/teacher/weekly-report"
+          style={{
+            fontSize: "0.85rem",
+            fontWeight: 800,
+            padding: "0.5rem 1rem",
+            borderRadius: "999px",
+            border: `1px solid ${colors.inputBorder}`,
+            color: colors.textPrimary,
+            textDecoration: "none",
+          }}
+        >
+          📅 Weekly Report
+        </Link>
+        <Link
+          href="/academy/teacher/analytics"
+          style={{
+            fontSize: "0.85rem",
+            fontWeight: 800,
+            padding: "0.5rem 1rem",
+            borderRadius: "999px",
+            border: `1px solid ${colors.inputBorder}`,
+            color: colors.textPrimary,
+            textDecoration: "none",
+          }}
+        >
+          📈 Analytics
+        </Link>
+      </div>
 
       <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: "0.5rem 0 0" }}>
         Student Progress
