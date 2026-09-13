@@ -71,7 +71,7 @@ export default async function StudentDashboardPage() {
   const supabase = createAdminSupabaseClient();
   const { data: assignments } = await supabase
     .from("assignments")
-    .select("id, lesson_id, due_at")
+    .select("id, lesson_id, game_id, due_at, assigned_at")
     .eq("class_id", session.classId)
     .eq("is_active", true)
     .or(`student_id.is.null,student_id.eq.${session.studentId}`)
@@ -81,7 +81,7 @@ export default async function StudentDashboardPage() {
   // static demo lesson_id ("1"), which isn't a valid uuid — only look up
   // the real ones, and fall back to the static title map for the rest.
   const realLessonIds = [
-    ...new Set((assignments || []).map((a) => a.lesson_id)),
+    ...new Set((assignments || []).map((a) => a.lesson_id).filter((id): id is string => !!id)),
   ].filter((id) => UUID_RE.test(id));
 
   let lessonTitleMap = new Map<string, string>();
@@ -91,6 +91,21 @@ export default async function StudentDashboardPage() {
       .select("id, title")
       .in("id", realLessonIds);
     lessonTitleMap = new Map((lessonRows || []).map((l) => [l.id, l.title]));
+  }
+
+  const gameIds = [
+    ...new Set((assignments || []).map((a) => a.game_id).filter((id): id is string => !!id)),
+  ];
+  let gameTitleMap = new Map<string, string>();
+  if (gameIds.length > 0) {
+    const { data: gameRows } = await supabase.from("games").select("id, title").in("id", gameIds);
+    gameTitleMap = new Map((gameRows || []).map((g) => [g.id, g.title]));
+  }
+
+  function assignmentTitle(a: { lesson_id: string | null; game_id: string | null }): string {
+    if (a.game_id) return gameTitleMap.get(a.game_id) ?? "Unknown game";
+    if (a.lesson_id) return lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id);
+    return "Unknown assignment";
   }
 
   // Scoped to this student's own id (never another student's) to prevent
@@ -121,6 +136,30 @@ export default async function StudentDashboardPage() {
     if (score !== null) totalPoints += score;
   }
   const { level, next, pointsToNext } = levelForPoints(totalPoints);
+
+  // Lightweight, computed-at-load notifications (no persisted/dismissible
+  // state) — "new" means assigned in the last 3 days, "due soon" means due
+  // within the next 2 days and not yet completed.
+  const now = Date.now();
+  const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+  const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+  const newAssignmentIds = new Set(
+    (assignments || [])
+      .filter((a) => now - new Date(a.assigned_at).getTime() <= THREE_DAYS_MS)
+      .map((a) => a.id)
+  );
+  const dueSoonIds = new Set(
+    (assignments || [])
+      .filter((a) => {
+        if (!a.due_at) return false;
+        const status = progressMap.get(a.id)?.status ?? "not_started";
+        if (status === "completed") return false;
+        const msUntilDue = new Date(a.due_at).getTime() - now;
+        return msUntilDue >= 0 && msUntilDue <= TWO_DAYS_MS;
+      })
+      .map((a) => a.id)
+  );
+  const notificationCount = newAssignmentIds.size + dueSoonIds.size;
 
   return (
     <main
@@ -183,11 +222,35 @@ export default async function StudentDashboardPage() {
         <span style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
           <span style={{ fontWeight: 800, fontSize: "1.05rem" }}>{level.label}</span>
           <span style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.7 }}>
-            {totalPoints} pts · {completedCount} lesson{completedCount === 1 ? "" : "s"} completed
+            {totalPoints} pts · {completedCount} item{completedCount === 1 ? "" : "s"} completed
             {next && pointsToNext !== null && ` · ${pointsToNext} pts to ${next.label}`}
           </span>
         </span>
       </div>
+
+      {notificationCount > 0 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            width: "100%",
+            maxWidth: "480px",
+            padding: "0.6rem 1rem",
+            borderRadius: radius.pill,
+            background: colors.coralBackground,
+            color: colors.coralText,
+            fontWeight: 700,
+            fontSize: "0.85rem",
+          }}
+        >
+          <span aria-hidden="true">🔔</span>
+          {newAssignmentIds.size > 0 &&
+            `${newAssignmentIds.size} new assignment${newAssignmentIds.size === 1 ? "" : "s"}`}
+          {newAssignmentIds.size > 0 && dueSoonIds.size > 0 && " · "}
+          {dueSoonIds.size > 0 && `${dueSoonIds.size} due soon`}
+        </div>
+      )}
 
       <div
         style={{
@@ -211,10 +274,12 @@ export default async function StudentDashboardPage() {
           const badge = scoreBadge(score);
           const { icon, label, cardBg, cardShadow, iconFill, iconShadow, badgeBg, cardOpacity } =
             STATUS_DISPLAY[status];
+          const isNew = newAssignmentIds.has(a.id);
+          const isDueSoon = dueSoonIds.has(a.id);
           return (
             <Link
               key={a.id}
-              href={`/student/lesson/${a.id}`}
+              href={a.game_id ? `/student/game/${a.id}` : `/student/lesson/${a.id}`}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -251,13 +316,26 @@ export default async function StudentDashboardPage() {
                 </span>
                 <span style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
                   <span style={{ fontWeight: 800, fontSize: "1.05rem" }}>
-                    {lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id)}
+                    {a.game_id ? "🎮 " : ""}
+                    {assignmentTitle(a)}
                   </span>
-                  {a.due_at && (
-                    <span style={{ opacity: 0.6, fontWeight: 600, fontSize: "0.8rem", direction: "ltr" }}>
-                      Due {new Date(a.due_at).toLocaleDateString()}
-                    </span>
-                  )}
+                  <span style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                    {a.due_at && (
+                      <span style={{ opacity: 0.6, fontWeight: 600, fontSize: "0.8rem", direction: "ltr" }}>
+                        Due {new Date(a.due_at).toLocaleDateString()}
+                      </span>
+                    )}
+                    {isNew && (
+                      <span style={{ color: colors.blueText, fontWeight: 800, fontSize: "0.75rem" }}>
+                        · New
+                      </span>
+                    )}
+                    {isDueSoon && (
+                      <span style={{ color: colors.coralText, fontWeight: 800, fontSize: "0.75rem" }}>
+                        · Due soon
+                      </span>
+                    )}
+                  </span>
                 </span>
               </span>
               <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.3rem" }}>

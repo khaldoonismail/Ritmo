@@ -8,6 +8,7 @@ import { lessonTitle as legacyLessonTitle } from "@/lib/lessons";
 import type { LessonBlockData } from "@/lib/lessonBlocks";
 import { forkLesson } from "@/lib/forkLesson";
 import { randomPin } from "@/lib/studentPin";
+import { DAY_NAMES, formatTime } from "@/lib/classSchedule";
 import UploadStudentsExcel from "./UploadStudentsExcel";
 import StudentThumbnail from "./StudentThumbnail";
 import StudentPhotoUploader from "./StudentPhotoUploader";
@@ -27,7 +28,8 @@ interface Student {
 
 interface Assignment {
   id: string;
-  lesson_id: string;
+  lesson_id: string | null;
+  game_id: string | null;
   student_id: string | null;
   assigned_at: string;
   due_at: string | null;
@@ -45,7 +47,24 @@ interface LessonRow {
   teachers: { name: string } | { name: string }[] | null;
 }
 
-function ownerNameOf(row: LessonRow): string | null {
+interface GameRow {
+  id: string;
+  title: string;
+  teacher_id: string;
+  is_public: boolean;
+  usage_count: number;
+  created_at: string;
+  teachers: { name: string } | { name: string }[] | null;
+}
+
+interface ScheduleSlot {
+  id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+}
+
+function ownerNameOf(row: LessonRow | GameRow): string | null {
   if (Array.isArray(row.teachers)) return row.teachers[0]?.name ?? null;
   return row.teachers?.name ?? null;
 }
@@ -85,12 +104,22 @@ export default function ManageClassPage() {
   const [removeStudentError, setRemoveStudentError] = useState("");
 
   const [showAssignLesson, setShowAssignLesson] = useState(false);
+  const [assignKind, setAssignKind] = useState<"lesson" | "game">("lesson");
+  const [games, setGames] = useState<GameRow[] | null>(null);
   const [dueDate, setDueDate] = useState("");
   const [assignError, setAssignError] = useState("");
   const [removeError, setRemoveError] = useState("");
   const [assignBusy, setAssignBusy] = useState(false);
   const [assignTarget, setAssignTarget] = useState<"class" | "students">("class");
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+
+  const [schedule, setSchedule] = useState<ScheduleSlot[] | null>(null);
+  const [showAddSchedule, setShowAddSchedule] = useState(false);
+  const [scheduleDay, setScheduleDay] = useState(1);
+  const [scheduleStart, setScheduleStart] = useState("15:00");
+  const [scheduleEnd, setScheduleEnd] = useState("15:45");
+  const [scheduleError, setScheduleError] = useState("");
+  const [scheduleBusy, setScheduleBusy] = useState(false);
 
   async function loadAll() {
     const supabase = createBrowserSupabaseClient();
@@ -136,7 +165,7 @@ export default function ManageClassPage() {
 
     const { data: assignmentRows, error: assignmentsError } = await supabase
       .from("assignments")
-      .select("id, lesson_id, student_id, assigned_at, due_at, is_active")
+      .select("id, lesson_id, game_id, student_id, assigned_at, due_at, is_active")
       .eq("class_id", classId)
       .order("assigned_at", { ascending: false });
 
@@ -155,6 +184,30 @@ export default function ManageClassPage() {
       setLoadError(lessonsError.message);
     } else {
       setLessons((lessonRows as unknown as LessonRow[]) || []);
+    }
+
+    const { data: gameRows, error: gamesError } = await supabase
+      .from("games")
+      .select("id, title, teacher_id, is_public, usage_count, created_at, teachers(name)")
+      .order("created_at", { ascending: false });
+
+    if (gamesError) {
+      setLoadError(gamesError.message);
+    } else {
+      setGames((gameRows as unknown as GameRow[]) || []);
+    }
+
+    const { data: scheduleRows, error: scheduleFetchError } = await supabase
+      .from("class_schedule")
+      .select("id, day_of_week, start_time, end_time")
+      .eq("class_id", classId)
+      .order("day_of_week", { ascending: true })
+      .order("start_time", { ascending: true });
+
+    if (scheduleFetchError) {
+      setLoadError(scheduleFetchError.message);
+    } else {
+      setSchedule(scheduleRows || []);
     }
   }
 
@@ -325,7 +378,7 @@ export default function ManageClassPage() {
     const { data, error } = await supabase
       .from("assignments")
       .insert(rows)
-      .select("id, lesson_id, student_id, assigned_at, due_at, is_active");
+      .select("id, lesson_id, game_id, student_id, assigned_at, due_at, is_active");
 
     if (error || !data) {
       setAssignBusy(false);
@@ -349,6 +402,125 @@ export default function ManageClassPage() {
     setDueDate("");
     setSelectedStudentIds([]);
     setAssignBusy(false);
+  }
+
+  async function assignGameToClass(gameId: string) {
+    setAssignError("");
+
+    const targets: (string | null)[] =
+      assignTarget === "class" ? [null] : selectedStudentIds;
+
+    if (assignTarget === "students" && targets.length === 0) {
+      setAssignError("Select at least one student.");
+      return;
+    }
+
+    const newDueDate = dueDate || null;
+    const duplicateTarget = targets.find((studentId) =>
+      (assignments || []).some((a) => {
+        if (a.game_id !== gameId) return false;
+        const existingDueDate = a.due_at ? a.due_at.slice(0, 10) : null;
+        if (existingDueDate !== newDueDate) return false;
+        return a.student_id === studentId;
+      })
+    );
+    if (duplicateTarget !== undefined) {
+      const label =
+        duplicateTarget === null
+          ? "the whole class"
+          : studentNameMap.get(duplicateTarget) || "that student";
+      setAssignError(
+        `This game is already assigned to ${label}${
+          newDueDate ? " with that due date" : ""
+        }.`
+      );
+      return;
+    }
+
+    setAssignBusy(true);
+
+    const supabase = createBrowserSupabaseClient();
+    const rows = targets.map((studentId) => ({
+      class_id: classId,
+      game_id: gameId,
+      student_id: studentId,
+      due_at: dueDate ? new Date(dueDate).toISOString() : null,
+      is_active: true,
+    }));
+
+    const { data, error } = await supabase
+      .from("assignments")
+      .insert(rows)
+      .select("id, lesson_id, game_id, student_id, assigned_at, due_at, is_active");
+
+    if (error || !data) {
+      setAssignBusy(false);
+      setAssignError(error?.message || "Could not assign game.");
+      return;
+    }
+
+    for (let i = 0; i < data.length; i++) {
+      await supabase.rpc("increment_game_usage", { game_id: gameId });
+    }
+
+    setAssignments((prev) => [...data, ...(prev || [])]);
+    setGames(
+      (prev) =>
+        prev?.map((g) =>
+          g.id === gameId ? { ...g, usage_count: g.usage_count + data.length } : g
+        ) ?? prev
+    );
+    setDueDate("");
+    setSelectedStudentIds([]);
+    setAssignBusy(false);
+  }
+
+  async function addScheduleSlot() {
+    setScheduleError("");
+    if (scheduleEnd <= scheduleStart) {
+      setScheduleError("End time must be after start time.");
+      return;
+    }
+
+    setScheduleBusy(true);
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase
+      .from("class_schedule")
+      .insert({
+        class_id: classId,
+        day_of_week: scheduleDay,
+        start_time: scheduleStart,
+        end_time: scheduleEnd,
+      })
+      .select("id, day_of_week, start_time, end_time")
+      .single();
+
+    setScheduleBusy(false);
+
+    if (error || !data) {
+      setScheduleError(error?.message || "Could not add time slot.");
+      return;
+    }
+
+    setSchedule((prev) =>
+      [...(prev || []), data].sort(
+        (a, b) => a.day_of_week - b.day_of_week || a.start_time.localeCompare(b.start_time)
+      )
+    );
+    setShowAddSchedule(false);
+  }
+
+  async function removeScheduleSlot(id: string) {
+    setScheduleError("");
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.from("class_schedule").delete().eq("id", id);
+
+    if (error) {
+      setScheduleError(error.message);
+      return;
+    }
+
+    setSchedule((prev) => (prev || []).filter((s) => s.id !== id));
   }
 
   async function removeAssignment(assignmentId: string) {
@@ -430,9 +602,15 @@ export default function ManageClassPage() {
   };
 
   const lessonTitleMap = new Map((lessons || []).map((l) => [l.id, l.title]));
+  const gameTitleMap = new Map((games || []).map((g) => [g.id, g.title]));
   const studentNameMap = new Map((students || []).map((s) => [s.id, s.name]));
   const sortedStudents = [...(students || [])].sort((a, b) => a.name.localeCompare(b.name));
   const sortedLessons = [...(lessons || [])].sort((a, b) =>
+    lessonSort === "az"
+      ? a.title.localeCompare(b.title)
+      : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  const sortedGames = [...(games || [])].sort((a, b) =>
     lessonSort === "az"
       ? a.title.localeCompare(b.title)
       : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -790,6 +968,135 @@ export default function ManageClassPage() {
         </div>
       </section>
 
+      {/* Schedule section */}
+      <section style={{ width: "100%", maxWidth: "600px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "0.75rem",
+          }}
+        >
+          <h2 style={{ fontSize: "1.3rem", fontWeight: 800, margin: 0 }}>Weekly Schedule</h2>
+          <button onClick={() => setShowAddSchedule((v) => !v)} style={dashedButtonStyle}>
+            + Add Time Slot
+          </button>
+        </div>
+
+        {showAddSchedule && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.5rem",
+              borderRadius: radius.card,
+              padding: "0.9rem",
+              marginBottom: "0.75rem",
+              background: colors.white,
+              boxShadow: solidShadow(4, colors.rosterCardShadow),
+              textAlign: "left",
+            }}
+          >
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <select
+                value={scheduleDay}
+                onChange={(e) => setScheduleDay(Number(e.target.value))}
+                style={{ ...inputStyle, width: "auto", flex: 1, minWidth: "120px" }}
+              >
+                {DAY_NAMES.map((name, i) => (
+                  <option key={name} value={i}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="time"
+                value={scheduleStart}
+                onChange={(e) => setScheduleStart(e.target.value)}
+                style={{ ...inputStyle, width: "auto" }}
+              />
+              <span style={{ alignSelf: "center", fontWeight: 700, opacity: 0.6 }}>to</span>
+              <input
+                type="time"
+                value={scheduleEnd}
+                onChange={(e) => setScheduleEnd(e.target.value)}
+                style={{ ...inputStyle, width: "auto" }}
+              />
+            </div>
+            {scheduleError && (
+              <p style={{ color: colors.coralText, fontSize: "0.85rem", margin: 0 }}>
+                {scheduleError}
+              </p>
+            )}
+            <button
+              onClick={addScheduleSlot}
+              disabled={scheduleBusy}
+              style={{
+                fontSize: "0.9rem",
+                fontWeight: 800,
+                padding: "0.6rem 1rem",
+                borderRadius: radius.button,
+                border: "none",
+                background: colors.orange,
+                boxShadow: scheduleBusy ? "none" : solidShadow(3, colors.orangeShadow),
+                color: colors.white,
+                cursor: scheduleBusy ? "default" : "pointer",
+                opacity: scheduleBusy ? 0.7 : 1,
+              }}
+            >
+              {scheduleBusy ? "Adding..." : "Add Time Slot"}
+            </button>
+          </div>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+          {schedule === null && <p style={{ opacity: 0.6, fontWeight: 600 }}>Loading...</p>}
+          {schedule?.length === 0 && (
+            <p style={{ opacity: 0.6, fontWeight: 600 }}>
+              No time slots yet — add one so this class shows up on your weekly schedule.
+            </p>
+          )}
+          {schedule?.map((slot) => (
+            <div
+              key={slot.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "0.6rem",
+                padding: "0.5rem 0.9rem",
+                borderRadius: radius.iconSquare,
+                background: colors.white,
+                boxShadow: solidShadow(3, colors.rosterCardShadow),
+                textAlign: "left",
+                fontSize: "0.88rem",
+                fontWeight: 700,
+              }}
+            >
+              <span>
+                {DAY_NAMES[slot.day_of_week]} · {formatTime(slot.start_time)} – {formatTime(slot.end_time)}
+              </span>
+              <button
+                onClick={() => removeScheduleSlot(slot.id)}
+                style={{
+                  fontSize: "0.7rem",
+                  fontWeight: 800,
+                  padding: "0.3rem 0.6rem",
+                  borderRadius: radius.button,
+                  border: "none",
+                  background: colors.coralText,
+                  color: colors.white,
+                  cursor: "pointer",
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Assignments section */}
       <section style={{ width: "100%", maxWidth: "600px" }}>
         <div
@@ -801,10 +1108,10 @@ export default function ManageClassPage() {
           }}
         >
           <h2 style={{ fontSize: "1.3rem", fontWeight: 800, margin: 0 }}>
-            Assigned Lessons
+            Assignments
           </h2>
           <button onClick={() => setShowAssignLesson((v) => !v)} style={dashedButtonStyle}>
-            + Assign New Lesson
+            + New Assignment
           </button>
         </div>
 
@@ -822,9 +1129,46 @@ export default function ManageClassPage() {
               textAlign: "left",
             }}
           >
+            <div style={{ display: "flex", gap: "0.4rem" }}>
+              <button
+                type="button"
+                onClick={() => setAssignKind("lesson")}
+                style={{
+                  flex: 1,
+                  fontSize: "0.85rem",
+                  fontWeight: 800,
+                  padding: "0.5rem",
+                  borderRadius: radius.button,
+                  border: "none",
+                  background: assignKind === "lesson" ? colors.orange : colors.background,
+                  color: assignKind === "lesson" ? colors.white : colors.textPrimary,
+                  cursor: "pointer",
+                }}
+              >
+                🎵 Lesson
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssignKind("game")}
+                style={{
+                  flex: 1,
+                  fontSize: "0.85rem",
+                  fontWeight: 800,
+                  padding: "0.5rem",
+                  borderRadius: radius.button,
+                  border: "none",
+                  background: assignKind === "game" ? colors.orange : colors.background,
+                  color: assignKind === "game" ? colors.white : colors.textPrimary,
+                  cursor: "pointer",
+                }}
+              >
+                🎮 Game
+              </button>
+            </div>
+
             <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
               <label style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.7 }}>
-                Due date (optional, applies to whichever lesson you assign below)
+                Due date (optional, applies to whichever {assignKind} you assign below)
               </label>
               <input
                 type="date"
@@ -905,7 +1249,8 @@ export default function ManageClassPage() {
               </p>
             )}
 
-            {lessons !== null && lessons.length > 0 && (
+            {((assignKind === "lesson" && lessons !== null && lessons.length > 0) ||
+              (assignKind === "game" && games !== null && games.length > 0)) && (
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <span style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.6 }}>Sort:</span>
                 <div
@@ -956,6 +1301,8 @@ export default function ManageClassPage() {
                 overflowY: "auto",
               }}
             >
+              {assignKind === "lesson" && (
+              <>
               {lessons === null && <p style={{ opacity: 0.6, fontWeight: 600 }}>Loading lessons...</p>}
               {lessons?.length === 0 && (
                 <p style={{ opacity: 0.6, fontWeight: 600 }}>
@@ -1028,6 +1375,58 @@ export default function ManageClassPage() {
                   </div>
                 );
               })}
+              </>
+              )}
+
+              {assignKind === "game" && (
+              <>
+              {games === null && <p style={{ opacity: 0.6, fontWeight: 600 }}>Loading games...</p>}
+              {games?.length === 0 && (
+                <p style={{ opacity: 0.6, fontWeight: 600 }}>
+                  No games yet.{" "}
+                  <Link href="/games/teacher/create-game" style={{ textDecoration: "underline" }}>
+                    Create one
+                  </Link>
+                  .
+                </p>
+              )}
+              {sortedGames.map((g) => {
+                const isMine = g.teacher_id === myTeacherId;
+                const owner = ownerNameOf(g);
+                return (
+                  <div
+                    key={g.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "0.6rem",
+                      padding: "0.6rem 0.75rem",
+                      borderRadius: radius.iconSquare,
+                      background: colors.listRowBg,
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: "0.9rem" }}>{g.title}</div>
+                      <div style={{ fontSize: "0.72rem", fontWeight: 600, opacity: 0.6 }}>
+                        {isMine ? "Your game" : `by ${owner || "another teacher"}`} · used{" "}
+                        {g.usage_count} time{g.usage_count === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
+                      <button
+                        onClick={() => assignGameToClass(g.id)}
+                        disabled={assignBusy}
+                        style={primaryButtonStyle}
+                      >
+                        {isMine ? "Assign" : "Assign as-is"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              </>
+              )}
             </div>
           </div>
         )}
@@ -1041,7 +1440,7 @@ export default function ManageClassPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           {assignments === null && <p style={{ opacity: 0.6, fontWeight: 600 }}>Loading...</p>}
           {assignments?.length === 0 && (
-            <p style={{ opacity: 0.6, fontWeight: 600 }}>No lessons assigned yet.</p>
+            <p style={{ opacity: 0.6, fontWeight: 600 }}>No assignments yet.</p>
           )}
           {assignments?.map((a) => (
             <div
@@ -1061,7 +1460,11 @@ export default function ManageClassPage() {
             >
               <div>
                 <div style={{ fontWeight: 800 }}>
-                  {lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id)}
+                  {a.game_id
+                    ? `🎮 ${gameTitleMap.get(a.game_id) ?? "Unknown game"}`
+                    : a.lesson_id
+                      ? (lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id))
+                      : "Unknown assignment"}
                 </div>
                 <div style={{ fontSize: "0.75rem", fontWeight: 600, opacity: 0.6 }}>
                   {a.student_id

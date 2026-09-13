@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { lessonTitle as legacyLessonTitle } from "@/lib/lessons";
 import { colors, radius, solidShadow } from "@/lib/theme";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const UPCOMING_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ClassRow {
   id: string;
@@ -33,6 +36,15 @@ interface StudentWeekly {
   lastActivity: string | null;
 }
 
+interface UpcomingItem {
+  assignmentId: string;
+  className: string;
+  title: string;
+  dueAt: string;
+  completedCount: number;
+  totalApplicable: number;
+}
+
 interface ClassSummary {
   classId: string;
   className: string;
@@ -51,6 +63,7 @@ export default function WeeklyReport() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [summaries, setSummaries] = useState<ClassSummary[]>([]);
+  const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
   const cutoff = new Date(Date.now() - WEEK_MS);
 
   useEffect(() => {
@@ -89,7 +102,7 @@ export default function WeeklyReport() {
           supabase.from("students").select("id, name, class_id").in("class_id", classIds),
           supabase
             .from("assignments")
-            .select("id, class_id")
+            .select("id, class_id, lesson_id, game_id, student_id, due_at")
             .in("class_id", classIds),
         ]);
 
@@ -172,6 +185,74 @@ export default function WeeklyReport() {
         };
       });
 
+      // Upcoming: assignments due in the next 3 days, with how many of the
+      // students they apply to have already completed them (all-time, not
+      // just this week — a different question than the weekly summary
+      // above).
+      const now = Date.now();
+      const dueSoon = (assignmentRows || []).filter((a) => {
+        if (!a.due_at) return false;
+        const msUntilDue = new Date(a.due_at).getTime() - now;
+        return msUntilDue >= 0 && msUntilDue <= UPCOMING_WINDOW_MS;
+      });
+
+      const dueSoonIds = dueSoon.map((a) => a.id);
+      let allTimeProgress: { student_id: string; assignment_id: string; status: string }[] = [];
+      if (dueSoonIds.length > 0) {
+        const { data } = await supabase
+          .from("student_progress")
+          .select("student_id, assignment_id, status")
+          .in("assignment_id", dueSoonIds);
+        allTimeProgress = data || [];
+      }
+
+      const realLessonIds = [
+        ...new Set(dueSoon.map((a) => a.lesson_id).filter((id): id is string => !!id)),
+      ].filter((id) => UUID_RE.test(id));
+      let lessonTitleMap = new Map<string, string>();
+      if (realLessonIds.length > 0) {
+        const { data } = await supabase.from("lessons").select("id, title").in("id", realLessonIds);
+        lessonTitleMap = new Map((data || []).map((l) => [l.id, l.title]));
+      }
+
+      const gameIds = [
+        ...new Set(dueSoon.map((a) => a.game_id).filter((id): id is string => !!id)),
+      ];
+      let gameTitleMap = new Map<string, string>();
+      if (gameIds.length > 0) {
+        const { data } = await supabase.from("games").select("id, title").in("id", gameIds);
+        gameTitleMap = new Map((data || []).map((g) => [g.id, g.title]));
+      }
+
+      const classNameById = new Map((classRows || []).map((c) => [c.id, c.name]));
+
+      const nextUpcoming: UpcomingItem[] = dueSoon
+        .map((a): UpcomingItem => {
+          const title = a.game_id
+            ? gameTitleMap.get(a.game_id) ?? "Unknown game"
+            : a.lesson_id
+              ? lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id)
+              : "Unknown assignment";
+
+          const totalApplicable = a.student_id
+            ? 1
+            : (studentsByClass.get(a.class_id) || []).length;
+          const completedCount = allTimeProgress.filter(
+            (p) => p.assignment_id === a.id && p.status === "completed"
+          ).length;
+
+          return {
+            assignmentId: a.id,
+            className: classNameById.get(a.class_id) ?? "Unknown class",
+            title,
+            dueAt: a.due_at as string,
+            completedCount,
+            totalApplicable,
+          };
+        })
+        .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
+
+      setUpcoming(nextUpcoming);
       setSummaries(nextSummaries);
       setLoading(false);
     }
@@ -208,6 +289,58 @@ export default function WeeklyReport() {
         maxWidth: "700px",
       }}
     >
+      {upcoming.length > 0 && (
+        <div
+          style={{
+            borderRadius: radius.card,
+            padding: "1.1rem 1.25rem",
+            background: colors.coralBackground,
+            textAlign: "left",
+          }}
+        >
+          <div style={{ fontWeight: 800, fontSize: "1rem", marginBottom: "0.6rem" }}>
+            🔔 Due in the next 3 days
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {upcoming.map((u) => (
+              <div
+                key={u.assignmentId}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "0.6rem",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                }}
+              >
+                <span>
+                  {u.title}{" "}
+                  <span style={{ opacity: 0.6, fontWeight: 600 }}>({u.className})</span>
+                </span>
+                <span style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexShrink: 0 }}>
+                  <span style={{ opacity: 0.75, direction: "ltr" }}>
+                    {new Date(u.dueAt).toLocaleDateString()}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      padding: "0.2rem 0.55rem",
+                      borderRadius: radius.pill,
+                      background: colors.coralText,
+                      color: colors.white,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {u.completedCount}/{u.totalApplicable} done
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <p style={{ fontSize: "0.85rem", fontWeight: 600, opacity: 0.6, margin: 0, textAlign: "left" }}>
         Activity since{" "}
         <span style={{ direction: "ltr", display: "inline-block" }}>

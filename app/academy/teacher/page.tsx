@@ -38,10 +38,18 @@ const sections = [
   {
     label: "Weekly Report",
     href: "/academy/teacher/weekly-report",
-    icon: "📅",
+    icon: "📊",
     bg: colors.notStartedCardBg,
     shadow: colors.notStartedCardShadow,
     text: colors.textPrimary,
+  },
+  {
+    label: "My Schedule",
+    href: "/teacher/schedule",
+    icon: "🗓️",
+    bg: colors.coralBackground,
+    shadow: colors.assessmentCardShadow,
+    text: colors.coralText,
   },
 ];
 
