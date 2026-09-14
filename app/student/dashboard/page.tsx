@@ -322,6 +322,27 @@ export default async function StudentDashboardPage() {
         )}
       </div>
 
+      <Link
+        href="/student/play"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "0.5rem",
+          width: "100%",
+          maxWidth: "480px",
+          padding: "0.75rem 1.25rem",
+          borderRadius: radius.button,
+          background: colors.greenButton,
+          boxShadow: solidShadow(4, colors.greenButtonShadow),
+          color: colors.white,
+          fontWeight: 800,
+          textDecoration: "none",
+        }}
+      >
+        🎮 Join a Game
+      </Link>
+
       {notificationCount > 0 && (
         <div
           style={{

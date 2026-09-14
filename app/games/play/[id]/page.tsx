@@ -6,6 +6,9 @@ import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, solidShadow } from "@/lib/theme";
+import TeamBattleHost from "./TeamBattleHost";
+
+type PlayMode = "individual" | "team_battle";
 
 type MediaType = "text" | "image" | "video" | "audio";
 
@@ -82,6 +85,7 @@ export default function PlayGamePage() {
 
   const [game, setGame] = useState<Game | null>(null);
   const [stage, setStage] = useState<Stage>("loading");
+  const [playMode, setPlayMode] = useState<PlayMode>("individual");
   const [pin] = useState(() => Math.floor(100000 + Math.random() * 900000));
   const [gameUrl, setGameUrl] = useState("");
   const [activeQuestions, setActiveQuestions] = useState<Question[]>([]);
@@ -314,18 +318,60 @@ export default function PlayGamePage() {
         <>
           <div
             style={{
-              width: "64px",
-              height: "64px",
-              borderRadius: "20px",
-              background: colors.orange,
-              boxShadow: solidShadow(6, colors.orangeShadow),
               display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              gap: "0.4rem",
+              background: colors.white,
+              borderRadius: radius.pill,
+              boxShadow: solidShadow(3, colors.gamesCardShadow),
+              padding: "0.3rem",
             }}
           >
-            <span style={{ fontSize: "2rem", color: colors.white, lineHeight: 1 }}>♪</span>
+            {(
+              [
+                { value: "individual", label: "Individual" },
+                { value: "team_battle", label: "Team Battle" },
+              ] as { value: PlayMode; label: string }[]
+            ).map((opt) => {
+              const on = playMode === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => setPlayMode(opt.value)}
+                  style={{
+                    fontSize: "0.85rem",
+                    fontWeight: 700,
+                    padding: "0.45rem 1rem",
+                    borderRadius: radius.pill,
+                    border: "none",
+                    background: on ? colors.greenButton : "transparent",
+                    color: on ? colors.white : colors.textPrimary,
+                    cursor: "pointer",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
+
+          {playMode === "team_battle" ? (
+            <TeamBattleHost game={game!} gameUrl={gameUrl} />
+          ) : (
+            <>
+              <div
+                style={{
+                  width: "64px",
+                  height: "64px",
+                  borderRadius: "20px",
+                  background: colors.orange,
+                  boxShadow: solidShadow(6, colors.orangeShadow),
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <span style={{ fontSize: "2rem", color: colors.white, lineHeight: 1 }}>♪</span>
+              </div>
           <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>
             {game!.title}
           </h1>
@@ -617,6 +663,8 @@ export default function PlayGamePage() {
           >
             Start Game
           </button>
+            </>
+          )}
         </>
       )}
 
