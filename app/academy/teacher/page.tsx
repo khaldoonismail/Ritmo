@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { colors, radius, solidShadow } from "@/lib/theme";
-import LogoutButton from "./LogoutButton";
 import DashboardSummary from "./DashboardSummary";
 
 const sections = [
@@ -136,8 +135,6 @@ export default function TeacherDashboard() {
       >
         Activities Library →
       </Link>
-
-      <LogoutButton />
     </main>
   );
 }

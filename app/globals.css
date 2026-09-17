@@ -41,3 +41,101 @@ input[type="checkbox"] {
   background: #fff3df !important;
   color: #b4650b !important;
 }
+
+/* Teacher navigation sidebar (components/teacher/TeacherSidebar.tsx) —
+   structural/responsive rules live here since active-state colors are
+   computed per item in JS from lib/theme.ts and applied inline. */
+.teacher-shell {
+  display: flex;
+  min-height: 100vh;
+  align-items: flex-start;
+}
+
+.teacher-sidebar {
+  width: 232px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.25rem 1rem;
+  background: #fff;
+  border-right: 1px solid #e5dfc8;
+  min-height: 100vh;
+  position: sticky;
+  top: 0;
+}
+
+.teacher-sidebar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.teacher-sidebar-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.45;
+  padding: 0 0.6rem;
+  margin-bottom: 0.3rem;
+}
+
+.teacher-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.92rem;
+  text-decoration: none;
+  color: inherit;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.teacher-sidebar-item:hover {
+  background: #fff3df;
+}
+
+.teacher-sidebar-content {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .teacher-shell {
+    flex-direction: column;
+  }
+  .teacher-sidebar {
+    width: 100%;
+    min-height: auto;
+    position: static;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid #e5dfc8;
+    padding: 0.6rem 0.75rem;
+  }
+  .teacher-sidebar-brand,
+  .teacher-sidebar-logout {
+    display: none;
+  }
+  .teacher-sidebar-group {
+    flex-direction: row;
+    gap: 0.3rem;
+  }
+  .teacher-sidebar-label {
+    display: none;
+  }
+  .teacher-sidebar-item {
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.62rem;
+    padding: 0.4rem 0.55rem;
+    white-space: nowrap;
+    border-left: none !important;
+  }
+}
