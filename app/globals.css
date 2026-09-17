@@ -63,6 +63,34 @@ input[type="checkbox"] {
   min-height: 100vh;
   position: sticky;
   top: 0;
+  transition: width 0.15s ease;
+}
+
+.teacher-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0 0.6rem;
+}
+
+.teacher-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-radius: 50%;
+  border: none;
+  background: #f0eee4;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.teacher-sidebar-toggle:hover {
+  background: #fff3df;
 }
 
 .teacher-sidebar-group {
@@ -82,6 +110,7 @@ input[type="checkbox"] {
 }
 
 .teacher-sidebar-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.65rem;
@@ -98,9 +127,74 @@ input[type="checkbox"] {
   background: #fff3df;
 }
 
+/* Icon-only hover tooltip — only rendered in the DOM at all while
+   collapsed (see TeacherSidebar.tsx), so no extra hiding needed here for
+   the expanded state. */
+.teacher-sidebar-tooltip {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  background: #2b2b2b;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.4rem 0.7rem;
+  border-radius: 8px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 30;
+}
+
+.teacher-sidebar-item:hover .teacher-sidebar-tooltip {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
 .teacher-sidebar-content {
   flex: 1;
   min-width: 0;
+}
+
+/* Collapsed (icon-only) desktop state — scoped to desktop widths only, so
+   its higher selector specificity can never win over the mobile layout
+   rules below at narrow widths. */
+@media (min-width: 768px) {
+  .teacher-sidebar.collapsed {
+    width: 76px;
+  }
+
+  .teacher-sidebar.collapsed .teacher-sidebar-header {
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .teacher-sidebar.collapsed .teacher-sidebar-brand-label,
+  .teacher-sidebar.collapsed .teacher-sidebar-item-label,
+  .teacher-sidebar.collapsed .teacher-sidebar-label {
+    display: none;
+  }
+
+  .teacher-sidebar.collapsed .teacher-sidebar-item {
+    justify-content: center;
+    padding: 0.65rem;
+  }
+
+  /* No text category headers while collapsed — a thin divider between
+     groups keeps the grouping visible instead. */
+  .teacher-sidebar.collapsed .teacher-sidebar-group {
+    padding-top: 0.85rem;
+    margin-top: 0.1rem;
+    border-top: 1px solid #e5dfc8;
+  }
+
+  .teacher-sidebar.collapsed .teacher-sidebar-group:first-of-type {
+    padding-top: 0;
+    margin-top: 0;
+    border-top: none;
+  }
 }
 
 @media (max-width: 767px) {
@@ -119,8 +213,11 @@ input[type="checkbox"] {
     border-bottom: 1px solid #e5dfc8;
     padding: 0.6rem 0.75rem;
   }
-  .teacher-sidebar-brand,
+  .teacher-sidebar-header,
   .teacher-sidebar-logout {
+    display: none;
+  }
+  .teacher-sidebar-tooltip {
     display: none;
   }
   .teacher-sidebar-group {
