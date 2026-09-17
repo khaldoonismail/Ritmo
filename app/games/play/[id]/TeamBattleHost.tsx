@@ -9,11 +9,27 @@ import { shadowForColor } from "@/lib/teamColors";
 import TeamLeaderboard, { LeaderboardTeam } from "@/components/TeamLeaderboard";
 import TeamSetup, { TeamSetupConfig } from "./TeamSetup";
 
+interface Question {
+  id: string;
+  mediaType: string;
+  prompt: string;
+  mediaContent: string;
+  imageContent?: string;
+  options: string[];
+}
+
 interface Game {
   id: string;
   title: string;
-  questions: { id: string }[];
+  questions: Question[];
 }
+
+// Small local copy of page.tsx's Kahoot-style answer-tile constants — kept
+// separate rather than shared, matching the same call made for
+// TeamBattlePlayer.tsx, so the untouched Individual-mode file stays that way.
+const answerColors = ["#e21b3c", "#1368ce", "#d89e00", "#2ca30f"];
+const answerShadowColors = ["#a8112c", "#0d4a8f", "#a67800", "#1f7a0b"];
+const answerShapes = ["▲", "◆", "●", "■"];
 
 interface Participant {
   id: string;
@@ -310,11 +326,72 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   }
 
   if (stage === "live") {
+    const question = game.questions[currentQuestionIndex];
     return (
       <div style={{ width: "100%", maxWidth: "560px", display: "flex", flexDirection: "column", gap: "1rem" }}>
         <p style={{ fontWeight: 700, opacity: 0.85, margin: 0 }}>
           Question {currentQuestionIndex + 1} / {totalQuestions}
         </p>
+
+        {question && (
+          <>
+            <div
+              style={{
+                background: colors.white,
+                color: colors.textPrimary,
+                borderRadius: radius.card,
+                boxShadow: solidShadow(4, colors.gamesCardShadow),
+                padding: "1.25rem",
+                textAlign: "left",
+              }}
+            >
+              <p style={{ fontSize: "1.15rem", fontWeight: 700, margin: 0 }}>
+                {question.prompt || "Question"}
+              </p>
+              {question.mediaType === "audio" && question.mediaContent && (
+                <audio
+                  key={question.id}
+                  src={question.mediaContent}
+                  controls
+                  autoPlay
+                  style={{ width: "100%", marginTop: "0.75rem" }}
+                />
+              )}
+              {question.imageContent && (
+                <img
+                  src={question.imageContent}
+                  alt=""
+                  style={{ maxWidth: "100%", maxHeight: "220px", borderRadius: "8px", marginTop: "0.75rem" }}
+                />
+              )}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+              {question.options.map((opt, i) => (
+                <div
+                  key={i}
+                  style={{
+                    fontSize: "1rem",
+                    fontWeight: 800,
+                    padding: "1rem",
+                    borderRadius: radius.button,
+                    background: answerColors[i],
+                    boxShadow: solidShadow(4, answerShadowColors[i]),
+                    color: colors.white,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    textAlign: "left",
+                  }}
+                >
+                  <span>{answerShapes[i]}</span>
+                  <span style={{ flex: 1 }}>{opt}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
         <TeamLeaderboard teams={teams} />
         <button
           onClick={handleNextQuestion}
