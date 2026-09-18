@@ -241,6 +241,37 @@ export default function PlayGamePage() {
     setStage("question");
   }
 
+  // Adds extra time to the current question. Just bumps the number, so it
+  // works the same whether the countdown is running or paused — pausing
+  // only stops timeLeft from ticking, it doesn't stop it from being added
+  // to (mirrors TeamBattleHost.handleAddTime's reasoning).
+  function handleAddTime(seconds: number) {
+    setTimeLeft((v) => v + seconds);
+  }
+
+  // Discards the current question without scoring it for anyone (unlike
+  // Team Battle, nothing needs reversing here — finishQuestion is the only
+  // place points are ever awarded, and this skips straight past it, same
+  // shape as its own "advance" branch below).
+  function handleSkipQuestion() {
+    if (!game || roundEndedRef.current || locked) return;
+    if (!window.confirm("Skip this question? No answers or points for it will count.")) return;
+    roundEndedRef.current = true;
+    const next = currentIndex + 1;
+    if (next >= activeQuestions.length) {
+      setLocked(false);
+      setStage("final");
+      return;
+    }
+    roundEndedRef.current = false;
+    setCurrentIndex(next);
+    setTimeLeft(timerEnabled ? timeLimitSeconds : 0);
+    setSelected(null);
+    setLocked(false);
+    setPaused(false);
+    setStage("question");
+  }
+
   if (stage === "loading") {
     return <main style={{ minHeight: "100vh" }} />;
   }
@@ -699,6 +730,23 @@ export default function PlayGamePage() {
               >
                 {timerEnabled ? `${timeLeft}s` : "No limit"}
               </span>
+              {timerEnabled && (
+                <button
+                  onClick={() => handleAddTime(15)}
+                  style={{
+                    fontSize: "0.85rem",
+                    fontWeight: 700,
+                    padding: "0.4rem 0.7rem",
+                    borderRadius: radius.pill,
+                    border: "none",
+                    background: "rgba(255,255,255,0.15)",
+                    color: colors.white,
+                    cursor: "pointer",
+                  }}
+                >
+                  +15s
+                </button>
+              )}
               <button
                 onClick={() => setPaused((p) => !p)}
                 style={{
@@ -713,6 +761,26 @@ export default function PlayGamePage() {
                 }}
               >
                 {paused ? "▶ Resume" : "⏸ Pause"}
+              </button>
+              {/* Danger-styled to match TeamBattleHost's Skip button (and
+                  the "Delete" convention it's copied from) — the one
+                  control here that discards the current question. */}
+              <button
+                onClick={handleSkipQuestion}
+                disabled={locked}
+                style={{
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  padding: "0.4rem 0.9rem",
+                  borderRadius: radius.pill,
+                  border: "none",
+                  background: colors.coralText,
+                  color: colors.white,
+                  cursor: locked ? "default" : "pointer",
+                  opacity: locked ? 0.6 : 1,
+                }}
+              >
+                ⏭ Skip
               </button>
             </div>
           </div>
