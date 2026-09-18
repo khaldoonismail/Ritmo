@@ -42,10 +42,18 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   // question-fetch effect below, which unlocks only once that value is set).
   const [locked, setLocked] = useState(true);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [extensionSeconds, setExtensionSeconds] = useState(0);
   const [finalResults, setFinalResults] = useState<FinalTeam[]>([]);
 
   const answeredIndexRef = useRef<number | null>(null);
   const fetchedIndexRef = useRef<number | null>(null);
+  // Always holds the latest DB value, read synchronously by the fetch
+  // effect below — unlike the `extensionSeconds` state, which only updates
+  // after a render and so could still read stale inside that same effect.
+  const extensionSecondsRef = useRef(0);
+  // How much of extensionSeconds is already baked into the current
+  // timeLeft, so the delta-effect only ever adds what's new.
+  const appliedExtensionRef = useRef(0);
   const supabaseRef = useRef(createBrowserSupabaseClient());
 
   async function loadTeams() {
@@ -59,12 +67,14 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   async function loadSessionState() {
     const { data } = await supabaseRef.current
       .from("game_sessions")
-      .select("status, current_question_index")
+      .select("status, current_question_index, time_extension_seconds")
       .eq("id", sessionId)
       .maybeSingle();
     if (data) {
       setStatus(data.status);
       setQuestionIndex(data.current_question_index);
+      extensionSecondsRef.current = data.time_extension_seconds ?? 0;
+      setExtensionSeconds(data.time_extension_seconds ?? 0);
     }
   }
 
@@ -98,6 +108,12 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
     if ((status !== "question" && status !== "paused") || questionIndex === null) return;
     if (fetchedIndexRef.current === questionIndex) return;
     fetchedIndexRef.current = questionIndex;
+    // Captured now, synchronously, rather than re-read inside the .then()
+    // below — otherwise a +15s landing during the fetch's round trip could
+    // race the delta-effect (further down) into double- or zero-counting
+    // it, since that effect diffs against appliedExtensionRef.
+    const extensionAtFetch = extensionSecondsRef.current;
+    appliedExtensionRef.current = extensionAtFetch;
     const alreadyAnswered = answeredIndexRef.current === questionIndex;
     setSelected(null);
     fetch(`/api/student/session/${sessionId}/question`)
@@ -107,7 +123,9 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
           setQuestion(data.question);
           setSettings(data.settings || {});
           if (!alreadyAnswered) {
-            setTimeLeft(data.settings?.timerEnabled ? data.settings.timeLimitSeconds || 20 : 0);
+            setTimeLeft(
+              data.settings?.timerEnabled ? (data.settings.timeLimitSeconds || 20) + extensionAtFetch : 0
+            );
           }
           // Unlock only once timeLeft carries its real value (or locked
           // stays true for an already-answered question) — batched with the
@@ -117,6 +135,19 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, questionIndex]);
+
+  // Applies extra time the teacher grants mid-question. Only reacts to
+  // increases beyond what the fetch effect above already baked into
+  // timeLeft (appliedExtensionRef) — works the same whether the countdown
+  // is currently running or frozen by a pause, since this only ever adds
+  // to the number, never restarts the effect that ticks it down.
+  useEffect(() => {
+    if (fetchedIndexRef.current !== questionIndex) return;
+    const delta = extensionSeconds - appliedExtensionRef.current;
+    if (delta === 0) return;
+    appliedExtensionRef.current = extensionSeconds;
+    setTimeLeft((v) => v + delta);
+  }, [extensionSeconds, questionIndex]);
 
   useEffect(() => {
     if (status === "final") {

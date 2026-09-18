@@ -58,6 +58,11 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   const [advancing, setAdvancing] = useState(false);
   const [paused, setPaused] = useState(false);
   const [pausing, setPausing] = useState(false);
+  const [skipping, setSkipping] = useState(false);
+  const [addingTime, setAddingTime] = useState(false);
+  const [settings, setSettings] = useState({ timerEnabled: true, timeLimitSeconds: 20 });
+  const [extensionSeconds, setExtensionSeconds] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(0);
   const totalQuestions = game.questions.length;
 
   // Memoized rather than recreated per render — a fresh client each render
@@ -108,6 +113,19 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, stage]);
+
+  // Host-side countdown display — a local mirror of the same per-client,
+  // independent countdown TeamBattlePlayer runs for each student (no
+  // server-anchored clock exists; see that file's timer effect). It's
+  // purely a display for the teacher's own screen: it never drives
+  // advancing the question or locking answers, which stay entirely
+  // student- and teacher-button-driven.
+  useEffect(() => {
+    if (stage !== "live" || !settings.timerEnabled || paused) return;
+    if (timeLeft <= 0) return;
+    const t = setTimeout(() => setTimeLeft((v) => v - 1), 1000);
+    return () => clearTimeout(t);
+  }, [stage, timeLeft, settings.timerEnabled, paused]);
 
   async function handleStart(config: TeamSetupConfig) {
     setStarting(true);
@@ -167,6 +185,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
       setSessionId(sessionRow.id);
       setPin(newPin);
       setTeams(teamRows);
+      setSettings({ timerEnabled: config.timerEnabled, timeLimitSeconds: config.timeLimitSeconds });
       await loadRoster(sessionRow.id);
       setStage("waiting");
     } catch (e: any) {
@@ -179,10 +198,12 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   async function handleStartGame() {
     await supabase
       .from("game_sessions")
-      .update({ status: "question", current_question_index: 0 })
+      .update({ status: "question", current_question_index: 0, time_extension_seconds: 0 })
       .eq("id", sessionId);
     setCurrentQuestionIndex(0);
     setPaused(false);
+    setExtensionSeconds(0);
+    setTimeLeft(settings.timerEnabled ? settings.timeLimitSeconds : 0);
     await loadTeams(sessionId);
     setStage("live");
   }
@@ -194,7 +215,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     // same stale index and only one increment actually sticks. Also blocked
     // while paused so the round can't be advanced out from under a frozen
     // question.
-    if (advancing || paused) return;
+    if (advancing || paused || skipping) return;
     setAdvancing(true);
     try {
       const next = currentQuestionIndex + 1;
@@ -204,10 +225,86 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
         setStage("final");
         return;
       }
-      await supabase.from("game_sessions").update({ current_question_index: next }).eq("id", sessionId);
+      await supabase
+        .from("game_sessions")
+        .update({ current_question_index: next, time_extension_seconds: 0 })
+        .eq("id", sessionId);
       setCurrentQuestionIndex(next);
+      setExtensionSeconds(0);
+      setTimeLeft(settings.timerEnabled ? settings.timeLimitSeconds : 0);
     } finally {
       setAdvancing(false);
+    }
+  }
+
+  // Discards the current question entirely: reverses any points already
+  // earned for it (skip_team_battle_question, supabase/migrations/
+  // 0023_quick_adjust.sql) before advancing, so a question the teacher
+  // pulls mid-round leaves no score trace for anyone, even students who'd
+  // already answered. Shares handleNextQuestion's advance/end-game shape
+  // but isn't gated on `paused` — skipping a paused question is exactly
+  // the situation this button exists for.
+  async function handleSkipQuestion() {
+    if (advancing || skipping) return;
+    if (!window.confirm("Skip this question? No answers or points for it will count.")) return;
+    setSkipping(true);
+    try {
+      const { error: skipError } = await supabase.rpc("skip_team_battle_question", {
+        p_session_id: sessionId,
+        p_question_index: currentQuestionIndex,
+      });
+      if (skipError) {
+        setError(skipError.message || "Could not skip this question");
+        return;
+      }
+      setError("");
+      await loadTeams(sessionId);
+
+      const next = currentQuestionIndex + 1;
+      if (next >= totalQuestions) {
+        await supabase.from("game_sessions").update({ status: "final" }).eq("id", sessionId);
+        await loadRoster(sessionId);
+        setStage("final");
+        return;
+      }
+      await supabase
+        .from("game_sessions")
+        .update({ current_question_index: next, time_extension_seconds: 0, status: "question" })
+        .eq("id", sessionId);
+      setCurrentQuestionIndex(next);
+      setPaused(false);
+      setExtensionSeconds(0);
+      setTimeLeft(settings.timerEnabled ? settings.timeLimitSeconds : 0);
+    } finally {
+      setSkipping(false);
+    }
+  }
+
+  // Adds extra time to the current question. Just a number going up, so it
+  // works the same whether the question is running or paused — pausing
+  // only stops timeLeft from ticking, it doesn't stop it from being added
+  // to. Propagates to every student the same way pause does: they're
+  // already subscribed to this row, and add the same delta onto their own
+  // local timeLeft the moment they see time_extension_seconds increase
+  // (see TeamBattlePlayer).
+  async function handleAddTime(seconds: number) {
+    if (addingTime) return;
+    setAddingTime(true);
+    try {
+      const nextExtension = extensionSeconds + seconds;
+      const { error: extendError } = await supabase
+        .from("game_sessions")
+        .update({ time_extension_seconds: nextExtension })
+        .eq("id", sessionId);
+      if (extendError) {
+        setError(extendError.message || "Could not add time");
+        return;
+      }
+      setError("");
+      setExtensionSeconds(nextExtension);
+      setTimeLeft((v) => v + seconds);
+    } finally {
+      setAddingTime(false);
     }
   }
 
@@ -220,7 +317,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   // see TeamBattlePlayer's question-fetch effect, which is keyed on
   // questionIndex alone so it doesn't refetch/reset the timer on this flip.
   async function togglePause() {
-    if (pausing) return;
+    if (pausing || skipping) return;
     setPausing(true);
     try {
       const nextPaused = !paused;
@@ -366,27 +463,86 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     return (
       <div style={{ width: "100%", maxWidth: "560px", display: "flex", flexDirection: "column", gap: "1rem" }}>
         {error && <p style={{ color: colors.coralText, fontWeight: 700, margin: 0 }}>{error}</p>}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
           <p style={{ fontWeight: 700, opacity: 0.85, margin: 0 }}>
             Question {currentQuestionIndex + 1} / {totalQuestions}
           </p>
-          <button
-            onClick={togglePause}
-            disabled={pausing}
-            style={{
-              fontSize: "0.85rem",
-              fontWeight: 700,
-              padding: "0.4rem 0.9rem",
-              borderRadius: radius.pill,
-              border: "none",
-              background: "rgba(255,255,255,0.15)",
-              color: colors.white,
-              cursor: pausing ? "default" : "pointer",
-              opacity: pausing ? 0.6 : 1,
-            }}
-          >
-            {paused ? "▶ Resume" : "⏸ Pause"}
-          </button>
+
+          {/* Teacher controls toolbar — kept separate from the question and
+              leaderboard below so Quick Adjust doesn't clutter the main
+              view; every action here disables the others via the shared
+              advancing/pausing/skipping/addingTime in-flight flags so two
+              can't race against each other. */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            {settings.timerEnabled && (
+              <span
+                style={{
+                  fontSize: "0.95rem",
+                  fontWeight: 800,
+                  direction: "ltr",
+                  background: colors.white,
+                  color: colors.textPrimary,
+                  padding: "0.35rem 0.7rem",
+                  borderRadius: radius.pill,
+                }}
+              >
+                {timeLeft}s
+              </span>
+            )}
+            {settings.timerEnabled && (
+              <button
+                onClick={() => handleAddTime(15)}
+                disabled={addingTime || skipping}
+                style={{
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  padding: "0.4rem 0.7rem",
+                  borderRadius: radius.pill,
+                  border: "none",
+                  background: "rgba(255,255,255,0.15)",
+                  color: colors.white,
+                  cursor: addingTime || skipping ? "default" : "pointer",
+                  opacity: addingTime || skipping ? 0.6 : 1,
+                }}
+              >
+                +15s
+              </button>
+            )}
+            <button
+              onClick={togglePause}
+              disabled={pausing || skipping}
+              style={{
+                fontSize: "0.85rem",
+                fontWeight: 700,
+                padding: "0.4rem 0.9rem",
+                borderRadius: radius.pill,
+                border: "none",
+                background: "rgba(255,255,255,0.15)",
+                color: colors.white,
+                cursor: pausing || skipping ? "default" : "pointer",
+                opacity: pausing || skipping ? 0.6 : 1,
+              }}
+            >
+              {paused ? "▶ Resume" : "⏸ Pause"}
+            </button>
+            <button
+              onClick={handleSkipQuestion}
+              disabled={advancing || skipping}
+              style={{
+                fontSize: "0.85rem",
+                fontWeight: 700,
+                padding: "0.4rem 0.9rem",
+                borderRadius: radius.pill,
+                border: "none",
+                background: "rgba(255,255,255,0.15)",
+                color: colors.white,
+                cursor: advancing || skipping ? "default" : "pointer",
+                opacity: advancing || skipping ? 0.6 : 1,
+              }}
+            >
+              ⏭ Skip
+            </button>
+          </div>
         </div>
 
         <div style={{ position: "relative" }}>
@@ -475,7 +631,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
         <TeamLeaderboard teams={teams} />
         <button
           onClick={handleNextQuestion}
-          disabled={advancing || paused}
+          disabled={advancing || paused || skipping}
           style={{
             fontSize: "1rem",
             fontWeight: 800,
@@ -485,8 +641,8 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
             background: colors.greenButton,
             boxShadow: solidShadow(4, colors.greenButtonShadow),
             color: colors.white,
-            cursor: advancing || paused ? "default" : "pointer",
-            opacity: advancing || paused ? 0.6 : 1,
+            cursor: advancing || paused || skipping ? "default" : "pointer",
+            opacity: advancing || paused || skipping ? 0.6 : 1,
           }}
         >
           {currentQuestionIndex + 1 >= totalQuestions ? "End Game" : "Next Question"}
