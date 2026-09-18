@@ -99,6 +99,7 @@ export default function PlayGamePage() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [players, setPlayers] = useState<Player[]>([
     { name: "You", score: 0 },
     { name: "RhythmRex", score: 0 },
@@ -170,7 +171,7 @@ export default function PlayGamePage() {
   }
 
   useEffect(() => {
-    if (stage !== "question" || !timerEnabled) return;
+    if (stage !== "question" || !timerEnabled || paused) return;
     if (timeLeft <= 0) {
       finishQuestion(null);
       return;
@@ -178,7 +179,7 @@ export default function PlayGamePage() {
     const t = setTimeout(() => setTimeLeft((v) => v - 1), 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, timeLeft, timerEnabled]);
+  }, [stage, timeLeft, timerEnabled, paused]);
 
   function startGame() {
     if (!game) return;
@@ -191,11 +192,12 @@ export default function PlayGamePage() {
     setTimeLeft(timerEnabled ? timeLimitSeconds : 0);
     setSelected(null);
     setLocked(false);
+    setPaused(false);
     setStage("question");
   }
 
   function handleAnswer(i: number) {
-    if (locked) return;
+    if (locked || paused) return;
     setLocked(true);
     setSelected(i);
     const q = activeQuestions[currentIndex];
@@ -235,6 +237,7 @@ export default function PlayGamePage() {
     setTimeLeft(timerEnabled ? timeLimitSeconds : 0);
     setSelected(null);
     setLocked(false);
+    setPaused(false);
     setStage("question");
   }
 
@@ -681,22 +684,60 @@ export default function PlayGamePage() {
             <span style={{ fontWeight: 700, opacity: 0.85 }}>
               Question {currentIndex + 1} / {activeQuestions.length}
             </span>
-            <span
-              style={{
-                fontSize: timerEnabled ? "1.5rem" : "1rem",
-                fontWeight: 800,
-                direction: "ltr",
-                background: colors.white,
-                boxShadow: solidShadow(3, whiteElementShadow),
-                color: stageBg,
-                padding: "0.25rem 1rem",
-                borderRadius: radius.pill,
-              }}
-            >
-              {timerEnabled ? `${timeLeft}s` : "No limit"}
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+              <span
+                style={{
+                  fontSize: timerEnabled ? "1.5rem" : "1rem",
+                  fontWeight: 800,
+                  direction: "ltr",
+                  background: colors.white,
+                  boxShadow: solidShadow(3, whiteElementShadow),
+                  color: stageBg,
+                  padding: "0.25rem 1rem",
+                  borderRadius: radius.pill,
+                }}
+              >
+                {timerEnabled ? `${timeLeft}s` : "No limit"}
+              </span>
+              <button
+                onClick={() => setPaused((p) => !p)}
+                style={{
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  padding: "0.4rem 0.9rem",
+                  borderRadius: radius.pill,
+                  border: "none",
+                  background: "rgba(255,255,255,0.15)",
+                  color: colors.white,
+                  cursor: "pointer",
+                }}
+              >
+                {paused ? "▶ Resume" : "⏸ Pause"}
+              </button>
+            </div>
           </div>
 
+          <div style={{ position: "relative" }}>
+          {paused && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                zIndex: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.5rem",
+                background: "rgba(0,0,0,0.55)",
+                borderRadius: radius.card,
+                color: colors.white,
+              }}
+            >
+              <span style={{ fontSize: "2rem" }}>⏸</span>
+              <span style={{ fontSize: "1.3rem", fontWeight: 800 }}>Game Paused</span>
+            </div>
+          )}
           <div
             style={{
               background: colors.white,
@@ -784,7 +825,7 @@ export default function PlayGamePage() {
                 <button
                   key={i}
                   onClick={() => handleAnswer(i)}
-                  disabled={locked}
+                  disabled={locked || paused}
                   style={{
                     fontSize: "1.05rem",
                     fontWeight: 800,
@@ -796,7 +837,7 @@ export default function PlayGamePage() {
                     background: answerColors[i],
                     boxShadow: dim ? "none" : solidShadow(4, answerShadowColors[i]),
                     color: colors.white,
-                    cursor: locked ? "default" : "pointer",
+                    cursor: locked || paused ? "default" : "pointer",
                     opacity: dim ? 0.5 : 1,
                     display: "flex",
                     alignItems: "center",
@@ -812,6 +853,7 @@ export default function PlayGamePage() {
                 </button>
               );
             })}
+          </div>
           </div>
         </div>
       )}

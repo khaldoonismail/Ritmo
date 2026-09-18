@@ -56,6 +56,8 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [advancing, setAdvancing] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [pausing, setPausing] = useState(false);
   const totalQuestions = game.questions.length;
 
   // Memoized rather than recreated per render — a fresh client each render
@@ -180,6 +182,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
       .update({ status: "question", current_question_index: 0 })
       .eq("id", sessionId);
     setCurrentQuestionIndex(0);
+    setPaused(false);
     await loadTeams(sessionId);
     setStage("live");
   }
@@ -188,8 +191,10 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     // Guards against a double-click (or anything else firing this twice in
     // quick succession) racing on currentQuestionIndex before the first
     // call's state update lands — without it, two rapid calls both read the
-    // same stale index and only one increment actually sticks.
-    if (advancing) return;
+    // same stale index and only one increment actually sticks. Also blocked
+    // while paused so the round can't be advanced out from under a frozen
+    // question.
+    if (advancing || paused) return;
     setAdvancing(true);
     try {
       const next = currentQuestionIndex + 1;
@@ -203,6 +208,37 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
       setCurrentQuestionIndex(next);
     } finally {
       setAdvancing(false);
+    }
+  }
+
+  // Toggles the round between "question" and "paused" in game_sessions —
+  // current_question_index is never touched, so resuming lands back on the
+  // exact same question. Each connected device (this host and every
+  // student in TeamBattlePlayer) freezes its own already-ticking local
+  // countdown the moment it sees status leave "question", and simply
+  // continues it from wherever it was once status returns to "question" —
+  // see TeamBattlePlayer's question-fetch effect, which is keyed on
+  // questionIndex alone so it doesn't refetch/reset the timer on this flip.
+  async function togglePause() {
+    if (pausing) return;
+    setPausing(true);
+    try {
+      const nextPaused = !paused;
+      const { error: pauseError } = await supabase
+        .from("game_sessions")
+        .update({ status: nextPaused ? "paused" : "question" })
+        .eq("id", sessionId);
+      // Only flip the host's own local state once the write actually
+      // lands — otherwise a failed update (e.g. a network blip) would show
+      // "Game Paused" here while every student's screen stays live.
+      if (pauseError) {
+        setError(pauseError.message || "Could not update the game's pause state");
+      } else {
+        setError("");
+        setPaused(nextPaused);
+      }
+    } finally {
+      setPausing(false);
     }
   }
 
@@ -329,73 +365,117 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     const question = game.questions[currentQuestionIndex];
     return (
       <div style={{ width: "100%", maxWidth: "560px", display: "flex", flexDirection: "column", gap: "1rem" }}>
-        <p style={{ fontWeight: 700, opacity: 0.85, margin: 0 }}>
-          Question {currentQuestionIndex + 1} / {totalQuestions}
-        </p>
+        {error && <p style={{ color: colors.coralText, fontWeight: 700, margin: 0 }}>{error}</p>}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <p style={{ fontWeight: 700, opacity: 0.85, margin: 0 }}>
+            Question {currentQuestionIndex + 1} / {totalQuestions}
+          </p>
+          <button
+            onClick={togglePause}
+            disabled={pausing}
+            style={{
+              fontSize: "0.85rem",
+              fontWeight: 700,
+              padding: "0.4rem 0.9rem",
+              borderRadius: radius.pill,
+              border: "none",
+              background: "rgba(255,255,255,0.15)",
+              color: colors.white,
+              cursor: pausing ? "default" : "pointer",
+              opacity: pausing ? 0.6 : 1,
+            }}
+          >
+            {paused ? "▶ Resume" : "⏸ Pause"}
+          </button>
+        </div>
 
-        {question && (
-          <>
+        <div style={{ position: "relative" }}>
+          {paused && (
             <div
               style={{
-                background: colors.white,
-                color: colors.textPrimary,
+                position: "absolute",
+                inset: 0,
+                zIndex: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.5rem",
+                background: "rgba(0,0,0,0.55)",
                 borderRadius: radius.card,
-                boxShadow: solidShadow(4, colors.gamesCardShadow),
-                padding: "1.25rem",
-                textAlign: "left",
+                color: colors.white,
               }}
             >
-              <p style={{ fontSize: "1.15rem", fontWeight: 700, margin: 0 }}>
-                {question.prompt || "Question"}
-              </p>
-              {question.mediaType === "audio" && question.mediaContent && (
-                <audio
-                  key={question.id}
-                  src={question.mediaContent}
-                  controls
-                  autoPlay
-                  style={{ width: "100%", marginTop: "0.75rem" }}
-                />
-              )}
-              {question.imageContent && (
-                <img
-                  src={question.imageContent}
-                  alt=""
-                  style={{ maxWidth: "100%", maxHeight: "220px", borderRadius: "8px", marginTop: "0.75rem" }}
-                />
-              )}
+              <span style={{ fontSize: "2rem" }}>⏸</span>
+              <span style={{ fontSize: "1.3rem", fontWeight: 800 }}>Game Paused</span>
             </div>
+          )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
-              {question.options.map((opt, i) => (
-                <div
-                  key={i}
-                  style={{
-                    fontSize: "1rem",
-                    fontWeight: 800,
-                    padding: "1rem",
-                    borderRadius: radius.button,
-                    background: answerColors[i],
-                    boxShadow: solidShadow(4, answerShadowColors[i]),
-                    color: colors.white,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    textAlign: "left",
-                  }}
-                >
-                  <span>{answerShapes[i]}</span>
-                  <span style={{ flex: 1 }}>{opt}</span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+          {question && (
+            <>
+              <div
+                style={{
+                  background: colors.white,
+                  color: colors.textPrimary,
+                  borderRadius: radius.card,
+                  boxShadow: solidShadow(4, colors.gamesCardShadow),
+                  padding: "1.25rem",
+                  textAlign: "left",
+                  marginBottom: "0.75rem",
+                }}
+              >
+                <p style={{ fontSize: "1.15rem", fontWeight: 700, margin: 0 }}>
+                  {question.prompt || "Question"}
+                </p>
+                {question.mediaType === "audio" && question.mediaContent && (
+                  <audio
+                    key={question.id}
+                    src={question.mediaContent}
+                    controls
+                    autoPlay
+                    style={{ width: "100%", marginTop: "0.75rem" }}
+                  />
+                )}
+                {question.imageContent && (
+                  <img
+                    src={question.imageContent}
+                    alt=""
+                    style={{ maxWidth: "100%", maxHeight: "220px", borderRadius: "8px", marginTop: "0.75rem" }}
+                  />
+                )}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+                {question.options.map((opt, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      fontSize: "1rem",
+                      fontWeight: 800,
+                      padding: "1rem",
+                      borderRadius: radius.button,
+                      background: answerColors[i],
+                      boxShadow: solidShadow(4, answerShadowColors[i]),
+                      color: colors.white,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      textAlign: "left",
+                    }}
+                  >
+                    <span>{answerShapes[i]}</span>
+                    <span style={{ flex: 1 }}>{opt}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
 
         <TeamLeaderboard teams={teams} />
         <button
           onClick={handleNextQuestion}
-          disabled={advancing}
+          disabled={advancing || paused}
           style={{
             fontSize: "1rem",
             fontWeight: 800,
@@ -405,8 +485,8 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
             background: colors.greenButton,
             boxShadow: solidShadow(4, colors.greenButtonShadow),
             color: colors.white,
-            cursor: advancing ? "default" : "pointer",
-            opacity: advancing ? 0.6 : 1,
+            cursor: advancing || paused ? "default" : "pointer",
+            opacity: advancing || paused ? 0.6 : 1,
           }}
         >
           {currentQuestionIndex + 1 >= totalQuestions ? "End Game" : "Next Question"}

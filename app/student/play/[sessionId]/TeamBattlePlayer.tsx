@@ -15,7 +15,7 @@ const answerShadowColors = ["#a8112c", "#0d4a8f", "#a67800", "#1f7a0b"];
 const answerShapes = ["▲", "◆", "●", "■"];
 const stageBg = "#1b6b0a";
 
-type SessionStatus = "lobby" | "question" | "reveal" | "leaderboard" | "final";
+type SessionStatus = "lobby" | "question" | "paused" | "reveal" | "leaderboard" | "final";
 
 interface QuestionPayload {
   id: string;
@@ -45,6 +45,7 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   const [finalResults, setFinalResults] = useState<FinalTeam[]>([]);
 
   const answeredIndexRef = useRef<number | null>(null);
+  const fetchedIndexRef = useRef<number | null>(null);
   const supabaseRef = useRef(createBrowserSupabaseClient());
 
   async function loadTeams() {
@@ -89,7 +90,14 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   }, [sessionId]);
 
   useEffect(() => {
-    if (status !== "question" || questionIndex === null) return;
+    // Fires once per question index, regardless of how many times status
+    // subsequently toggles between "question" and "paused" for that same
+    // index — a pause/resume must never re-fetch and reset the timer back
+    // to full time. (A student who loads the page mid-pause still needs
+    // this to run once so the question renders instead of staying blank.)
+    if ((status !== "question" && status !== "paused") || questionIndex === null) return;
+    if (fetchedIndexRef.current === questionIndex) return;
+    fetchedIndexRef.current = questionIndex;
     const alreadyAnswered = answeredIndexRef.current === questionIndex;
     setSelected(null);
     fetch(`/api/student/session/${sessionId}/question`)
@@ -140,7 +148,7 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   }
 
   function handleAnswer(i: number) {
-    if (locked) return;
+    if (locked || status === "paused") return;
     setLocked(true);
     setSelected(i);
     submitAnswer(i);
@@ -185,12 +193,27 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
     );
   }
 
-  // status === "question" (or the unused reveal/leaderboard interstitials,
-  // which the host never sets — see TeamBattleHost.handleNextQuestion)
+  // status === "question" or "paused" (or the unused reveal/leaderboard
+  // interstitials, which the host never sets — see
+  // TeamBattleHost.handleNextQuestion)
+  const paused = status === "paused";
   return (
     <main style={mainStyle(stageBg, colors.white)}>
       <div style={{ width: "100%", maxWidth: "480px", display: "flex", flexDirection: "column", gap: "1rem" }}>
-        {settings.timerEnabled && !locked && (
+        {paused && (
+          <div
+            style={{
+              background: "rgba(255,255,255,0.15)",
+              borderRadius: radius.card,
+              padding: "0.75rem 1rem",
+              fontWeight: 800,
+            }}
+          >
+            ⏸ Game Paused — waiting for teacher
+          </div>
+        )}
+
+        {settings.timerEnabled && !locked && !paused && (
           <span
             style={{
               alignSelf: "center",
@@ -236,7 +259,7 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
               <button
                 key={i}
                 onClick={() => handleAnswer(i)}
-                disabled={locked}
+                disabled={locked || paused}
                 style={{
                   fontSize: "1rem",
                   fontWeight: 800,
@@ -246,8 +269,8 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
                   background: answerColors[i],
                   boxShadow: solidShadow(4, answerShadowColors[i]),
                   color: colors.white,
-                  cursor: locked ? "default" : "pointer",
-                  opacity: locked && selected !== i ? 0.5 : 1,
+                  cursor: locked || paused ? "default" : "pointer",
+                  opacity: (locked && selected !== i) || paused ? 0.5 : 1,
                   display: "flex",
                   alignItems: "center",
                   gap: "0.5rem",
