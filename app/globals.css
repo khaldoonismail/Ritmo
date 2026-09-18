@@ -158,6 +158,24 @@ input[type="checkbox"] {
   min-width: 0;
 }
 
+/* Shared Back button (components/teacher/BackButton.tsx), rendered once by
+   TeacherShell above every wrapped page's own content. */
+.teacher-back-bar {
+  padding: 1rem 1rem 0;
+}
+
+.teacher-back-button:hover {
+  background: #fff3df !important;
+}
+
+@media (max-width: 420px) {
+  /* Icon-only once space is tight — the button keeps its aria-label/title
+     for accessibility and as a native tooltip. */
+  .teacher-back-button-label {
+    display: none;
+  }
+}
+
 /* Collapsed (icon-only) desktop state — scoped to desktop widths only, so
    its higher selector specificity can never win over the mobile layout
    rules below at narrow widths. */
