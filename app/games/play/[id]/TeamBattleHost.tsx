@@ -499,8 +499,9 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
                   padding: "0.4rem 0.7rem",
                   borderRadius: radius.pill,
                   border: "none",
-                  background: "rgba(255,255,255,0.15)",
-                  color: colors.white,
+                  background: colors.white,
+                  boxShadow: solidShadow(3, colors.gamesCardShadow),
+                  color: colors.textPrimary,
                   cursor: addingTime || skipping ? "default" : "pointer",
                   opacity: addingTime || skipping ? 0.6 : 1,
                 }}
@@ -517,14 +518,19 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
                 padding: "0.4rem 0.9rem",
                 borderRadius: radius.pill,
                 border: "none",
-                background: "rgba(255,255,255,0.15)",
-                color: colors.white,
+                background: colors.white,
+                boxShadow: solidShadow(3, colors.gamesCardShadow),
+                color: colors.textPrimary,
                 cursor: pausing || skipping ? "default" : "pointer",
                 opacity: pausing || skipping ? 0.6 : 1,
               }}
             >
               {paused ? "▶ Resume" : "⏸ Pause"}
             </button>
+            {/* Danger-styled (matches the "Delete" button convention in
+                app/games/teacher/library/page.tsx) since it's the one
+                control here that discards data — everyone's answers and
+                points for the current question. */}
             <button
               onClick={handleSkipQuestion}
               disabled={advancing || skipping}
@@ -534,7 +540,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
                 padding: "0.4rem 0.9rem",
                 borderRadius: radius.pill,
                 border: "none",
-                background: "rgba(255,255,255,0.15)",
+                background: colors.coralText,
                 color: colors.white,
                 cursor: advancing || skipping ? "default" : "pointer",
                 opacity: advancing || skipping ? 0.6 : 1,
