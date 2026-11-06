@@ -140,6 +140,8 @@ function GameCoverThumb({ title, coverImage }: { title: string; coverImage: stri
   );
 }
 
+const LOAD_TIMEOUT_MS = 15000;
+
 export default function GamesLibraryPage() {
   const router = useRouter();
   const [myTeacherId, setMyTeacherId] = useState<string | null>(null);
@@ -157,14 +159,31 @@ export default function GamesLibraryPage() {
   const [rateError, setRateError] = useState("");
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  // Bumped by "Try again" to re-run the load effect.
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
+    let cancelled = false;
+    let timedOut = false;
+
+    setLoadError("");
+    setMyGames(null);
+    setCommunityGames(null);
+
+    // A thrown error or a request that never settles would otherwise leave
+    // both sections on "Loading..." forever.
+    const timeoutId = setTimeout(() => {
+      if (cancelled) return;
+      timedOut = true;
+      setLoadError("Loading is taking longer than expected. Check your connection and try again.");
+    }, LOAD_TIMEOUT_MS);
 
     async function load() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
+      if (cancelled) return;
 
       if (!session) {
         router.push("/accounts/login");
@@ -176,6 +195,7 @@ export default function GamesLibraryPage() {
         .select("id")
         .eq("auth_user_id", session.user.id)
         .maybeSingle();
+      if (cancelled) return;
 
       if (!teacherRow) {
         setLoadError("Could not load your teacher account.");
@@ -201,12 +221,16 @@ export default function GamesLibraryPage() {
         .eq("is_public", true)
         .neq("teacher_id", teacherRow.id)
         .order("created_at", { ascending: false });
+      if (cancelled) return;
 
       if (communityError) {
         setLoadError(communityError.message);
       } else {
         setCommunityGames((community as unknown as CommunityGame[]) || []);
       }
+
+      // Both lists arrived after the timeout message went up — drop it.
+      if (timedOut && !mineError && !communityError) setLoadError("");
 
       const allIds = [
         ...(mine || []).map((g) => g.id),
@@ -250,8 +274,18 @@ export default function GamesLibraryPage() {
       }
     }
 
-    load();
-  }, [router]);
+    load()
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setLoadError(err instanceof Error ? err.message : "Something went wrong while loading the library.");
+      })
+      .finally(() => clearTimeout(timeoutId));
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [router, loadAttempt]);
 
   async function rateGame(gameId: string, rating: number) {
     if (!myTeacherId) return;
@@ -421,7 +455,16 @@ export default function GamesLibraryPage() {
         Host a demo round of any game you own or copy from the community
       </p>
 
-      {loadError && <p style={{ color: colors.coralText, fontSize: "0.9rem", fontWeight: 600 }}>{loadError}</p>}
+      {loadError && (
+        <div role="alert" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+          <p style={{ color: colors.coralText, fontSize: "0.9rem", fontWeight: 600, margin: 0, textAlign: "center" }}>
+            Couldn&apos;t load the Games Library: {loadError}
+          </p>
+          <button onClick={() => setLoadAttempt((n) => n + 1)} style={primaryButtonStyle}>
+            Try again
+          </button>
+        </div>
+      )}
 
       <Link
         href="/games/teacher/create-game"
