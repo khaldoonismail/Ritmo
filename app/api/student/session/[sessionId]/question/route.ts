@@ -15,7 +15,10 @@ interface QuestionShape {
 
 // Returns the current question for a Team Battle round, with correctIndex
 // stripped so a student's browser never sees the answer key — grading
-// happens server-side in the answer route below.
+// happens server-side in the answer route below. Once the host moves the
+// session to "reveal", the correct option and this student's own result are
+// included too. serverNow lets the browser correct for its own clock skew
+// when it displays the server-anchored countdown (lib/teamBattleTiming.ts).
 export async function GET(request: NextRequest, { params }: { params: { sessionId: string } }) {
   const token = cookies().get(STUDENT_SESSION_COOKIE)?.value;
   const session = token ? await verifyStudentSessionToken(token) : null;
@@ -51,7 +54,29 @@ export async function GET(request: NextRequest, { params }: { params: { sessionI
     return NextResponse.json({ error: "No question available" }, { status: 404 });
   }
 
+  let reveal: {
+    correctIndex: number;
+    myAnswer: { selectedIndex: number | null; correct: boolean; points: number } | null;
+  } | null = null;
+  if (gameSession.status === "reveal") {
+    const { data: answer } = await supabase
+      .from("game_answers")
+      .select("selected_index, is_correct, points_earned")
+      .eq("session_id", gameSession.id)
+      .eq("participant_id", participant.id)
+      .eq("question_index", gameSession.current_question_index)
+      .maybeSingle();
+    reveal = {
+      correctIndex: q.correctIndex,
+      myAnswer: answer
+        ? { selectedIndex: answer.selected_index, correct: answer.is_correct, points: answer.points_earned }
+        : null,
+    };
+  }
+
   return NextResponse.json({
+    serverNow: new Date().toISOString(),
+    reveal,
     status: gameSession.status,
     questionIndex: gameSession.current_question_index,
     question: {

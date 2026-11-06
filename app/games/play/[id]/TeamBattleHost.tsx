@@ -8,6 +8,7 @@ import { colors, radius, solidShadow } from "@/lib/theme";
 import { shadowForColor } from "@/lib/teamColors";
 import TeamLeaderboard, { LeaderboardTeam } from "@/components/TeamLeaderboard";
 import TeamSetup, { TeamSetupConfig } from "./TeamSetup";
+import { displaySecondsLeft, timingFromSessionRow, type QuestionTiming } from "@/lib/teamBattleTiming";
 
 interface Question {
   id: string;
@@ -16,6 +17,7 @@ interface Question {
   mediaContent: string;
   imageContent?: string;
   options: string[];
+  correctIndex: number;
 }
 
 interface Game {
@@ -42,6 +44,25 @@ interface Participant {
 
 type HostStage = "setup" | "waiting" | "live" | "final";
 
+// An unfinished Team Battle session for this game, found on load so a host
+// who reloaded or closed the tab can pick it back up (or end it).
+interface ResumableSession {
+  id: string;
+  pin: string;
+  status: string;
+  current_question_index: number;
+  settings: { timerEnabled?: boolean; timeLimitSeconds?: number } | null;
+}
+
+interface RevealStats {
+  answered: number;
+  correct: number;
+  perOption: number[];
+}
+
+const SESSION_TIMING_COLUMNS =
+  "status, current_question_index, time_extension_seconds, question_started_at, paused_at, paused_seconds";
+
 // Host-side state machine for a real, multi-device Team Battle session.
 // Fully separate from the Individual "Play Demo" stage machine in
 // page.tsx — nothing here is shared with or affects that code path.
@@ -60,10 +81,20 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   const [pausing, setPausing] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const [addingTime, setAddingTime] = useState(false);
+  const [revealing, setRevealing] = useState(false);
+  const [revealStats, setRevealStats] = useState<RevealStats | null>(null);
+  const [ending, setEnding] = useState(false);
+  const [resumable, setResumable] = useState<ResumableSession | null>(null);
   const [settings, setSettings] = useState({ timerEnabled: true, timeLimitSeconds: 20 });
-  const [extensionSeconds, setExtensionSeconds] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(0);
+  // The current question's server-anchored clock (lib/teamBattleTiming.ts),
+  // refreshed from game_sessions after every host action.
+  const [timing, setTiming] = useState<QuestionTiming | null>(null);
+  // Database time minus this device's time, from the RPCs' returned now().
+  const [clockOffsetMs, setClockOffsetMs] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const totalQuestions = game.questions.length;
+  const extensionSeconds = timing?.extensionSeconds ?? 0;
+  const timeLeft = timing ? displaySecondsLeft(timing, nowMs + clockOffsetMs) : 0;
 
   // Memoized rather than recreated per render — a fresh client each render
   // gave its Realtime channel its own new websocket/auth handshake, which
@@ -93,6 +124,153 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     setTeams(data || []);
   }
 
+  // Re-reads the session's status, question and clock — the single source
+  // of truth for the live screen, so a reload lands on the same state.
+  async function refreshSession(sid: string, timeLimitSeconds: number) {
+    const { data } = await supabase.from("game_sessions").select(SESSION_TIMING_COLUMNS).eq("id", sid).maybeSingle();
+    if (!data) return null;
+    setCurrentQuestionIndex(data.current_question_index);
+    setPaused(data.status === "paused");
+    setRevealing(data.status === "reveal");
+    setTiming(timingFromSessionRow(data, timeLimitSeconds));
+    return data;
+  }
+
+  function syncClock(serverNow: string | null) {
+    if (serverNow) setClockOffsetMs(Date.parse(serverNow) - Date.now());
+  }
+
+  async function loadRevealStats(sid: string, questionIndex: number) {
+    const { data } = await supabase
+      .from("game_answers")
+      .select("selected_index, is_correct")
+      .eq("session_id", sid)
+      .eq("question_index", questionIndex);
+    const perOption = [0, 0, 0, 0];
+    let correct = 0;
+    for (const a of data || []) {
+      if (a.selected_index !== null && a.selected_index >= 0 && a.selected_index < perOption.length) {
+        perOption[a.selected_index] += 1;
+      }
+      if (a.is_correct) correct += 1;
+    }
+    setRevealStats({ answered: (data || []).length, correct, perOption });
+  }
+
+  // Looks for this teacher's unfinished Team Battle session for this game.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data: teacherRow } = await supabase
+        .from("teachers")
+        .select("id")
+        .eq("auth_user_id", session.user.id)
+        .maybeSingle();
+      if (!teacherRow) return;
+      const { data } = await supabase
+        .from("game_sessions")
+        .select("id, pin, status, current_question_index, settings")
+        .eq("game_id", game.id)
+        .eq("teacher_id", teacherRow.id)
+        .eq("play_mode", "team_battle")
+        .neq("status", "final")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!cancelled && data) setResumable(data as ResumableSession);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.id]);
+
+  async function handleResume(row: ResumableSession) {
+    setError("");
+    const resumedSettings = {
+      timerEnabled: row.settings?.timerEnabled ?? true,
+      timeLimitSeconds: row.settings?.timeLimitSeconds ?? 20,
+    };
+    setSessionId(row.id);
+    setPin(row.pin);
+    setSettings(resumedSettings);
+    await Promise.all([loadTeams(row.id), loadRoster(row.id)]);
+    const current = await refreshSession(row.id, resumedSettings.timeLimitSeconds);
+    if (!current) {
+      setError("That game could not be loaded.");
+      return;
+    }
+    setResumable(null);
+    if (current.status === "lobby") {
+      setStage("waiting");
+    } else if (current.status === "final") {
+      setStage("final");
+    } else {
+      if (current.status === "reveal") await loadRevealStats(row.id, current.current_question_index);
+      setStage("live");
+    }
+  }
+
+  // Ends the session for everyone: students land on Final Results, and the
+  // PIN is freed for reuse (game_sessions_active_pin_idx ignores 'final').
+  async function endSession(sid: string) {
+    const { error: endError } = await supabase
+      .from("game_sessions")
+      .update({ status: "final", ended_at: new Date().toISOString() })
+      .eq("id", sid);
+    if (endError) throw new Error(endError.message);
+  }
+
+  async function handleEndGame() {
+    if (ending) return;
+    if (!window.confirm("End this game for everyone now? Scores so far will be kept as the final results.")) return;
+    setEnding(true);
+    try {
+      await endSession(sessionId);
+      setError("");
+      await Promise.all([loadTeams(sessionId), loadRoster(sessionId)]);
+      setStage("final");
+    } catch (e: any) {
+      setError(e.message || "Could not end the game");
+    } finally {
+      setEnding(false);
+    }
+  }
+
+  async function handleDiscardResumable(row: ResumableSession) {
+    if (!window.confirm(`End the unfinished game (PIN ${row.pin}) for everyone?`)) return;
+    try {
+      await endSession(row.id);
+      setResumable(null);
+    } catch (e: any) {
+      setError(e.message || "Could not end that game");
+    }
+  }
+
+  // Starts question `index` via the server-stamped RPC, or ends the game
+  // once past the last question.
+  async function goToQuestion(index: number) {
+    if (index >= totalQuestions) {
+      await endSession(sessionId);
+      await loadRoster(sessionId);
+      await loadTeams(sessionId);
+      setStage("final");
+      return;
+    }
+    const { data: serverNow, error: startError } = await supabase.rpc("team_battle_start_question", {
+      p_session_id: sessionId,
+      p_question_index: index,
+    });
+    if (startError) throw new Error(startError.message);
+    syncClock(serverNow as string | null);
+    setRevealStats(null);
+    await refreshSession(sessionId, settings.timeLimitSeconds);
+  }
+
   useEffect(() => {
     if (!sessionId) return;
     if (stage === "waiting") {
@@ -114,18 +292,14 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, stage]);
 
-  // Host-side countdown display — a local mirror of the same per-client,
-  // independent countdown TeamBattlePlayer runs for each student (no
-  // server-anchored clock exists; see that file's timer effect). It's
-  // purely a display for the teacher's own screen: it never drives
-  // advancing the question or locking answers, which stay entirely
-  // student- and teacher-button-driven.
+  // Host-side countdown display, derived from the same server-anchored
+  // clock the answer route grades by. Purely a display: it never advances
+  // the question or locks answers.
   useEffect(() => {
-    if (stage !== "live" || !settings.timerEnabled || paused) return;
-    if (timeLeft <= 0) return;
-    const t = setTimeout(() => setTimeLeft((v) => v - 1), 1000);
-    return () => clearTimeout(t);
-  }, [stage, timeLeft, settings.timerEnabled, paused]);
+    if (stage !== "live" || !settings.timerEnabled || paused || revealing) return;
+    const id = setInterval(() => setNowMs(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [stage, settings.timerEnabled, paused, revealing]);
 
   async function handleStart(config: TeamSetupConfig) {
     setStarting(true);
@@ -196,16 +370,40 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   }
 
   async function handleStartGame() {
-    await supabase
-      .from("game_sessions")
-      .update({ status: "question", current_question_index: 0, time_extension_seconds: 0 })
-      .eq("id", sessionId);
-    setCurrentQuestionIndex(0);
-    setPaused(false);
-    setExtensionSeconds(0);
-    setTimeLeft(settings.timerEnabled ? settings.timeLimitSeconds : 0);
-    await loadTeams(sessionId);
-    setStage("live");
+    if (advancing) return;
+    setAdvancing(true);
+    try {
+      await goToQuestion(0);
+      setError("");
+      await loadTeams(sessionId);
+      setStage("live");
+    } catch (e: any) {
+      setError(e.message || "Could not start the game");
+    } finally {
+      setAdvancing(false);
+    }
+  }
+
+  // Closes answering for the current question and shows everyone the
+  // correct option, before the teacher moves on.
+  async function handleReveal() {
+    if (advancing || skipping || revealing) return;
+    setAdvancing(true);
+    try {
+      const { error: revealError } = await supabase
+        .from("game_sessions")
+        .update({ status: "reveal" })
+        .eq("id", sessionId)
+        .in("status", ["question", "paused"]);
+      if (revealError) throw new Error(revealError.message);
+      setError("");
+      await refreshSession(sessionId, settings.timeLimitSeconds);
+      await Promise.all([loadRevealStats(sessionId, currentQuestionIndex), loadTeams(sessionId)]);
+    } catch (e: any) {
+      setError(e.message || "Could not show the answer");
+    } finally {
+      setAdvancing(false);
+    }
   }
 
   async function handleNextQuestion() {
@@ -218,20 +416,10 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     if (advancing || paused || skipping) return;
     setAdvancing(true);
     try {
-      const next = currentQuestionIndex + 1;
-      if (next >= totalQuestions) {
-        await supabase.from("game_sessions").update({ status: "final" }).eq("id", sessionId);
-        await loadRoster(sessionId);
-        setStage("final");
-        return;
-      }
-      await supabase
-        .from("game_sessions")
-        .update({ current_question_index: next, time_extension_seconds: 0 })
-        .eq("id", sessionId);
-      setCurrentQuestionIndex(next);
-      setExtensionSeconds(0);
-      setTimeLeft(settings.timerEnabled ? settings.timeLimitSeconds : 0);
+      await goToQuestion(currentQuestionIndex + 1);
+      setError("");
+    } catch (e: any) {
+      setError(e.message || "Could not move to the next question");
     } finally {
       setAdvancing(false);
     }
@@ -259,34 +447,18 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
       }
       setError("");
       await loadTeams(sessionId);
-
-      const next = currentQuestionIndex + 1;
-      if (next >= totalQuestions) {
-        await supabase.from("game_sessions").update({ status: "final" }).eq("id", sessionId);
-        await loadRoster(sessionId);
-        setStage("final");
-        return;
-      }
-      await supabase
-        .from("game_sessions")
-        .update({ current_question_index: next, time_extension_seconds: 0, status: "question" })
-        .eq("id", sessionId);
-      setCurrentQuestionIndex(next);
-      setPaused(false);
-      setExtensionSeconds(0);
-      setTimeLeft(settings.timerEnabled ? settings.timeLimitSeconds : 0);
+      await goToQuestion(currentQuestionIndex + 1);
+    } catch (e: any) {
+      setError(e.message || "Could not skip this question");
     } finally {
       setSkipping(false);
     }
   }
 
-  // Adds extra time to the current question. Just a number going up, so it
-  // works the same whether the question is running or paused — pausing
-  // only stops timeLeft from ticking, it doesn't stop it from being added
-  // to. Propagates to every student the same way pause does: they're
-  // already subscribed to this row, and add the same delta onto their own
-  // local timeLeft the moment they see time_extension_seconds increase
-  // (see TeamBattlePlayer).
+  // Adds extra time to the current question. Just a number going up on the
+  // session row, so it works the same whether the question is running or
+  // paused; every device's countdown (and the answer route's grading)
+  // derives from that row, so it applies everywhere at once.
   async function handleAddTime(seconds: number) {
     if (addingTime) return;
     setAddingTime(true);
@@ -301,30 +473,25 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
         return;
       }
       setError("");
-      setExtensionSeconds(nextExtension);
-      setTimeLeft((v) => v + seconds);
+      await refreshSession(sessionId, settings.timeLimitSeconds);
     } finally {
       setAddingTime(false);
     }
   }
 
-  // Toggles the round between "question" and "paused" in game_sessions —
-  // current_question_index is never touched, so resuming lands back on the
-  // exact same question. Each connected device (this host and every
-  // student in TeamBattlePlayer) freezes its own already-ticking local
-  // countdown the moment it sees status leave "question", and simply
-  // continues it from wherever it was once status returns to "question" —
-  // see TeamBattlePlayer's question-fetch effect, which is keyed on
-  // questionIndex alone so it doesn't refetch/reset the timer on this flip.
+  // Toggles the round between "question" and "paused" via
+  // team_battle_set_paused, which stamps the pause with the database clock
+  // and, on resume, adds the paused stretch to paused_seconds — so the
+  // server-anchored countdown on every device freezes and resumes in step,
+  // and paused time never counts against anyone's speed bonus.
   async function togglePause() {
-    if (pausing || skipping) return;
+    if (pausing || skipping || revealing) return;
     setPausing(true);
     try {
-      const nextPaused = !paused;
-      const { error: pauseError } = await supabase
-        .from("game_sessions")
-        .update({ status: nextPaused ? "paused" : "question" })
-        .eq("id", sessionId);
+      const { data: serverNow, error: pauseError } = await supabase.rpc("team_battle_set_paused", {
+        p_session_id: sessionId,
+        p_paused: !paused,
+      });
       // Only flip the host's own local state once the write actually
       // lands — otherwise a failed update (e.g. a network blip) would show
       // "Game Paused" here while every student's screen stays live.
@@ -332,17 +499,70 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
         setError(pauseError.message || "Could not update the game's pause state");
       } else {
         setError("");
-        setPaused(nextPaused);
+        syncClock(serverNow as string | null);
+        await refreshSession(sessionId, settings.timeLimitSeconds);
       }
     } finally {
       setPausing(false);
     }
   }
 
+  const secondaryButtonStyle: React.CSSProperties = {
+    fontSize: "0.85rem",
+    fontWeight: 700,
+    padding: "0.5rem 1rem",
+    borderRadius: radius.pill,
+    border: `1px solid ${colors.rosterCardShadow}`,
+    background: colors.white,
+    color: colors.textPrimary,
+    cursor: "pointer",
+  };
+
   if (stage === "setup") {
     return (
       <>
         {error && <p style={{ color: colors.coralText, fontWeight: 700 }}>{error}</p>}
+        {resumable && (
+          <div
+            role="status"
+            style={{
+              width: "100%",
+              maxWidth: "560px",
+              background: colors.blueBackground,
+              color: colors.blueText,
+              borderRadius: radius.card,
+              boxShadow: solidShadow(4, colors.gamesCardShadow),
+              padding: "1rem 1.25rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.6rem",
+              textAlign: "left",
+            }}
+          >
+            <span style={{ fontWeight: 800 }}>
+              You have an unfinished Team Battle for this game (PIN {resumable.pin}
+              {resumable.status === "lobby" ? ", still in the lobby" : `, question ${resumable.current_question_index + 1}`}).
+            </span>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button
+                onClick={() => handleResume(resumable)}
+                style={{
+                  ...secondaryButtonStyle,
+                  border: "none",
+                  background: colors.greenButton,
+                  boxShadow: solidShadow(3, colors.greenButtonShadow),
+                  color: colors.white,
+                  fontWeight: 800,
+                }}
+              >
+                Resume game
+              </button>
+              <button onClick={() => handleDiscardResumable(resumable)} style={secondaryButtonStyle}>
+                End it
+              </button>
+            </div>
+          </div>
+        )}
         <TeamSetup onStart={handleStart} starting={starting} />
       </>
     );
@@ -357,6 +577,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     }
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
+        {error && <p style={{ color: colors.coralText, fontWeight: 700, margin: 0 }}>{error}</p>}
         <p style={{ fontSize: "1rem", fontWeight: 700, opacity: 0.7, margin: 0 }}>Game PIN</p>
         <div
           style={{
@@ -440,6 +661,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
 
         <button
           onClick={handleStartGame}
+          disabled={advancing}
           style={{
             fontSize: "1.1rem",
             fontWeight: 800,
@@ -449,10 +671,14 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
             background: colors.greenButton,
             boxShadow: solidShadow(5, colors.greenButtonShadow),
             color: colors.white,
-            cursor: "pointer",
+            cursor: advancing ? "default" : "pointer",
+            opacity: advancing ? 0.6 : 1,
           }}
         >
           Start Game
+        </button>
+        <button onClick={handleEndGame} disabled={ending} style={secondaryButtonStyle}>
+          End game
         </button>
       </div>
     );
@@ -474,7 +700,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
               advancing/pausing/skipping/addingTime in-flight flags so two
               can't race against each other. */}
           <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-            {settings.timerEnabled && (
+            {settings.timerEnabled && !revealing && (
               <span
                 style={{
                   fontSize: "0.95rem",
@@ -486,10 +712,10 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
                   borderRadius: radius.pill,
                 }}
               >
-                {timeLeft}s
+                {timeLeft > 0 ? `${timeLeft}s` : "Time's up"}
               </span>
             )}
-            {settings.timerEnabled && (
+            {settings.timerEnabled && !revealing && (
               <button
                 onClick={() => handleAddTime(15)}
                 disabled={addingTime || skipping}
@@ -509,45 +735,49 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
                 +15s
               </button>
             )}
-            <button
-              onClick={togglePause}
-              disabled={pausing || skipping}
-              style={{
-                fontSize: "0.85rem",
-                fontWeight: 700,
-                padding: "0.4rem 0.9rem",
-                borderRadius: radius.pill,
-                border: "none",
-                background: colors.white,
-                boxShadow: solidShadow(3, colors.gamesCardShadow),
-                color: colors.textPrimary,
-                cursor: pausing || skipping ? "default" : "pointer",
-                opacity: pausing || skipping ? 0.6 : 1,
-              }}
-            >
-              {paused ? "▶ Resume" : "⏸ Pause"}
-            </button>
+            {!revealing && (
+              <button
+                onClick={togglePause}
+                disabled={pausing || skipping}
+                style={{
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  padding: "0.4rem 0.9rem",
+                  borderRadius: radius.pill,
+                  border: "none",
+                  background: colors.white,
+                  boxShadow: solidShadow(3, colors.gamesCardShadow),
+                  color: colors.textPrimary,
+                  cursor: pausing || skipping ? "default" : "pointer",
+                  opacity: pausing || skipping ? 0.6 : 1,
+                }}
+              >
+                {paused ? "▶ Resume" : "⏸ Pause"}
+              </button>
+            )}
             {/* Danger-styled (matches the "Delete" button convention in
                 app/games/teacher/library/page.tsx) since it's the one
                 control here that discards data — everyone's answers and
                 points for the current question. */}
-            <button
-              onClick={handleSkipQuestion}
-              disabled={advancing || skipping}
-              style={{
-                fontSize: "0.85rem",
-                fontWeight: 700,
-                padding: "0.4rem 0.9rem",
-                borderRadius: radius.pill,
-                border: "none",
-                background: colors.coralText,
-                color: colors.white,
-                cursor: advancing || skipping ? "default" : "pointer",
-                opacity: advancing || skipping ? 0.6 : 1,
-              }}
-            >
-              ⏭ Skip
-            </button>
+            {!revealing && (
+              <button
+                onClick={handleSkipQuestion}
+                disabled={advancing || skipping}
+                style={{
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  padding: "0.4rem 0.9rem",
+                  borderRadius: radius.pill,
+                  border: "none",
+                  background: colors.coralText,
+                  color: colors.white,
+                  cursor: advancing || skipping ? "default" : "pointer",
+                  opacity: advancing || skipping ? 0.6 : 1,
+                }}
+              >
+                ⏭ Skip
+              </button>
+            )}
           </div>
         </div>
 
@@ -612,6 +842,9 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
                   <div
                     key={i}
                     style={{
+                      opacity: revealing && i !== question.correctIndex ? 0.35 : 1,
+                      outline: revealing && i === question.correctIndex ? `4px solid ${colors.textPrimary}` : "none",
+                      outlineOffset: "3px",
                       fontSize: "1rem",
                       fontWeight: 800,
                       padding: "1rem",
@@ -627,17 +860,28 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
                   >
                     <span>{answerShapes[i]}</span>
                     <span style={{ flex: 1 }}>{opt}</span>
+                    {revealing && (
+                      <span style={{ fontSize: "0.85rem" }}>
+                        {i === question.correctIndex ? "✓ " : ""}
+                        {revealStats?.perOption[i] ?? 0}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
+              {revealing && revealStats && (
+                <p style={{ fontWeight: 700, margin: "0.75rem 0 0", textAlign: "center" }}>
+                  {revealStats.correct} of {revealStats.answered} answered correctly
+                </p>
+              )}
             </>
           )}
         </div>
 
         <TeamLeaderboard teams={teams} />
         <button
-          onClick={handleNextQuestion}
-          disabled={advancing || paused || skipping}
+          onClick={revealing ? handleNextQuestion : handleReveal}
+          disabled={advancing || (revealing && paused) || skipping}
           style={{
             fontSize: "1rem",
             fontWeight: 800,
@@ -647,11 +891,14 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
             background: colors.greenButton,
             boxShadow: solidShadow(4, colors.greenButtonShadow),
             color: colors.white,
-            cursor: advancing || paused || skipping ? "default" : "pointer",
-            opacity: advancing || paused || skipping ? 0.6 : 1,
+            cursor: advancing || skipping ? "default" : "pointer",
+            opacity: advancing || skipping ? 0.6 : 1,
           }}
         >
-          {currentQuestionIndex + 1 >= totalQuestions ? "End Game" : "Next Question"}
+          {!revealing ? "Show Answer" : currentQuestionIndex + 1 >= totalQuestions ? "See Final Results" : "Next Question"}
+        </button>
+        <button onClick={handleEndGame} disabled={ending} style={{ ...secondaryButtonStyle, alignSelf: "center" }}>
+          End game now
         </button>
       </div>
     );

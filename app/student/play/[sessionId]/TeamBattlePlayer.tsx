@@ -5,6 +5,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { subscribeToTable } from "@/lib/supabase/realtime";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import TeamLeaderboard, { LeaderboardTeam } from "@/components/TeamLeaderboard";
+import { displaySecondsLeft, secondsLeft, timingFromSessionRow } from "@/lib/teamBattleTiming";
 
 // Small local copies of page.tsx's Kahoot-style answer-tile constants — kept
 // separate rather than shared, so the existing single-device Play Demo file
@@ -26,35 +27,48 @@ interface QuestionPayload {
   options: string[];
 }
 
+interface RevealPayload {
+  correctIndex: number;
+  myAnswer: { selectedIndex: number | null; correct: boolean; points: number } | null;
+}
+
+interface SessionRow {
+  status: SessionStatus;
+  current_question_index: number;
+  time_extension_seconds: number;
+  question_started_at: string | null;
+  paused_at: string | null;
+  paused_seconds: number | string;
+}
+
 interface FinalTeam extends LeaderboardTeam {
   topScorer: { name: string; score: number } | null;
 }
 
 export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
-  const [status, setStatus] = useState<SessionStatus>("lobby");
-  const [questionIndex, setQuestionIndex] = useState<number | null>(null);
+  const [sessionRow, setSessionRow] = useState<SessionRow | null>(null);
   const [question, setQuestion] = useState<QuestionPayload | null>(null);
+  const [reveal, setReveal] = useState<RevealPayload | null>(null);
   const [settings, setSettings] = useState<{ timerEnabled?: boolean; timeLimitSeconds?: number }>({});
   const [teams, setTeams] = useState<LeaderboardTeam[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
-  // Starts locked so the timeout effect can't fire on a stale timeLeft=0
-  // before the freshly-fetched question's real timer value lands (see the
-  // question-fetch effect below, which unlocks only once that value is set).
+  // Starts locked so the timeout effect can't fire before the current
+  // question (and its timer settings) has actually loaded.
   const [locked, setLocked] = useState(true);
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [extensionSeconds, setExtensionSeconds] = useState(0);
+  // Server time minus this device's time, from the question route's
+  // serverNow — so the countdown matches the clock the server grades by.
+  const [clockOffsetMs, setClockOffsetMs] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [finalResults, setFinalResults] = useState<FinalTeam[]>([]);
 
   const answeredIndexRef = useRef<number | null>(null);
   const fetchedIndexRef = useRef<number | null>(null);
-  // Always holds the latest DB value, read synchronously by the fetch
-  // effect below — unlike the `extensionSeconds` state, which only updates
-  // after a render and so could still read stale inside that same effect.
-  const extensionSecondsRef = useRef(0);
-  // How much of extensionSeconds is already baked into the current
-  // timeLeft, so the delta-effect only ever adds what's new.
-  const appliedExtensionRef = useRef(0);
   const supabaseRef = useRef(createBrowserSupabaseClient());
+
+  const status: SessionStatus = sessionRow?.status ?? "lobby";
+  const questionIndex = sessionRow ? sessionRow.current_question_index : null;
+  const timing = sessionRow ? timingFromSessionRow(sessionRow, settings.timeLimitSeconds || 20) : null;
+  const timeLeft = timing ? displaySecondsLeft(timing, nowMs + clockOffsetMs) : 0;
 
   async function loadTeams() {
     const { data } = await supabaseRef.current
@@ -67,15 +81,10 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   async function loadSessionState() {
     const { data } = await supabaseRef.current
       .from("game_sessions")
-      .select("status, current_question_index, time_extension_seconds")
+      .select("status, current_question_index, time_extension_seconds, question_started_at, paused_at, paused_seconds")
       .eq("id", sessionId)
       .maybeSingle();
-    if (data) {
-      setStatus(data.status);
-      setQuestionIndex(data.current_question_index);
-      extensionSecondsRef.current = data.time_extension_seconds ?? 0;
-      setExtensionSeconds(data.time_extension_seconds ?? 0);
-    }
+    if (data) setSessionRow(data as SessionRow);
   }
 
   useEffect(() => {
@@ -100,54 +109,34 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   }, [sessionId]);
 
   useEffect(() => {
-    // Fires once per question index, regardless of how many times status
-    // subsequently toggles between "question" and "paused" for that same
-    // index — a pause/resume must never re-fetch and reset the timer back
-    // to full time. (A student who loads the page mid-pause still needs
-    // this to run once so the question renders instead of staying blank.)
-    if ((status !== "question" && status !== "paused") || questionIndex === null) return;
-    if (fetchedIndexRef.current === questionIndex) return;
+    // Fetches each question once — a pause/resume for the same index needs
+    // no refetch, since the countdown is derived from the session row
+    // rather than kept locally. The one exception is the switch to
+    // "reveal", which refetches to get the correct answer and this
+    // student's own result.
+    if ((status !== "question" && status !== "paused" && status !== "reveal") || questionIndex === null) return;
+    const isNewIndex = fetchedIndexRef.current !== questionIndex;
+    if (!isNewIndex && status !== "reveal") return;
     fetchedIndexRef.current = questionIndex;
-    // Captured now, synchronously, rather than re-read inside the .then()
-    // below — otherwise a +15s landing during the fetch's round trip could
-    // race the delta-effect (further down) into double- or zero-counting
-    // it, since that effect diffs against appliedExtensionRef.
-    const extensionAtFetch = extensionSecondsRef.current;
-    appliedExtensionRef.current = extensionAtFetch;
+    if (isNewIndex) {
+      setSelected(null);
+      setReveal(null);
+      setLocked(true);
+    }
     const alreadyAnswered = answeredIndexRef.current === questionIndex;
-    setSelected(null);
     fetch(`/api/student/session/${sessionId}/question`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.question) {
-          setQuestion(data.question);
-          setSettings(data.settings || {});
-          if (!alreadyAnswered) {
-            setTimeLeft(
-              data.settings?.timerEnabled ? (data.settings.timeLimitSeconds || 20) + extensionAtFetch : 0
-            );
-          }
-          // Unlock only once timeLeft carries its real value (or locked
-          // stays true for an already-answered question) — batched with the
-          // timeLeft update above so the timer effect never sees a stale 0.
-          setLocked(alreadyAnswered);
-        }
+        if (!data.question || data.questionIndex !== questionIndex) return;
+        setQuestion(data.question);
+        setSettings(data.settings || {});
+        if (data.serverNow) setClockOffsetMs(Date.parse(data.serverNow) - Date.now());
+        setReveal(data.reveal ?? null);
+        if (data.reveal?.myAnswer) setSelected(data.reveal.myAnswer.selectedIndex);
+        setLocked(alreadyAnswered || !!data.reveal);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, questionIndex]);
-
-  // Applies extra time the teacher grants mid-question. Only reacts to
-  // increases beyond what the fetch effect above already baked into
-  // timeLeft (appliedExtensionRef) — works the same whether the countdown
-  // is currently running or frozen by a pause, since this only ever adds
-  // to the number, never restarts the effect that ticks it down.
-  useEffect(() => {
-    if (fetchedIndexRef.current !== questionIndex) return;
-    const delta = extensionSeconds - appliedExtensionRef.current;
-    if (delta === 0) return;
-    appliedExtensionRef.current = extensionSeconds;
-    setTimeLeft((v) => v + delta);
-  }, [extensionSeconds, questionIndex]);
 
   useEffect(() => {
     if (status === "final") {
@@ -157,16 +146,19 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
     }
   }, [status, sessionId]);
 
+  // Re-renders the countdown a few times a second while a question is live.
   useEffect(() => {
-    if (status !== "question" || !settings.timerEnabled || locked) return;
-    if (timeLeft <= 0) {
-      handleTimeout();
-      return;
-    }
-    const t = setTimeout(() => setTimeLeft((v) => v - 1), 1000);
-    return () => clearTimeout(t);
+    if (status !== "question" || !settings.timerEnabled) return;
+    const id = setInterval(() => setNowMs(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [status, settings.timerEnabled]);
+
+  // Submits a blank answer once the server-anchored clock runs out.
+  useEffect(() => {
+    if (status !== "question" || !settings.timerEnabled || locked || !timing?.questionStartedAt) return;
+    if (secondsLeft(timing, nowMs + clockOffsetMs) <= 0) handleTimeout();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, timeLeft, settings.timerEnabled, locked]);
+  }, [status, nowMs, settings.timerEnabled, locked]);
 
   async function submitAnswer(selectedIndex: number | null) {
     if (questionIndex === null) return;
@@ -174,12 +166,14 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
     await fetch(`/api/student/session/${sessionId}/answer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      // timeLeftSeconds is only used for sessions started before the
+      // server-anchored clock existed; the server ignores it otherwise.
       body: JSON.stringify({ questionIndex, selectedIndex, timeLeftSeconds: timeLeft }),
     });
   }
 
   function handleAnswer(i: number) {
-    if (locked || status === "paused") return;
+    if (locked || status !== "question") return;
     setLocked(true);
     setSelected(i);
     submitAnswer(i);
@@ -224,10 +218,10 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
     );
   }
 
-  // status === "question" or "paused" (or the unused reveal/leaderboard
-  // interstitials, which the host never sets — see
-  // TeamBattleHost.handleNextQuestion)
+  // status === "question", "paused" or "reveal" (the "leaderboard"
+  // interstitial is never set by the host)
   const paused = status === "paused";
+  const revealing = status === "reveal" && reveal !== null;
   return (
     <main style={mainStyle(stageBg, colors.white)}>
       <div style={{ width: "100%", maxWidth: "480px", display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -244,7 +238,25 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
           </div>
         )}
 
-        {settings.timerEnabled && !locked && !paused && (
+        {revealing && (
+          <div
+            style={{
+              background: "rgba(255,255,255,0.15)",
+              borderRadius: radius.card,
+              padding: "0.75rem 1rem",
+              fontWeight: 800,
+              fontSize: "1.2rem",
+            }}
+          >
+            {reveal.myAnswer === null
+              ? "⏰ No answer this time"
+              : reveal.myAnswer.correct
+                ? `✅ Correct! +${reveal.myAnswer.points} pts`
+                : "❌ Not quite"}
+          </div>
+        )}
+
+        {settings.timerEnabled && !locked && !paused && !revealing && (
           <span
             style={{
               alignSelf: "center",
@@ -290,18 +302,26 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
               <button
                 key={i}
                 onClick={() => handleAnswer(i)}
-                disabled={locked || paused}
+                disabled={locked || paused || revealing}
                 style={{
                   fontSize: "1rem",
                   fontWeight: 800,
                   padding: "1rem",
                   borderRadius: radius.button,
                   border: selected === i ? `4px solid ${colors.white}` : "none",
+                  outline: revealing && reveal.correctIndex === i ? `4px solid ${colors.white}` : "none",
+                  outlineOffset: "3px",
                   background: answerColors[i],
                   boxShadow: solidShadow(4, answerShadowColors[i]),
                   color: colors.white,
-                  cursor: locked || paused ? "default" : "pointer",
-                  opacity: (locked && selected !== i) || paused ? 0.5 : 1,
+                  cursor: locked || paused || revealing ? "default" : "pointer",
+                  opacity: revealing
+                    ? reveal.correctIndex === i
+                      ? 1
+                      : 0.35
+                    : (locked && selected !== i) || paused
+                      ? 0.5
+                      : 1,
                   display: "flex",
                   alignItems: "center",
                   gap: "0.5rem",
@@ -310,12 +330,18 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
               >
                 <span>{answerShapes[i]}</span>
                 <span style={{ flex: 1 }}>{opt}</span>
+                {revealing && reveal.correctIndex === i && <span aria-label="Correct answer">✓</span>}
               </button>
             ))}
           </div>
         )}
 
-        {locked && <p style={{ textAlign: "center", fontWeight: 700 }}>Answer submitted — waiting for the next question…</p>}
+        {revealing ? (
+          <p style={{ textAlign: "center", fontWeight: 700 }}>Waiting for the next question…</p>
+        ) : (
+          locked &&
+          question && <p style={{ textAlign: "center", fontWeight: 700 }}>Answer submitted — waiting for the next question…</p>
+        )}
 
         <TeamLeaderboard teams={teams} />
       </div>

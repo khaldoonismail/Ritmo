@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { verifyStudentSessionToken, STUDENT_SESSION_COOKIE } from "@/lib/studentSession";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { computeAnswerPoints } from "@/lib/scoring";
+import { LATE_ANSWER_GRACE_SECONDS, secondsLeft, timingFromSessionRow } from "@/lib/teamBattleTiming";
 
 interface QuestionShape {
   id: string;
@@ -18,6 +19,8 @@ interface SessionSettings {
 // correctIndex) and pools the resulting points onto the student's team via
 // the award_team_battle_points RPC (supabase/migrations/0020_team_battle.sql),
 // which does both updates atomically so concurrent teammates can't race.
+// Speed is measured on the server-anchored question clock
+// (lib/teamBattleTiming.ts), not the time the student's browser reports.
 export async function POST(request: NextRequest, { params }: { params: { sessionId: string } }) {
   const token = cookies().get(STUDENT_SESSION_COOKIE)?.value;
   const session = token ? await verifyStudentSessionToken(token) : null;
@@ -28,13 +31,15 @@ export async function POST(request: NextRequest, { params }: { params: { session
   const body = await request.json().catch(() => null);
   const questionIndex = Number.isInteger(body?.questionIndex) ? body.questionIndex : -1;
   const selectedIndex = Number.isInteger(body?.selectedIndex) ? body.selectedIndex : null;
-  const timeLeftSeconds = typeof body?.timeLeftSeconds === "number" ? body.timeLeftSeconds : 0;
+  const clientTimeLeftSeconds = typeof body?.timeLeftSeconds === "number" ? body.timeLeftSeconds : 0;
 
   const supabase = createAdminSupabaseClient();
 
   const { data: gameSession } = await supabase
     .from("game_sessions")
-    .select("id, game_id, status, current_question_index, settings")
+    .select(
+      "id, game_id, status, current_question_index, settings, question_started_at, paused_at, paused_seconds, time_extension_seconds"
+    )
     .eq("id", params.sessionId)
     .maybeSingle();
   if (!gameSession) {
@@ -63,10 +68,25 @@ export async function POST(request: NextRequest, { params }: { params: { session
 
   const correct = selectedIndex !== null && selectedIndex === q.correctIndex;
   const settings = (gameSession.settings as SessionSettings) || {};
+  const timerEnabled = settings.timerEnabled ?? true;
+  const timing = timingFromSessionRow(gameSession, settings.timeLimitSeconds ?? 20);
+
+  // Sessions started before 0024_team_battle_hardening.sql have no
+  // question_started_at; they keep the old client-reported timing.
+  let timeLeftSeconds = clientTimeLeftSeconds;
+  if (timing.questionStartedAt) {
+    timeLeftSeconds = secondsLeft(timing, Date.now());
+    if (timerEnabled && timeLeftSeconds < -LATE_ANSWER_GRACE_SECONDS) {
+      return NextResponse.json({ error: "Time's up for this question" }, { status: 409 });
+    }
+  }
+
   const points = computeAnswerPoints({
     correct,
-    timerEnabled: settings.timerEnabled ?? true,
-    timeLimitSeconds: settings.timeLimitSeconds ?? 20,
+    timerEnabled,
+    // Extra time counts toward the window, so +15s can't push the speed
+    // bonus above its maximum.
+    timeLimitSeconds: timing.timeLimitSeconds + timing.extensionSeconds,
     timeLeftSeconds,
   });
 
