@@ -14,6 +14,7 @@ import StudentThumbnail from "./StudentThumbnail";
 import StudentPhotoUploader from "./StudentPhotoUploader";
 import Attendance from "./Attendance";
 import Notes from "./Notes";
+import ClassGameLeaderboard from "./ClassGameLeaderboard";
 import { colors, radius, solidShadow } from "@/lib/theme";
 
 interface ClassInfo {
@@ -1133,6 +1134,16 @@ export default function ManageClassPage() {
             teacherId={myTeacherId}
             students={(students || []).map((s) => ({ id: s.id, name: s.name }))}
           />
+        </section>
+      )}
+
+      {/* Game leaderboard section */}
+      {students && (
+        <section style={{ width: "100%", maxWidth: "600px" }}>
+          <h2 style={{ fontSize: "1.3rem", fontWeight: 800, margin: "0 0 0.75rem" }}>Game Leaderboard</h2>
+          {/* students is the page's own state array, so its reference only
+              changes when the roster does — the leaderboard refetches then. */}
+          <ClassGameLeaderboard classId={classId} students={students} />
         </section>
       )}
 

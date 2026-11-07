@@ -12,6 +12,8 @@ import { levelForPoints, scoreBadge } from "@/lib/studentLevels";
 import { activityDateSet, computeStreak } from "@/lib/studentStreak";
 import LogoutButton from "./LogoutButton";
 import Leaderboard from "./Leaderboard";
+import GameLeaderboard from "@/components/GameLeaderboard";
+import { buildLeaderboards, firstName } from "@/lib/gameLeaderboard";
 import CertificateButton from "./CertificateButton";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -196,6 +198,25 @@ export default async function StudentDashboardPage() {
 
   const weeklyBoard = buildBoard(weeklyPoints);
   const monthlyBoard = buildBoard(monthlyPoints);
+
+  // Game leaderboard (game_results, 0025_game_results.sql): this class only,
+  // ranked server-side like the board above, and first names only so
+  // students never see classmates' full names.
+  const { data: gameResultRows } = await supabase
+    .from("game_results")
+    .select("student_id, game_id, accuracy, points")
+    .eq("class_id", session.classId);
+  const resultGameIds = [...new Set((gameResultRows || []).map((r) => r.game_id))];
+  let resultGameTitles = new Map<string, string>();
+  if (resultGameIds.length > 0) {
+    const { data: resultGames } = await supabase.from("games").select("id, title").in("id", resultGameIds);
+    resultGameTitles = new Map((resultGames || []).map((g) => [g.id, g.title]));
+  }
+  const gameBoards = buildLeaderboards(
+    gameResultRows || [],
+    new Map((classmates || []).map((c) => [c.id, firstName(c.name)])),
+    resultGameTitles
+  );
 
   const { data: classRow } = await supabase
     .from("classes")
@@ -398,6 +419,8 @@ export default async function StudentDashboardPage() {
         monthlyBoard={monthlyBoard}
         currentStudentId={session.studentId}
       />
+
+      <GameLeaderboard boards={gameBoards} currentStudentId={session.studentId} />
 
       <div
         style={{
