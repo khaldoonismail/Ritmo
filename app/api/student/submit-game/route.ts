@@ -84,5 +84,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: upsertError.message }, { status: 500 });
   }
 
+  // Feeds the class leaderboard (supabase/migrations/0025_game_results.sql).
+  // Assigned games have no speed bonus, so points are a flat 1000 per
+  // correct answer; a resubmission replaces the earlier result. Best-effort:
+  // the submission above has already succeeded, so a failure here is only
+  // logged and never fails the student's request.
+  const { error: resultError } = await supabase.from("game_results").upsert(
+    {
+      student_id: session.studentId,
+      class_id: assignment.class_id,
+      game_id: assignment.game_id,
+      source: "assignment",
+      assignment_id: assignmentId,
+      points: correctCount * 1000,
+      correct_count: correctCount,
+      total_questions: questions.length,
+      accuracy: Math.round((correctCount / questions.length) * 10000) / 100,
+      completed_at: new Date().toISOString(),
+    },
+    { onConflict: "assignment_id,student_id" }
+  );
+
+  if (resultError) {
+    console.error("submit-game: could not record game_results", resultError.message);
+  }
+
   return NextResponse.json({ score, correctCount, total: questions.length });
 }
