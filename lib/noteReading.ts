@@ -229,7 +229,8 @@ export function generateNoteReadingQuestions(
   settings: NoteReadingSettings,
   rand: () => number = Math.random
 ): NoteReadingQuestion[] {
-  const count = Math.max(1, Math.min(MAX_QUESTIONS, Math.floor(settings.count)));
+  const count = Math.max(1, Math.min(MAX_QUESTIONS, Math.floor(settings.count) || 1));
+  const timeLimit = Math.max(5, Math.min(120, Math.floor(settings.timeLimit) || 20));
   const [lo, hi] = LEVEL_RANGE[settings.level];
   const [easyLo, easyHi] = LEVEL_RANGE.easy;
   const allowAccidentals = settings.level === "hard" && settings.accidentals;
@@ -283,7 +284,7 @@ export function generateNoteReadingQuestions(
       mediaContent: "",
       options: all.map((c) => noteName(c.step, c.accidental, settings.naming)),
       correctIndex: all.indexOf(answer),
-      timeLimit: settings.timeLimit,
+      timeLimit,
       note: { clef, step, octave, accidental },
     });
   }

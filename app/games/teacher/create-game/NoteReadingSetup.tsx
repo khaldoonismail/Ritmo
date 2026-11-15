@@ -135,9 +135,10 @@ export default function NoteReadingSetup({
               min={1}
               max={MAX_QUESTIONS}
               value={settings.count}
-              onChange={(e) =>
-                onChange({ count: Math.max(1, Math.min(MAX_QUESTIONS, Number(e.target.value) || 1)) })
-              }
+              // Clamped to the minimum only on blur, so typing "12" or "15"
+              // isn't turned into "1"/"5" after the first keystroke.
+              onChange={(e) => onChange({ count: Math.min(MAX_QUESTIONS, Number(e.target.value) || 0) })}
+              onBlur={() => onChange({ count: Math.max(1, settings.count) })}
               style={numberStyle}
             />
           </label>
@@ -148,9 +149,8 @@ export default function NoteReadingSetup({
               min={5}
               max={120}
               value={settings.timeLimit}
-              onChange={(e) =>
-                onChange({ timeLimit: Math.max(5, Math.min(120, Number(e.target.value) || 20)) })
-              }
+              onChange={(e) => onChange({ timeLimit: Math.min(120, Number(e.target.value) || 0) })}
+              onBlur={() => onChange({ timeLimit: Math.max(5, settings.timeLimit) })}
               style={numberStyle}
             />
           </label>
