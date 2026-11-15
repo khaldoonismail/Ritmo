@@ -139,7 +139,9 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   const extensionSeconds = timing?.extensionSeconds ?? 0;
   const timeLeft = timing ? displaySecondsLeft(timing, nowMs + clockOffsetMs) : 0;
   const revealPaused = revealing && !!revealTiming?.pausedAt;
-  const revealLeft = revealTiming ? Math.max(0, Math.ceil(revealSecondsLeft(revealTiming, nowMs + clockOffsetMs))) : 0;
+  const revealLeft = revealTiming
+    ? Math.min(revealTiming.revealSeconds, Math.max(0, Math.ceil(revealSecondsLeft(revealTiming, nowMs + clockOffsetMs))))
+    : 0;
 
   // Memoized rather than recreated per render — a fresh client each render
   // gave its Realtime channel its own new websocket/auth handshake, which
@@ -172,28 +174,43 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   // Re-reads the session's status, question and clock — the single source
   // of truth for the live screen, so a reload lands on the same state.
   async function refreshSession(sid: string) {
-    const { timeLimitSeconds, revealSeconds } = settingsRef.current;
+    const data = await fetchSessionRow(sid);
+    if (data) applySessionRow(data);
+    return data;
+  }
+
+  async function fetchSessionRow(sid: string) {
     const { data } = await supabase.from("game_sessions").select(SESSION_TIMING_COLUMNS).eq("id", sid).maybeSingle();
-    if (!data) return null;
+    return data;
+  }
+
+  function applySessionRow(data: NonNullable<Awaited<ReturnType<typeof fetchSessionRow>>>) {
+    const { timeLimitSeconds, revealSeconds } = settingsRef.current;
+    // nowMs only ticks while a countdown runs, so it can be minutes old
+    // here (e.g. from the lobby); refresh it with the new clock so the
+    // first render doesn't show a too-long countdown.
+    setNowMs(Date.now());
     setCurrentQuestionIndex(data.current_question_index);
     setPaused(data.status === "paused");
     setRevealing(data.status === "reveal");
     setTiming(timingFromSessionRow(data, timeLimitSeconds));
     setRevealTiming(data.status === "reveal" ? revealTimingFromSessionRow(data, revealSeconds) : null);
-    return data;
   }
 
   // Brings the live screen in line with the session row after any change —
   // the host's own actions, and ones made elsewhere (the answer route's
   // "everyone answered" reveal, the game ending in another tab).
   async function syncLive(sid: string) {
-    const data = await refreshSession(sid);
+    const data = await fetchSessionRow(sid);
     if (!data) return null;
+    // Load the reveal's answer counts before switching the screen to the
+    // reveal, so the options never flash a count of 0.
     if (data.status === "reveal") {
       await Promise.all([loadRevealStats(sid, data.current_question_index), loadTeams(sid)]);
     } else {
       setRevealStats(null);
     }
+    applySessionRow(data);
     if (data.status === "final") {
       await Promise.all([loadTeams(sid), loadRoster(sid)]);
       setStage("final");
@@ -1023,7 +1040,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
                     {revealing && (
                       <span style={{ fontSize: "0.85rem" }}>
                         {i === question.correctIndex ? "✓ " : ""}
-                        {revealStats?.perOption[i] ?? 0}
+                        {revealStats ? revealStats.perOption[i] : "…"}
                       </span>
                     )}
                   </div>

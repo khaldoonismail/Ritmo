@@ -90,7 +90,9 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
     sessionRow && sessionRow.status === "reveal" && settings.autoAdvance && sessionRow.reveal_started_at
       ? revealTimingFromSessionRow(sessionRow, settings.revealSeconds ?? DEFAULT_REVEAL_SECONDS)
       : null;
-  const revealLeft = revealTiming ? Math.max(0, Math.ceil(revealSecondsLeft(revealTiming, nowMs + clockOffsetMs))) : 0;
+  const revealLeft = revealTiming
+    ? Math.min(revealTiming.revealSeconds, Math.max(0, Math.ceil(revealSecondsLeft(revealTiming, nowMs + clockOffsetMs))))
+    : 0;
 
   async function loadTeams() {
     const { data } = await supabaseRef.current

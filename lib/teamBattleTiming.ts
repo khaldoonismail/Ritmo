@@ -26,9 +26,11 @@ export function secondsLeft(timing: QuestionTiming, nowMs: number): number {
   return total - elapsed;
 }
 
-// Whole seconds for display, never below zero.
+// Whole seconds for display, never below zero and never above the limit
+// (a stale nowMs would otherwise show more time than the question has).
 export function displaySecondsLeft(timing: QuestionTiming, nowMs: number): number {
-  return Math.max(0, Math.ceil(secondsLeft(timing, nowMs)));
+  const total = timing.timeLimitSeconds + timing.extensionSeconds;
+  return Math.min(total, Math.max(0, Math.ceil(secondsLeft(timing, nowMs))));
 }
 
 // Maps a game_sessions row (snake_case, as read from Supabase) plus its
