@@ -20,6 +20,7 @@ const NOTE_X = 76; // centre of the note head
 const CLEF_X = 8;
 const STAFF_STROKE = 1;
 const STEM_LENGTH = 3.5 * SPACE;
+const LEDGER_OVERHANG = 3.5; // how far a ledger line sticks out past the note head
 
 function yOf(position: number): number {
   return (TOP_POSITION - position) * HALF;
@@ -55,7 +56,10 @@ export default function NoteStaff({
         ? glyphPaths.accidentalFlat
         : null;
   const accidentalWidth = note.accidental === "sharp" ? 10 : 9;
-  const accidentalX = NOTE_X - HEAD_WIDTH / 2 - 2.5 - accidentalWidth;
+  // Notes with ledger lines get their sign left of the ledger line, as in
+  // printed music, so the ♯/♭ never crosses it.
+  const accidentalGap = ledgers.length > 0 ? LEDGER_OVERHANG + 1.5 : 2.5;
+  const accidentalX = NOTE_X - HEAD_WIDTH / 2 - accidentalGap - accidentalWidth;
 
   const clefPath = note.clef === "treble" ? glyphPaths.gClef : glyphPaths.fClef;
   // The G clef curls around the G line (2nd line), the F clef's dots sit
@@ -83,9 +87,9 @@ export default function NoteStaff({
         {ledgers.map((l) => (
           <rect
             key={l}
-            x={NOTE_X - HEAD_WIDTH / 2 - 3.5}
+            x={NOTE_X - HEAD_WIDTH / 2 - LEDGER_OVERHANG}
             y={yOf(l) - STAFF_STROKE * 0.7}
-            width={HEAD_WIDTH + 7}
+            width={HEAD_WIDTH + LEDGER_OVERHANG * 2}
             height={STAFF_STROKE * 1.4}
           />
         ))}
