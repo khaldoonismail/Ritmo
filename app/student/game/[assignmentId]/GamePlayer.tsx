@@ -3,8 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { colors, radius, solidShadow } from "@/lib/theme";
+import NoteStaff from "@/components/NoteStaff";
+import { isNoteSpec } from "@/lib/noteReading";
+import { playNote } from "@/lib/playNote";
 
-type MediaType = "text" | "image" | "video" | "audio";
+type MediaType = "text" | "image" | "video" | "audio" | "note";
 
 interface Question {
   id: string;
@@ -13,6 +16,8 @@ interface Question {
   mediaContent: string;
   options: string[];
   correctIndex: number;
+  // Note Reading questions (lib/noteReading.ts).
+  note?: unknown;
 }
 
 const answerColors = ["#e21b3c", "#1368ce", "#d89e00", "#2ca30f"];
@@ -81,6 +86,9 @@ export default function GamePlayer({
     if (locked) return;
     setLocked(true);
     setSelected(i);
+    // The answer reveal for a Note Reading question plays the note; this
+    // runs inside the tap, so the browser allows the sound.
+    if (isNoteSpec(q.note)) playNote(q.note);
 
     const nextAnswers = [...answers, { questionId: q.id, selectedIndex: i }];
     setAnswers(nextAnswers);
@@ -94,7 +102,7 @@ export default function GamePlayer({
       setCurrentIndex(next);
       setSelected(null);
       setLocked(false);
-    }, 1200);
+    }, isNoteSpec(q.note) ? 1800 : 1200);
   }
 
   const outerStyle: React.CSSProperties = {
@@ -239,6 +247,7 @@ export default function GamePlayer({
           {q.mediaType === "audio" && q.mediaContent && (
             <audio src={q.mediaContent} controls autoPlay style={{ width: "100%" }} />
           )}
+          {q.mediaType === "note" && <NoteStaff note={q.note} />}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>

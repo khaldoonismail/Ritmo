@@ -8,6 +8,9 @@ import { colors, radius, solidShadow } from "@/lib/theme";
 import { shadowForColor } from "@/lib/teamColors";
 import TeamLeaderboard, { LeaderboardTeam } from "@/components/TeamLeaderboard";
 import TeamSetup, { TeamSetupConfig } from "./TeamSetup";
+import NoteStaff from "@/components/NoteStaff";
+import { isNoteSpec } from "@/lib/noteReading";
+import { playNote, unlockNoteAudio } from "@/lib/playNote";
 import {
   DEFAULT_REVEAL_SECONDS,
   LATE_ANSWER_GRACE_SECONDS,
@@ -28,6 +31,8 @@ interface Question {
   imageContent?: string;
   options: string[];
   correctIndex: number;
+  // Note Reading questions (lib/noteReading.ts).
+  note?: unknown;
 }
 
 interface Game {
@@ -272,6 +277,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   }, [game.id]);
 
   async function handleResume(row: ResumableSession) {
+    unlockNoteAudio();
     setError("");
     setSessionId(row.id);
     setPin(row.pin);
@@ -434,6 +440,18 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nowMs, revealClockRunning]);
 
+  // Note Reading: the answer reveal plays the note on the host's speakers,
+  // whether the teacher clicked "Show answer" or auto-advance revealed it.
+  // Keyed by question so a refresh of the same reveal doesn't replay it.
+  const playedRevealRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!revealing) return;
+    if (playedRevealRef.current === currentQuestionIndex) return;
+    playedRevealRef.current = currentQuestionIndex;
+    const note = game.questions[currentQuestionIndex]?.note;
+    if (isNoteSpec(note)) playNote(note);
+  }, [revealing, currentQuestionIndex, game.questions]);
+
   // Leaves the reveal of question `fromIndex`: the next question, or Final
   // Results after the last one. skipCountdown = true for Next Question /
   // Next now; false for the auto-advance, which the database only allows
@@ -526,6 +544,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
 
   async function handleStartGame() {
     if (advancing) return;
+    unlockNoteAudio();
     setAdvancing(true);
     try {
       await goToQuestion(0);
@@ -1011,6 +1030,11 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
                     alt=""
                     style={{ maxWidth: "100%", maxHeight: "220px", borderRadius: "8px", marginTop: "0.75rem" }}
                   />
+                )}
+                {question.mediaType === "note" && (
+                  <div style={{ marginTop: "0.5rem" }}>
+                    <NoteStaff note={question.note} maxWidth={460} />
+                  </div>
                 )}
               </div>
 

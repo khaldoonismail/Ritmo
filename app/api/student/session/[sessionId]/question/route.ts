@@ -11,6 +11,8 @@ interface QuestionShape {
   imageContent?: string;
   options: string[];
   correctIndex: number;
+  // Note Reading questions: what to draw on the staff (lib/noteReading.ts).
+  note?: unknown;
 }
 
 // Returns the current question for a Team Battle round, with correctIndex
@@ -86,6 +88,7 @@ export async function GET(request: NextRequest, { params }: { params: { sessionI
       mediaContent: q.mediaContent,
       imageContent: q.imageContent,
       options: q.options,
+      note: q.note,
     },
     settings: gameSession.settings,
   });

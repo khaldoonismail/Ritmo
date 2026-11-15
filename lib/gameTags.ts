@@ -12,6 +12,7 @@ export const gameTagGallery = [
   { key: "rhythm", label: "Rhythm" },
   { key: "ear-training", label: "Ear Training" },
   { key: "dynamics", label: "Dynamics" },
+  { key: "note-reading", label: "Note Reading" },
 ] as const;
 
 export type GameTagKey = (typeof gameTagGallery)[number]["key"];

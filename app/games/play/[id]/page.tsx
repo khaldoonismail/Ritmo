@@ -7,10 +7,13 @@ import { QRCodeSVG } from "qrcode.react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import TeamBattleHost from "./TeamBattleHost";
+import NoteStaff from "@/components/NoteStaff";
+import { isNoteSpec } from "@/lib/noteReading";
+import { playNote, unlockNoteAudio } from "@/lib/playNote";
 
 type PlayMode = "individual" | "team_battle";
 
-type MediaType = "text" | "image" | "video" | "audio";
+type MediaType = "text" | "image" | "video" | "audio" | "note";
 
 interface Question {
   id: string;
@@ -21,6 +24,8 @@ interface Question {
   options: string[];
   correctIndex: number;
   timeLimit: number;
+  // Note Reading questions (lib/noteReading.ts).
+  note?: unknown;
 }
 
 type MediaMode = "sound" | "photo" | "both";
@@ -202,7 +207,13 @@ export default function PlayGamePage() {
     setSelected(i);
     const q = activeQuestions[currentIndex];
     playSound(i === q.correctIndex ? "correct" : "wrong");
-    setTimeout(() => finishQuestion(i), 1400);
+    // Note Reading: play the note itself just after the right/wrong sound.
+    const note = q.note;
+    if (isNoteSpec(note)) {
+      unlockNoteAudio();
+      setTimeout(() => playNote(note), 350);
+    }
+    setTimeout(() => finishQuestion(i), isNoteSpec(note) ? 2000 : 1400);
   }
 
   function finishQuestion(chosen: number | null) {
@@ -871,6 +882,7 @@ export default function PlayGamePage() {
                   {q.mediaType === "audio" && q.mediaContent && (
                     <audio src={q.mediaContent} controls autoPlay style={{ width: "100%" }} />
                   )}
+                  {q.mediaType === "note" && <NoteStaff note={q.note} maxWidth={440} />}
                 </>
               );
             })()}

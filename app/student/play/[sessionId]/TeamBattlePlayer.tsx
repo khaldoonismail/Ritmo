@@ -5,6 +5,9 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { subscribeToTable } from "@/lib/supabase/realtime";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import TeamLeaderboard, { LeaderboardTeam } from "@/components/TeamLeaderboard";
+import NoteStaff from "@/components/NoteStaff";
+import { isNoteSpec } from "@/lib/noteReading";
+import { playNote, unlockNoteAudio } from "@/lib/playNote";
 import {
   DEFAULT_REVEAL_SECONDS,
   displaySecondsLeft,
@@ -32,6 +35,8 @@ interface QuestionPayload {
   mediaContent: string;
   imageContent?: string;
   options: string[];
+  // Note Reading questions (lib/noteReading.ts).
+  note?: unknown;
 }
 
 interface RevealPayload {
@@ -78,6 +83,7 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   const [finalResults, setFinalResults] = useState<FinalTeam[]>([]);
 
   const answeredIndexRef = useRef<number | null>(null);
+  const playedRevealRef = useRef<number | null>(null);
   const fetchedIndexRef = useRef<number | null>(null);
   const supabaseRef = useRef(createBrowserSupabaseClient());
 
@@ -93,6 +99,16 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   const revealLeft = revealTiming
     ? Math.min(revealTiming.revealSeconds, Math.max(0, Math.ceil(revealSecondsLeft(revealTiming, nowMs + clockOffsetMs))))
     : 0;
+
+  // Note Reading: the answer reveal plays the note. Tapping an answer has
+  // already let this page make sound; a student who didn't answer just
+  // doesn't hear it.
+  useEffect(() => {
+    if (!reveal || questionIndex === null || playedRevealRef.current === questionIndex) return;
+    playedRevealRef.current = questionIndex;
+    const note = question?.note;
+    if (isNoteSpec(note)) playNote(note);
+  }, [reveal, questionIndex, question]);
 
   async function loadTeams() {
     const { data } = await supabaseRef.current
@@ -203,6 +219,7 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   function handleAnswer(i: number) {
     if (locked || status !== "question") return;
     setLocked(true);
+    unlockNoteAudio();
     setSelected(i);
     submitAnswer(i);
   }
@@ -320,6 +337,11 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
                 alt=""
                 style={{ maxWidth: "100%", maxHeight: "200px", borderRadius: "8px", marginTop: "0.75rem" }}
               />
+            )}
+            {question.mediaType === "note" && (
+              <div style={{ marginTop: "0.5rem" }}>
+                <NoteStaff note={question.note} />
+              </div>
             )}
           </div>
         )}
