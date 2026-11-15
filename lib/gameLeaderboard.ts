@@ -1,14 +1,20 @@
+import { variantLabel } from "@/lib/noteReading";
+
 // Class game leaderboard, built from game_results (supabase/migrations/
 // 0025_game_results.sql). Shared by the teacher's class page (which reads
 // the rows through RLS) and the student dashboard (which reads them
 // server-side), so both rank exactly the same way:
 //   * Per game: each student's best play — highest accuracy, then points.
+//     Results with a difficulty label (game_results.variant — the shared
+//     Note Reading game's settings, e.g. "Treble Easy") get a board of their
+//     own, so an Easy score is never ranked against a Hard one.
 //   * Overall: the sum of each student's best accuracy across every game
 //     they've played (so playing more games counts), then total best points.
 
 export interface GameResultRow {
   student_id: string;
   game_id: string;
+  variant?: string | null;
   accuracy: number | string;
   points: number;
 }
@@ -25,6 +31,7 @@ export interface LeaderboardEntry {
 }
 
 export interface GameBoard {
+  // Unique per board: the game id, plus "|variant" for labelled results.
   gameId: string;
   title: string;
   entries: LeaderboardEntry[];
@@ -66,15 +73,23 @@ export function buildLeaderboards(
   nameByStudent: Map<string, string>,
   titleByGame: Map<string, string>
 ): Leaderboards {
-  // Best play per (game, student).
+  // Best play per (board, student); a board is a game, or a game plus a
+  // difficulty label.
   const best = new Map<string, Map<string, { accuracy: number; points: number }>>();
+  const boardTitle = new Map<string, string>();
   for (const row of rows) {
     if (!nameByStudent.has(row.student_id)) continue;
     const accuracy = Number(row.accuracy);
-    let perStudent = best.get(row.game_id);
+    const boardKey = row.variant ? `${row.game_id}|${row.variant}` : row.game_id;
+    if (!boardTitle.has(boardKey)) {
+      const title = titleByGame.get(row.game_id) ?? "Untitled game";
+      const label = variantLabel(row.variant);
+      boardTitle.set(boardKey, label ? `${title} – ${label}` : title);
+    }
+    let perStudent = best.get(boardKey);
     if (!perStudent) {
       perStudent = new Map();
-      best.set(row.game_id, perStudent);
+      best.set(boardKey, perStudent);
     }
     const current = perStudent.get(row.student_id);
     if (!current || accuracy > current.accuracy || (accuracy === current.accuracy && row.points > current.points)) {
@@ -95,7 +110,7 @@ export function buildLeaderboards(
       total.gamesPlayed += 1;
       overallTotals.set(studentId, total);
     }
-    games.push({ gameId, title: titleByGame.get(gameId) ?? "Untitled game", entries: entries.sort(byRank) });
+    games.push({ gameId, title: boardTitle.get(gameId) ?? "Untitled game", entries: entries.sort(byRank) });
   }
 
   return {

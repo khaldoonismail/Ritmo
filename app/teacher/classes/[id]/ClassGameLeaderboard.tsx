@@ -24,7 +24,7 @@ export default function ClassGameLeaderboard({ classId, students }: { classId: s
       const supabase = createBrowserSupabaseClient();
       const { data: rows, error: rowsError } = await supabase
         .from("game_results")
-        .select("student_id, game_id, accuracy, points")
+        .select("student_id, game_id, accuracy, points, variant")
         .eq("class_id", classId);
       if (cancelled) return;
       if (rowsError) {

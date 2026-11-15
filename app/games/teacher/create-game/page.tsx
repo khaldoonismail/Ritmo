@@ -7,14 +7,6 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import { gameTagGallery } from "@/lib/gameTags";
 import GameCoverPicker from "./GameCoverPicker";
-import NoteReadingSetup from "./NoteReadingSetup";
-import {
-  generateNoteReadingQuestions,
-  type NoteReadingQuestion,
-  type NoteReadingSettings,
-} from "@/lib/noteReading";
-
-type GameMode = "custom" | "note-reading";
 
 type MediaType = "text" | "image" | "video" | "audio";
 
@@ -67,16 +59,6 @@ export default function CreateGamePage() {
   const [myTeacherId, setMyTeacherId] = useState<string | null>(null);
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [mode, setMode] = useState<GameMode>("custom");
-  const [noteSettings, setNoteSettings] = useState<NoteReadingSettings>({
-    clef: "treble",
-    level: "easy",
-    naming: "solfege",
-    count: 10,
-    accidentals: false,
-    timeLimit: 20,
-  });
-  const [noteQuestions, setNoteQuestions] = useState<NoteReadingQuestion[]>([]);
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -124,23 +106,8 @@ export default function CreateGamePage() {
     );
   }
 
-  function updateNoteSettings(patch: Partial<NoteReadingSettings>) {
-    setNoteSettings((prev) => ({ ...prev, ...patch }));
-  }
-
-  function switchMode(next: GameMode) {
-    setMode(next);
-    // Note Reading games always carry their tag so they show up under it in
-    // the Games Library; the teacher can still add other tags.
-    if (next === "note-reading") {
-      setTags((prev) => (prev.includes("note-reading") ? prev : [...prev, "note-reading"]));
-      if (!gameTitle.trim()) setGameTitle("Note Reading");
-    }
-  }
-
   async function saveGame() {
-    const toSave = mode === "note-reading" ? noteQuestions : questions;
-    if (!gameTitle.trim() || toSave.length === 0) {
+    if (!gameTitle.trim() || questions.length === 0) {
       alert("Add a game title and at least one question before saving.");
       return;
     }
@@ -155,7 +122,7 @@ export default function CreateGamePage() {
       title: gameTitle.trim(),
       cover_image: coverImage,
       tags,
-      questions: toSave,
+      questions,
     });
 
     setSaveBusy(false);
@@ -281,49 +248,6 @@ export default function CreateGamePage() {
       )}
 
       <div
-        role="tablist"
-        aria-label="Game type"
-        style={{
-          display: "flex",
-          gap: "0.4rem",
-          width: "100%",
-          maxWidth: "700px",
-          padding: "0.3rem",
-          borderRadius: radius.pill,
-          background: colors.white,
-          boxShadow: solidShadow(3, colors.gamesCardShadow),
-        }}
-      >
-        {(
-          [
-            ["custom", "✏️ Write my own questions"],
-            ["note-reading", "🎼 Note Reading (auto-generated)"],
-          ] as [GameMode, string][]
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={mode === key}
-            onClick={() => switchMode(key)}
-            style={{
-              flex: 1,
-              fontSize: "0.85rem",
-              fontWeight: 800,
-              padding: "0.5rem 0.75rem",
-              borderRadius: radius.pill,
-              border: "none",
-              background: mode === key ? colors.orange : "transparent",
-              color: mode === key ? colors.white : colors.textPrimary,
-              cursor: "pointer",
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div
         style={{
           display: "flex",
           flexWrap: "wrap",
@@ -356,17 +280,6 @@ export default function CreateGamePage() {
         })}
       </div>
 
-      {mode === "note-reading" && (
-        <NoteReadingSetup
-          settings={noteSettings}
-          onChange={updateNoteSettings}
-          questions={noteQuestions}
-          onGenerate={() => setNoteQuestions(generateNoteReadingQuestions(noteSettings))}
-        />
-      )}
-
-      {mode === "custom" && (
-      <>
       <div style={{ position: "relative", width: "100%", maxWidth: "700px" }}>
         <button
           onClick={() => setPickerOpen((v) => !v)}
@@ -670,8 +583,6 @@ export default function CreateGamePage() {
           </div>
         ))}
       </div>
-      </>
-      )}
 
       <Link
         href="/games/teacher"

@@ -8,7 +8,15 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import TeamBattleHost from "./TeamBattleHost";
 import NoteStaff from "@/components/NoteStaff";
-import { isNoteSpec } from "@/lib/noteReading";
+import NoteReadingSettings from "@/components/NoteReadingSettings";
+import {
+  DEFAULT_NOTE_READING_CONFIG,
+  NOTE_READING_GENERATOR,
+  configLabel,
+  generateFromConfig,
+  isNoteSpec,
+  type NoteReadingConfig,
+} from "@/lib/noteReading";
 import { playNote, unlockNoteAudio } from "@/lib/playNote";
 import { clampTimeLimit } from "@/lib/teamBattleTiming";
 
@@ -35,6 +43,9 @@ interface Game {
   id: string;
   title: string;
   questions: Question[];
+  // 'note_reading' = the shared Note Reading game: no saved questions,
+  // fresh ones are generated from the teacher's settings on every play.
+  generator?: string | null;
 }
 
 interface Player {
@@ -99,6 +110,7 @@ export default function PlayGamePage() {
   const [selectedLabels, setSelectedLabels] = useState<Set<string>>(new Set());
   const [questionCount, setQuestionCount] = useState(1);
   const [mediaMode, setMediaMode] = useState<MediaMode>("sound");
+  const [noteConfig, setNoteConfig] = useState<NoteReadingConfig>(DEFAULT_NOTE_READING_CONFIG);
   const [timerEnabled, setTimerEnabled] = useState(true);
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(20);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -136,7 +148,7 @@ export default function PlayGamePage() {
 
       const { data } = await supabase
         .from("games")
-        .select("id, title, questions")
+        .select("id, title, questions, generator")
         .eq("id", id)
         .maybeSingle();
 
@@ -157,9 +169,12 @@ export default function PlayGamePage() {
     load();
   }, [id, router]);
 
-  const poolSize = game
-    ? game.questions.filter((q) => selectedLabels.has(q.options[q.correctIndex])).length
-    : 0;
+  const isGenerated = game?.generator === NOTE_READING_GENERATOR;
+  const poolSize = !game
+    ? 0
+    : isGenerated
+      ? Math.max(noteConfig.count, 1)
+      : game.questions.filter((q) => selectedLabels.has(q.options[q.correctIndex])).length;
   const hasImages = game ? game.questions.some((q) => q.imageContent) : false;
 
   useEffect(() => {
@@ -192,7 +207,10 @@ export default function PlayGamePage() {
     const pool = game.questions.filter((q) => selectedLabels.has(q.options[q.correctIndex]));
     const count = Math.max(1, questionCount);
     const timeLimit = clampTimeLimit(timeLimitSeconds);
-    const picked = shuffle(pool).slice(0, Math.min(count, pool.length));
+    // The shared Note Reading game gets fresh questions on every Start.
+    const picked = isGenerated
+      ? (generateFromConfig({ ...noteConfig, count: Math.max(1, noteConfig.count) }, timeLimit) as Question[])
+      : shuffle(pool).slice(0, Math.min(count, pool.length));
     if (picked.length === 0) return;
     setQuestionCount(count);
     setTimeLimitSeconds(timeLimit);
@@ -462,7 +480,27 @@ export default function PlayGamePage() {
             single-device demo, so you'll play alongside 3 simulated players.
           </p>
 
-          {labels.length > 1 && (
+          {isGenerated && (
+            <div
+              style={{
+                width: "100%",
+                maxWidth: "500px",
+                background: colors.white,
+                borderRadius: radius.card,
+                boxShadow: solidShadow(4, colors.gamesCardShadow),
+                padding: "1rem 1.25rem",
+                textAlign: "left",
+              }}
+            >
+              <div style={{ fontWeight: 800, marginBottom: "0.75rem" }}>
+                Note Reading settings
+                <span style={{ fontWeight: 700, opacity: 0.6, marginLeft: "0.5rem" }}>{configLabel(noteConfig)}</span>
+              </div>
+              <NoteReadingSettings value={noteConfig} onChange={setNoteConfig} />
+            </div>
+          )}
+
+          {!isGenerated && labels.length > 1 && (
             <div
               style={{
                 width: "100%",

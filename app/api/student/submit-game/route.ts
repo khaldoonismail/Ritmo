@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifyStudentSessionToken, STUDENT_SESSION_COOKIE } from "@/lib/studentSession";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { assignmentQuestions } from "@/lib/gameQuestions";
+import { NOTE_READING_GENERATOR, normalizeNoteReadingConfig, noteReadingVariant } from "@/lib/noteReading";
 
 interface QuestionShape {
   id: string;
@@ -41,7 +43,7 @@ export async function POST(request: NextRequest) {
 
   const { data: assignment } = await supabase
     .from("assignments")
-    .select("id, class_id, game_id, student_id")
+    .select("id, class_id, game_id, student_id, game_settings")
     .eq("id", assignmentId)
     .maybeSingle();
 
@@ -55,11 +57,27 @@ export async function POST(request: NextRequest) {
 
   const { data: game } = await supabase
     .from("games")
-    .select("questions")
+    .select("questions, generator")
     .eq("id", assignment.game_id)
     .maybeSingle();
 
-  const questions = (game?.questions as QuestionShape[] | undefined) || [];
+  // The shared Note Reading game grades against this student's own
+  // generated set (never created here — it's made when they open the game).
+  const questions = game
+    ? await assignmentQuestions<QuestionShape>(supabase, {
+        assignmentId,
+        studentId: session.studentId,
+        game,
+        gameSettings: assignment.game_settings,
+        create: false,
+      })
+    : [];
+  // Labels the result on the leaderboard so different settings aren't
+  // ranked together (game_results.variant, 0028_note_reading_single_game.sql).
+  const variant =
+    game?.generator === NOTE_READING_GENERATOR
+      ? noteReadingVariant(normalizeNoteReadingConfig(assignment.game_settings))
+      : null;
   if (questions.length === 0) {
     return NextResponse.json({ error: "This game has no questions" }, { status: 400 });
   }
@@ -101,6 +119,7 @@ export async function POST(request: NextRequest) {
       total_questions: questions.length,
       accuracy: Math.round((correctCount / questions.length) * 10000) / 100,
       completed_at: new Date().toISOString(),
+      variant,
     },
     { onConflict: "assignment_id,student_id" }
   );

@@ -7,6 +7,8 @@ import {
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { colors } from "@/lib/theme";
 import GamePlayer from "./GamePlayer";
+import { assignmentQuestions } from "@/lib/gameQuestions";
+import { NOTE_READING_GENERATOR, configLabel, normalizeNoteReadingConfig } from "@/lib/noteReading";
 
 function NotFound({ message }: { message: string }) {
   return (
@@ -49,7 +51,7 @@ export default async function StudentGamePage({
   const supabase = createAdminSupabaseClient();
   const { data: assignment } = await supabase
     .from("assignments")
-    .select("id, class_id, game_id, student_id")
+    .select("id, class_id, game_id, student_id, game_settings")
     .eq("id", params.assignmentId)
     .maybeSingle();
 
@@ -63,11 +65,11 @@ export default async function StudentGamePage({
 
   const { data: game } = await supabase
     .from("games")
-    .select("id, title, questions")
+    .select("id, title, questions, generator")
     .eq("id", assignment.game_id)
     .maybeSingle();
 
-  if (!game || !Array.isArray(game.questions) || game.questions.length === 0) {
+  if (!game) {
     return <NotFound message="This game isn't available yet" />;
   }
 
@@ -79,13 +81,31 @@ export default async function StudentGamePage({
     .eq("student_id", session.studentId)
     .eq("assignment_id", assignment.id)
     .maybeSingle();
+  const alreadyCompleted = progress?.status === "completed";
+
+  // The shared Note Reading game: this student's own generated set (made on
+  // first open, not for an already-completed assignment).
+  const questions = await assignmentQuestions(supabase, {
+    assignmentId: assignment.id,
+    studentId: session.studentId,
+    game,
+    gameSettings: assignment.game_settings,
+    create: !alreadyCompleted,
+  });
+  if (questions.length === 0 && !alreadyCompleted) {
+    return <NotFound message="This game isn't available yet" />;
+  }
+  const title =
+    game.generator === NOTE_READING_GENERATOR
+      ? `${game.title} – ${configLabel(normalizeNoteReadingConfig(assignment.game_settings))}`
+      : game.title;
 
   return (
     <GamePlayer
       assignmentId={assignment.id}
-      title={game.title}
-      questions={game.questions}
-      alreadyCompleted={progress?.status === "completed"}
+      title={title}
+      questions={questions as Parameters<typeof GamePlayer>[0]["questions"]}
+      alreadyCompleted={alreadyCompleted}
       savedScore={progress?.score ?? null}
     />
   );

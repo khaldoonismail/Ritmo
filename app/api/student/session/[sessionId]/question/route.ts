@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifyStudentSessionToken, STUDENT_SESSION_COOKIE } from "@/lib/studentSession";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { teamBattleQuestions } from "@/lib/gameQuestions";
 
 interface QuestionShape {
   id: string;
@@ -49,8 +50,8 @@ export async function GET(request: NextRequest, { params }: { params: { sessionI
     return NextResponse.json({ error: "You're not part of this game" }, { status: 403 });
   }
 
-  const { data: game } = await supabase.from("games").select("questions").eq("id", gameSession.game_id).maybeSingle();
-  const questions = (game?.questions as QuestionShape[] | undefined) || [];
+  // The session's generated questions (shared Note Reading game), else the game's own.
+  const questions = await teamBattleQuestions<QuestionShape>(supabase, gameSession.id, gameSession.game_id);
   const q = questions[gameSession.current_question_index];
   if (!q) {
     return NextResponse.json({ error: "No question available" }, { status: 404 });

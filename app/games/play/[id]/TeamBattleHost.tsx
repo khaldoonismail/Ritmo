@@ -9,7 +9,7 @@ import { shadowForColor } from "@/lib/teamColors";
 import TeamLeaderboard, { LeaderboardTeam } from "@/components/TeamLeaderboard";
 import TeamSetup, { TeamSetupConfig } from "./TeamSetup";
 import NoteStaff from "@/components/NoteStaff";
-import { isNoteSpec } from "@/lib/noteReading";
+import { NOTE_READING_GENERATOR, generateFromConfig, isNoteSpec, noteReadingVariant } from "@/lib/noteReading";
 import { playNote, unlockNoteAudio } from "@/lib/playNote";
 import {
   DEFAULT_REVEAL_SECONDS,
@@ -39,6 +39,9 @@ interface Game {
   id: string;
   title: string;
   questions: Question[];
+  // 'note_reading': no saved questions; each session generates its own
+  // and stores them in session_questions (0028_note_reading_single_game.sql).
+  generator?: string | null;
 }
 
 // Small local copy of page.tsx's Kahoot-style answer-tile constants — kept
@@ -140,7 +143,11 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   // Database time minus this device's time, from the RPCs' returned now().
   const [clockOffsetMs, setClockOffsetMs] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const totalQuestions = game.questions.length;
+  // This session's generated questions (shared Note Reading game), else the
+  // game's own saved questions.
+  const [sessionQuestions, setSessionQuestions] = useState<Question[] | null>(null);
+  const questions = sessionQuestions ?? game.questions;
+  const totalQuestions = questions.length;
   const extensionSeconds = timing?.extensionSeconds ?? 0;
   const timeLeft = timing ? displaySecondsLeft(timing, nowMs + clockOffsetMs) : 0;
   const revealPaused = revealing && !!revealTiming?.pausedAt;
@@ -282,6 +289,18 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     setSessionId(row.id);
     setPin(row.pin);
     setSettings(hostSettingsFrom(row.settings));
+    if (game.generator === NOTE_READING_GENERATOR) {
+      const { data: sq } = await supabase
+        .from("session_questions")
+        .select("questions")
+        .eq("session_id", row.id)
+        .maybeSingle();
+      if (!sq || !Array.isArray(sq.questions)) {
+        setError("This game's questions could not be loaded. End it and start a new one.");
+        return;
+      }
+      setSessionQuestions(sq.questions as Question[]);
+    }
     await Promise.all([loadTeams(row.id), loadRoster(row.id)]);
     const current = await refreshSession(row.id);
     if (!current) {
@@ -448,9 +467,9 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     if (!revealing) return;
     if (playedRevealRef.current === currentQuestionIndex) return;
     playedRevealRef.current = currentQuestionIndex;
-    const note = game.questions[currentQuestionIndex]?.note;
+    const note = questions[currentQuestionIndex]?.note;
     if (isNoteSpec(note)) playNote(note);
-  }, [revealing, currentQuestionIndex, game.questions]);
+  }, [revealing, currentQuestionIndex, questions]);
 
   // Leaves the reveal of question `fromIndex`: the next question, or Final
   // Results after the last one. skipCountdown = true for Next Question /
@@ -485,6 +504,12 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
 
       const newPin = String(Math.floor(100000 + Math.random() * 900000));
 
+      // Shared Note Reading game: fresh questions for this session only.
+      const generated =
+        game.generator === NOTE_READING_GENERATOR && config.noteReading
+          ? (generateFromConfig(config.noteReading, config.timeLimitSeconds) as Question[])
+          : null;
+
       const { data: sessionRow, error: sessionError } = await supabase
         .from("game_sessions")
         .insert({
@@ -500,11 +525,24 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
             timeLimitSeconds: config.timeLimitSeconds,
             autoAdvance: config.autoAdvance,
             revealSeconds: config.revealSeconds,
+            // Labels this round's results on the leaderboard
+            // (record_team_battle_results copies it to game_results.variant).
+            ...(generated && config.noteReading
+              ? { noteReading: config.noteReading, variant: noteReadingVariant(config.noteReading) }
+              : {}),
           },
         })
         .select("id")
         .single();
       if (sessionError || !sessionRow) throw new Error(sessionError?.message || "Could not create session");
+
+      if (generated) {
+        const { error: questionsError } = await supabase
+          .from("session_questions")
+          .insert({ session_id: sessionRow.id, questions: generated });
+        if (questionsError) throw new Error(questionsError.message);
+        setSessionQuestions(generated);
+      }
 
       const { data: teamRows, error: teamsError } = await supabase
         .from("teams")
@@ -740,7 +778,11 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
             </div>
           </div>
         )}
-        <TeamSetup onStart={handleStart} starting={starting} />
+        <TeamSetup
+          onStart={handleStart}
+          starting={starting}
+          noteReading={game.generator === NOTE_READING_GENERATOR}
+        />
       </>
     );
   }
@@ -862,7 +904,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   }
 
   if (stage === "live") {
-    const question = game.questions[currentQuestionIndex];
+    const question = questions[currentQuestionIndex];
     return (
       <div style={{ width: "100%", maxWidth: "560px", display: "flex", flexDirection: "column", gap: "1rem" }}>
         {error && <p style={{ color: colors.coralText, fontWeight: 700, margin: 0 }}>{error}</p>}

@@ -14,6 +14,7 @@ import LogoutButton from "./LogoutButton";
 import Leaderboard from "./Leaderboard";
 import GameLeaderboard from "@/components/GameLeaderboard";
 import { buildLeaderboards, studentDisplayNames } from "@/lib/gameLeaderboard";
+import { configLabel, normalizeNoteReadingConfig } from "@/lib/noteReading";
 import CertificateButton from "./CertificateButton";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -76,7 +77,7 @@ export default async function StudentDashboardPage() {
   const supabase = createAdminSupabaseClient();
   const { data: assignments } = await supabase
     .from("assignments")
-    .select("id, lesson_id, game_id, due_at, assigned_at")
+    .select("id, lesson_id, game_id, due_at, assigned_at, game_settings")
     .eq("class_id", session.classId)
     .eq("is_active", true)
     .or(`student_id.is.null,student_id.eq.${session.studentId}`)
@@ -107,7 +108,10 @@ export default async function StudentDashboardPage() {
     gameTitleMap = new Map((gameRows || []).map((g) => [g.id, g.title]));
   }
 
-  function assignmentTitle(a: { lesson_id: string | null; game_id: string | null }): string {
+  function assignmentTitle(a: { lesson_id: string | null; game_id: string | null; game_settings?: unknown }): string {
+    // The shared Note Reading game shows its settings: "Note Reading – Treble Easy".
+    if (a.game_id && a.game_settings)
+      return `${gameTitleMap.get(a.game_id) ?? "Unknown game"} – ${configLabel(normalizeNoteReadingConfig(a.game_settings))}`;
     if (a.game_id) return gameTitleMap.get(a.game_id) ?? "Unknown game";
     if (a.lesson_id) return lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id);
     return "Unknown assignment";
@@ -204,7 +208,7 @@ export default async function StudentDashboardPage() {
   // last initial when first names clash) so students never see full names.
   const { data: gameResultRows } = await supabase
     .from("game_results")
-    .select("student_id, game_id, accuracy, points")
+    .select("student_id, game_id, accuracy, points, variant")
     .eq("class_id", session.classId);
   const resultGameIds = [...new Set((gameResultRows || []).map((r) => r.game_id))];
   let resultGameTitles = new Map<string, string>();

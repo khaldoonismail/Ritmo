@@ -16,6 +16,14 @@ import Attendance from "./Attendance";
 import Notes from "./Notes";
 import ClassGameLeaderboard from "./ClassGameLeaderboard";
 import { colors, radius, solidShadow } from "@/lib/theme";
+import NoteReadingSettings from "@/components/NoteReadingSettings";
+import {
+  DEFAULT_NOTE_READING_CONFIG,
+  NOTE_READING_GENERATOR,
+  configLabel,
+  normalizeNoteReadingConfig,
+  type NoteReadingConfig,
+} from "@/lib/noteReading";
 
 interface ClassInfo {
   id: string;
@@ -38,6 +46,9 @@ interface Assignment {
   assigned_at: string;
   due_at: string | null;
   is_active: boolean;
+  // Shared Note Reading game: the settings each student's questions are
+  // generated from (0028_note_reading_single_game.sql).
+  game_settings?: unknown;
 }
 
 interface LessonRow {
@@ -59,6 +70,7 @@ interface GameRow {
   usage_count: number;
   created_at: string;
   teachers: { name: string } | { name: string }[] | null;
+  generator?: string | null;
 }
 
 interface ScheduleSlot {
@@ -115,6 +127,8 @@ export default function ManageClassPage() {
   const [assignError, setAssignError] = useState("");
   const [removeError, setRemoveError] = useState("");
   const [assignBusy, setAssignBusy] = useState(false);
+  const [noteAssignOpen, setNoteAssignOpen] = useState(false);
+  const [noteAssignConfig, setNoteAssignConfig] = useState<NoteReadingConfig>(DEFAULT_NOTE_READING_CONFIG);
   const [assignTarget, setAssignTarget] = useState<"class" | "students">("class");
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
 
@@ -170,7 +184,7 @@ export default function ManageClassPage() {
 
     const { data: assignmentRows, error: assignmentsError } = await supabase
       .from("assignments")
-      .select("id, lesson_id, game_id, student_id, assigned_at, due_at, is_active")
+      .select("id, lesson_id, game_id, student_id, assigned_at, due_at, is_active, game_settings")
       .eq("class_id", classId)
       .order("assigned_at", { ascending: false });
 
@@ -193,7 +207,7 @@ export default function ManageClassPage() {
 
     const { data: gameRows, error: gamesError } = await supabase
       .from("games")
-      .select("id, title, teacher_id, is_public, usage_count, created_at, teachers(name)")
+      .select("id, title, teacher_id, is_public, usage_count, created_at, teachers(name), generator")
       .order("created_at", { ascending: false });
 
     if (gamesError) {
@@ -394,7 +408,7 @@ export default function ManageClassPage() {
     const { data, error } = await supabase
       .from("assignments")
       .insert(rows)
-      .select("id, lesson_id, game_id, student_id, assigned_at, due_at, is_active");
+      .select("id, lesson_id, game_id, student_id, assigned_at, due_at, is_active, game_settings");
 
     if (error || !data) {
       setAssignBusy(false);
@@ -420,7 +434,8 @@ export default function ManageClassPage() {
     setAssignBusy(false);
   }
 
-  async function assignGameToClass(gameId: string) {
+  // gameSettings: only for the shared Note Reading game.
+  async function assignGameToClass(gameId: string, gameSettings?: NoteReadingConfig) {
     setAssignError("");
 
     const targets: (string | null)[] =
@@ -435,6 +450,13 @@ export default function ManageClassPage() {
     const duplicateTarget = targets.find((studentId) =>
       (assignments || []).some((a) => {
         if (a.game_id !== gameId) return false;
+        // Note Reading can be assigned again with different settings
+        // (e.g. Easy this week, Hard next week).
+        if (
+          gameSettings &&
+          JSON.stringify(normalizeNoteReadingConfig(a.game_settings)) !== JSON.stringify(gameSettings)
+        )
+          return false;
         const existingDueDate = a.due_at ? a.due_at.slice(0, 10) : null;
         if (existingDueDate !== newDueDate) return false;
         return a.student_id === studentId;
@@ -460,6 +482,7 @@ export default function ManageClassPage() {
       class_id: classId,
       game_id: gameId,
       student_id: studentId,
+      game_settings: gameSettings ?? null,
       due_at: dueDate ? new Date(dueDate).toISOString() : null,
       is_active: true,
     }));
@@ -467,7 +490,7 @@ export default function ManageClassPage() {
     const { data, error } = await supabase
       .from("assignments")
       .insert(rows)
-      .select("id, lesson_id, game_id, student_id, assigned_at, due_at, is_active");
+      .select("id, lesson_id, game_id, student_id, assigned_at, due_at, is_active, game_settings");
 
     if (error || !data) {
       setAssignBusy(false);
@@ -1448,6 +1471,7 @@ export default function ManageClassPage() {
                     key={g.id}
                     style={{
                       display: "flex",
+                      flexWrap: "wrap",
                       alignItems: "center",
                       justifyContent: "space-between",
                       gap: "0.6rem",
@@ -1464,14 +1488,56 @@ export default function ManageClassPage() {
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
-                      <button
-                        onClick={() => assignGameToClass(g.id)}
-                        disabled={assignBusy}
-                        style={primaryButtonStyle}
-                      >
-                        {isMine ? "Assign" : "Assign as-is"}
-                      </button>
+                      {g.generator === NOTE_READING_GENERATOR ? (
+                        <button
+                          onClick={() => setNoteAssignOpen((v) => !v)}
+                          disabled={assignBusy}
+                          style={noteAssignOpen ? secondaryButtonStyle : primaryButtonStyle}
+                        >
+                          {noteAssignOpen ? "Close" : "Choose settings…"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => assignGameToClass(g.id)}
+                          disabled={assignBusy}
+                          style={primaryButtonStyle}
+                        >
+                          {isMine ? "Assign" : "Assign as-is"}
+                        </button>
+                      )}
                     </div>
+                    {g.generator === NOTE_READING_GENERATOR && noteAssignOpen && (
+                      <div
+                        style={{
+                          flexBasis: "100%",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.75rem",
+                          padding: "0.75rem",
+                          borderRadius: radius.iconSquare,
+                          background: colors.white,
+                        }}
+                      >
+                        <span style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.7 }}>
+                          Each student gets their own fresh notes with these settings.
+                        </span>
+                        <NoteReadingSettings value={noteAssignConfig} onChange={setNoteAssignConfig} />
+                        <div>
+                          <button
+                            onClick={() =>
+                              assignGameToClass(g.id, {
+                                ...noteAssignConfig,
+                                count: Math.max(1, noteAssignConfig.count),
+                              })
+                            }
+                            disabled={assignBusy}
+                            style={primaryButtonStyle}
+                          >
+                            Assign {configLabel(noteAssignConfig)}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1511,7 +1577,9 @@ export default function ManageClassPage() {
               <div>
                 <div style={{ fontWeight: 800 }}>
                   {a.game_id
-                    ? `🎮 ${gameTitleMap.get(a.game_id) ?? "Unknown game"}`
+                    ? `🎮 ${gameTitleMap.get(a.game_id) ?? "Unknown game"}${
+                        a.game_settings ? ` – ${configLabel(normalizeNoteReadingConfig(a.game_settings))}` : ""
+                      }`
                     : a.lesson_id
                       ? (lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id))
                       : "Unknown assignment"}

@@ -290,3 +290,79 @@ export function generateNoteReadingQuestions(
   }
   return questions;
 }
+
+// ---------------------------------------------------------------------------
+// The shared Note Reading game (supabase/migrations/0028_note_reading_single_game.sql)
+// ---------------------------------------------------------------------------
+// One public game marked games.generator = 'note_reading' with no saved
+// questions. The teacher picks these settings each time it's played
+// (Individual, Team Battle setup, Assign), and fresh questions are
+// generated from them.
+
+export const NOTE_READING_GENERATOR = "note_reading";
+
+export interface NoteReadingConfig {
+  clef: ClefChoice;
+  level: NoteLevel;
+  naming: NamingSystem;
+  // Only used on Hard.
+  accidentals: boolean;
+  count: number;
+}
+
+export const DEFAULT_NOTE_READING_CONFIG: NoteReadingConfig = {
+  clef: "treble",
+  level: "easy",
+  naming: "solfege",
+  accidentals: false,
+  count: 10,
+};
+
+// Reads settings back from jsonb (assignments.game_settings,
+// game_sessions.settings.noteReading), filling in anything missing or
+// invalid with the defaults.
+export function normalizeNoteReadingConfig(value: unknown): NoteReadingConfig {
+  const v = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  const d = DEFAULT_NOTE_READING_CONFIG;
+  const count = Math.floor(Number(v.count));
+  return {
+    clef: v.clef === "treble" || v.clef === "bass" || v.clef === "mixed" ? v.clef : d.clef,
+    level: v.level === "easy" || v.level === "medium" || v.level === "hard" ? v.level : d.level,
+    naming: v.naming === "letters" || v.naming === "solfege" ? v.naming : d.naming,
+    accidentals: v.accidentals === true,
+    count: Number.isFinite(count) ? Math.max(1, Math.min(MAX_QUESTIONS, count)) : d.count,
+  };
+}
+
+export function generateFromConfig(
+  config: NoteReadingConfig,
+  timeLimit = 20,
+  rand: () => number = Math.random
+): NoteReadingQuestion[] {
+  return generateNoteReadingQuestions({ ...config, timeLimit }, rand);
+}
+
+// The part of the settings that changes difficulty, stored on each result
+// (game_results.variant) so the leaderboard never ranks an Easy score
+// against a Hard one. Naming and question count don't change difficulty
+// (the board ranks by accuracy), so they're left out.
+export function noteReadingVariant(config: NoteReadingConfig): string {
+  const accidentals = config.level === "hard" && config.accidentals;
+  return `${config.clef}-${config.level}${accidentals ? "-accidentals" : ""}`;
+}
+
+const CLEF_SHORT: Record<ClefChoice, string> = { treble: "Treble", bass: "Bass", mixed: "Mixed" };
+const LEVEL_SHORT: Record<NoteLevel, string> = { easy: "Easy", medium: "Medium", hard: "Hard" };
+
+// "treble-easy" → "Treble Easy", "mixed-hard-accidentals" → "Mixed Hard ♯♭".
+// Null for anything that isn't a Note Reading variant.
+export function variantLabel(variant: string | null | undefined): string | null {
+  if (!variant) return null;
+  const [clef, level, extra] = variant.split("-");
+  if (!(clef in CLEF_SHORT) || !(level in LEVEL_SHORT)) return null;
+  return `${CLEF_SHORT[clef as ClefChoice]} ${LEVEL_SHORT[level as NoteLevel]}${extra === "accidentals" ? " ♯♭" : ""}`;
+}
+
+export function configLabel(config: NoteReadingConfig): string {
+  return variantLabel(noteReadingVariant(config)) ?? "";
+}

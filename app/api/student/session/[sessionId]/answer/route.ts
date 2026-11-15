@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifyStudentSessionToken, STUDENT_SESSION_COOKIE } from "@/lib/studentSession";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { teamBattleQuestions } from "@/lib/gameQuestions";
 import { computeAnswerPoints } from "@/lib/scoring";
 import { LATE_ANSWER_GRACE_SECONDS, secondsLeft, timingFromSessionRow } from "@/lib/teamBattleTiming";
 
@@ -60,8 +61,8 @@ export async function POST(request: NextRequest, { params }: { params: { session
     return NextResponse.json({ error: "You're not part of this game" }, { status: 403 });
   }
 
-  const { data: game } = await supabase.from("games").select("questions").eq("id", gameSession.game_id).maybeSingle();
-  const questions = (game?.questions as QuestionShape[] | undefined) || [];
+  // The session's generated questions (shared Note Reading game), else the game's own.
+  const questions = await teamBattleQuestions<QuestionShape>(supabase, gameSession.id, gameSession.game_id);
   const q = questions[questionIndex];
   if (!q) {
     return NextResponse.json({ error: "No question available" }, { status: 404 });

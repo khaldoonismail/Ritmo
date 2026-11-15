@@ -17,6 +17,7 @@ interface MyGame {
   questions: unknown[];
   is_public: boolean;
   usage_count: number;
+  generator?: string | null;
 }
 
 interface CommunityGame {
@@ -27,6 +28,7 @@ interface CommunityGame {
   questions: unknown[];
   usage_count: number;
   teachers: { name: string } | { name: string }[] | null;
+  generator?: string | null;
 }
 
 // avg/count/my-own-rating for one game, keyed by game id.
@@ -205,7 +207,7 @@ export default function GamesLibraryPage() {
 
       const { data: mine, error: mineError } = await supabase
         .from("games")
-        .select("id, title, cover_image, tags, questions, is_public, usage_count")
+        .select("id, title, cover_image, tags, questions, is_public, usage_count, generator")
         .eq("teacher_id", teacherRow.id)
         .order("created_at", { ascending: false });
 
@@ -217,7 +219,7 @@ export default function GamesLibraryPage() {
 
       const { data: community, error: communityError } = await supabase
         .from("games")
-        .select("id, title, cover_image, tags, questions, usage_count, teachers(name)")
+        .select("id, title, cover_image, tags, questions, usage_count, teachers(name), generator")
         .eq("is_public", true)
         .neq("teacher_id", teacherRow.id)
         .order("created_at", { ascending: false });
@@ -537,7 +539,7 @@ export default function GamesLibraryPage() {
                 <div>
                   <div style={{ fontWeight: 800 }}>{g.title}</div>
                   <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
-                    {g.is_public ? "Public" : "Private"} · {questionCountLabel(g.questions.length)} · used{" "}
+                    {g.is_public ? "Public" : "Private"} · {g.generator ? "fresh questions every play" : questionCountLabel(g.questions.length)} · used{" "}
                     {g.usage_count} time
                     {g.usage_count === 1 ? "" : "s"}
                     {forkCounts[g.id] > 0 &&
@@ -648,7 +650,7 @@ export default function GamesLibraryPage() {
                   <div>
                     <div style={{ fontWeight: 800 }}>{g.title}</div>
                     <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
-                      by {ownerNameOf(g) || "another teacher"} · {questionCountLabel(g.questions.length)} · used{" "}
+                      by {ownerNameOf(g) || "another teacher"} · {g.generator ? "fresh questions every play" : questionCountLabel(g.questions.length)} · used{" "}
                       {g.usage_count} time
                       {g.usage_count === 1 ? "" : "s"}
                       {forkCounts[g.id] > 0 &&
@@ -666,13 +668,17 @@ export default function GamesLibraryPage() {
                   <Link href={`/games/play/${g.id}`} style={primaryButtonStyle}>
                     Play Demo
                   </Link>
-                  <button
-                    onClick={() => handleCopy(g)}
-                    disabled={copyBusyId === g.id}
-                    style={{ ...primaryButtonStyle, background: colors.greenButton, boxShadow: solidShadow(3, colors.greenButtonShadow) }}
-                  >
-                    {copyBusyId === g.id ? "Copying..." : "Copy to My Games"}
-                  </button>
+                  {/* A generated game (shared Note Reading) has no questions
+                      to copy — every teacher plays the shared one directly. */}
+                  {!g.generator && (
+                    <button
+                      onClick={() => handleCopy(g)}
+                      disabled={copyBusyId === g.id}
+                      style={{ ...primaryButtonStyle, background: colors.greenButton, boxShadow: solidShadow(3, colors.greenButtonShadow) }}
+                    >
+                      {copyBusyId === g.id ? "Copying..." : "Copy to My Games"}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

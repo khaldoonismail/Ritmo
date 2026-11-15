@@ -5,6 +5,8 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import { defaultTeamColor, shadowForColor, teamColorPalette } from "@/lib/teamColors";
 import { clampTimeLimit, DEFAULT_REVEAL_SECONDS, REVEAL_SECONDS_CHOICES } from "@/lib/teamBattleTiming";
+import NoteReadingSettings from "@/components/NoteReadingSettings";
+import { DEFAULT_NOTE_READING_CONFIG, configLabel, type NoteReadingConfig } from "@/lib/noteReading";
 
 interface ClassRow {
   id: string;
@@ -33,6 +35,9 @@ export interface TeamSetupConfig {
   // then move on after revealSeconds (supabase/migrations/0026_auto_advance.sql).
   autoAdvance: boolean;
   revealSeconds: number;
+  // Only for the shared Note Reading game: the settings this round's
+  // questions are generated from.
+  noteReading?: NoteReadingConfig;
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -57,10 +62,14 @@ const fieldCardStyle = {
 export default function TeamSetup({
   onStart,
   starting,
+  noteReading = false,
 }: {
   onStart: (config: TeamSetupConfig) => void;
   starting: boolean;
+  // True for the shared Note Reading game: show its settings panel.
+  noteReading?: boolean;
 }) {
+  const [noteConfig, setNoteConfig] = useState<NoteReadingConfig>(DEFAULT_NOTE_READING_CONFIG);
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [classId, setClassId] = useState("");
   const [roster, setRoster] = useState<StudentRow[]>([]);
@@ -202,6 +211,7 @@ export default function TeamSetup({
       timeLimitSeconds: clampTimeLimit(timeLimitSeconds),
       autoAdvance,
       revealSeconds,
+      noteReading: noteReading ? { ...noteConfig, count: Math.max(1, noteConfig.count) } : undefined,
     });
   }
 
@@ -303,6 +313,16 @@ export default function TeamSetup({
           ))}
         </div>
       </div>
+
+      {noteReading && (
+        <div style={fieldCardStyle}>
+          <div style={{ fontWeight: 800, marginBottom: "0.75rem" }}>
+            Note Reading settings
+            <span style={{ fontWeight: 700, opacity: 0.6, marginLeft: "0.5rem" }}>{configLabel(noteConfig)}</span>
+          </div>
+          <NoteReadingSettings value={noteConfig} onChange={setNoteConfig} />
+        </div>
+      )}
 
       <div style={fieldCardStyle}>
         <div style={{ fontWeight: 800, marginBottom: "0.6rem" }}>Time per question</div>
