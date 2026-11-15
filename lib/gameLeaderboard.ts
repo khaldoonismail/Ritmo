@@ -43,6 +43,24 @@ export function firstName(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] || fullName;
 }
 
+// Student-facing names: first name only, plus the last name's initial
+// ("Ahmed K.") when two or more classmates share that first name
+// (case-insensitive). A one-word name has no initial to add, so it stays.
+export function studentDisplayNames(students: { id: string; name: string }[]): Map<string, string> {
+  const key = (name: string) => firstName(name).toLocaleLowerCase();
+  const count = new Map<string, number>();
+  for (const s of students) count.set(key(s.name), (count.get(key(s.name)) ?? 0) + 1);
+
+  return new Map(
+    students.map((s) => {
+      const first = firstName(s.name);
+      const parts = s.name.trim().split(/\s+/);
+      if ((count.get(key(s.name)) ?? 0) < 2 || parts.length < 2) return [s.id, first];
+      return [s.id, `${first} ${parts[parts.length - 1][0].toLocaleUpperCase()}.`];
+    })
+  );
+}
+
 export function buildLeaderboards(
   rows: GameResultRow[],
   nameByStudent: Map<string, string>,

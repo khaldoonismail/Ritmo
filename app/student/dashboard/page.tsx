@@ -13,7 +13,7 @@ import { activityDateSet, computeStreak } from "@/lib/studentStreak";
 import LogoutButton from "./LogoutButton";
 import Leaderboard from "./Leaderboard";
 import GameLeaderboard from "@/components/GameLeaderboard";
-import { buildLeaderboards, firstName } from "@/lib/gameLeaderboard";
+import { buildLeaderboards, studentDisplayNames } from "@/lib/gameLeaderboard";
 import CertificateButton from "./CertificateButton";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -200,8 +200,8 @@ export default async function StudentDashboardPage() {
   const monthlyBoard = buildBoard(monthlyPoints);
 
   // Game leaderboard (game_results, 0025_game_results.sql): this class only,
-  // ranked server-side like the board above, and first names only so
-  // students never see classmates' full names.
+  // ranked server-side like the board above, and first names only (plus a
+  // last initial when first names clash) so students never see full names.
   const { data: gameResultRows } = await supabase
     .from("game_results")
     .select("student_id, game_id, accuracy, points")
@@ -214,7 +214,7 @@ export default async function StudentDashboardPage() {
   }
   const gameBoards = buildLeaderboards(
     gameResultRows || [],
-    new Map((classmates || []).map((c) => [c.id, firstName(c.name)])),
+    studentDisplayNames(classmates || []),
     resultGameTitles
   );
 
