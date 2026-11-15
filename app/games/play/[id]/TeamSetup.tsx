@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import { defaultTeamColor, shadowForColor, teamColorPalette } from "@/lib/teamColors";
-import { DEFAULT_REVEAL_SECONDS, REVEAL_SECONDS_CHOICES } from "@/lib/teamBattleTiming";
+import { clampTimeLimit, DEFAULT_REVEAL_SECONDS, REVEAL_SECONDS_CHOICES } from "@/lib/teamBattleTiming";
 
 interface ClassRow {
   id: string;
@@ -194,7 +194,15 @@ export default function TeamSetup({
         .filter((s) => manualAssignments[s.id] !== undefined)
         .map((s) => ({ studentId: s.id, teamIndex: manualAssignments[s.id] }));
     }
-    onStart({ classId, teams, assignments, timerEnabled, timeLimitSeconds, autoAdvance, revealSeconds });
+    onStart({
+      classId,
+      teams,
+      assignments,
+      timerEnabled,
+      timeLimitSeconds: clampTimeLimit(timeLimitSeconds),
+      autoAdvance,
+      revealSeconds,
+    });
   }
 
   return (
@@ -322,9 +330,10 @@ export default function TeamSetup({
               min={5}
               max={120}
               value={timeLimitSeconds}
-              onChange={(e) =>
-                setTimeLimitSeconds(Math.max(5, Math.min(Number(e.target.value) || 5, 120)))
-              }
+              // Clamped to the minimum only on blur (and on Start), so typing
+              // "15" isn't turned into "5" and then "55" after the first key.
+              onChange={(e) => setTimeLimitSeconds(Math.min(Number(e.target.value) || 0, 120))}
+              onBlur={() => setTimeLimitSeconds(clampTimeLimit(timeLimitSeconds))}
               style={{
                 width: "4rem",
                 fontSize: "0.9rem",

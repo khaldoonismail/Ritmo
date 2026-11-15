@@ -10,6 +10,7 @@ import TeamBattleHost from "./TeamBattleHost";
 import NoteStaff from "@/components/NoteStaff";
 import { isNoteSpec } from "@/lib/noteReading";
 import { playNote, unlockNoteAudio } from "@/lib/playNote";
+import { clampTimeLimit } from "@/lib/teamBattleTiming";
 
 type PlayMode = "individual" | "team_battle";
 
@@ -189,12 +190,16 @@ export default function PlayGamePage() {
   function startGame() {
     if (!game) return;
     const pool = game.questions.filter((q) => selectedLabels.has(q.options[q.correctIndex]));
-    const picked = shuffle(pool).slice(0, Math.min(questionCount, pool.length));
+    const count = Math.max(1, questionCount);
+    const timeLimit = clampTimeLimit(timeLimitSeconds);
+    const picked = shuffle(pool).slice(0, Math.min(count, pool.length));
     if (picked.length === 0) return;
+    setQuestionCount(count);
+    setTimeLimitSeconds(timeLimit);
     setActiveQuestions(picked);
     roundEndedRef.current = false;
     setCurrentIndex(0);
-    setTimeLeft(timerEnabled ? timeLimitSeconds : 0);
+    setTimeLeft(timerEnabled ? timeLimit : 0);
     setSelected(null);
     setLocked(false);
     setPaused(false);
@@ -551,11 +556,12 @@ export default function PlayGamePage() {
                   min={1}
                   max={Math.max(poolSize, 1)}
                   value={questionCount}
+                  // Clamped to the minimum only on blur (and on Start), so
+                  // typing "12" isn't turned into "1" after the first key.
                   onChange={(e) =>
-                    setQuestionCount(
-                      Math.max(1, Math.min(Number(e.target.value) || 1, Math.max(poolSize, 1)))
-                    )
+                    setQuestionCount(Math.min(Number(e.target.value) || 0, Math.max(poolSize, 1)))
                   }
+                  onBlur={() => setQuestionCount(Math.max(1, questionCount))}
                   style={{
                     width: "4rem",
                     fontSize: "0.9rem",
@@ -624,9 +630,8 @@ export default function PlayGamePage() {
                   min={5}
                   max={120}
                   value={timeLimitSeconds}
-                  onChange={(e) =>
-                    setTimeLimitSeconds(Math.max(5, Math.min(Number(e.target.value) || 5, 120)))
-                  }
+                  onChange={(e) => setTimeLimitSeconds(Math.min(Number(e.target.value) || 0, 120))}
+                  onBlur={() => setTimeLimitSeconds(clampTimeLimit(timeLimitSeconds))}
                   style={{
                     width: "4rem",
                     fontSize: "0.9rem",

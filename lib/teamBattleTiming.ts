@@ -92,3 +92,10 @@ export function revealTimingFromSessionRow(
     revealSeconds,
   };
 }
+
+// The setup screens' "Time per question" range (Individual and Team Battle).
+// Applied on blur and on Start, not per keystroke, so multi-digit values can
+// be typed.
+export function clampTimeLimit(seconds: number): number {
+  return Math.max(5, Math.min(120, Math.floor(seconds) || 20));
+}
