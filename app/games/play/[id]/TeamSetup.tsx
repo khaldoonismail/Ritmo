@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import { defaultTeamColor, shadowForColor, teamColorPalette } from "@/lib/teamColors";
+import { DEFAULT_REVEAL_SECONDS, REVEAL_SECONDS_CHOICES } from "@/lib/teamBattleTiming";
 
 interface ClassRow {
   id: string;
@@ -28,6 +29,10 @@ export interface TeamSetupConfig {
   assignments: { studentId: string; teamIndex: number }[];
   timerEnabled: boolean;
   timeLimitSeconds: number;
+  // Reveal the answer by itself when time is up or everyone has answered,
+  // then move on after revealSeconds (supabase/migrations/0026_auto_advance.sql).
+  autoAdvance: boolean;
+  revealSeconds: number;
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -72,6 +77,8 @@ export default function TeamSetup({
 
   const [timerEnabled, setTimerEnabled] = useState(true);
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(20);
+  const [autoAdvance, setAutoAdvance] = useState(true);
+  const [revealSeconds, setRevealSeconds] = useState<number>(DEFAULT_REVEAL_SECONDS);
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -187,7 +194,7 @@ export default function TeamSetup({
         .filter((s) => manualAssignments[s.id] !== undefined)
         .map((s) => ({ studentId: s.id, teamIndex: manualAssignments[s.id] }));
     }
-    onStart({ classId, teams, assignments, timerEnabled, timeLimitSeconds });
+    onStart({ classId, teams, assignments, timerEnabled, timeLimitSeconds, autoAdvance, revealSeconds });
   }
 
   return (
@@ -329,6 +336,52 @@ export default function TeamSetup({
               }}
             />
             <span style={{ fontSize: "0.85rem", opacity: 0.7 }}>seconds</span>
+          </div>
+        )}
+      </div>
+
+      <div style={fieldCardStyle}>
+        <div style={{ fontWeight: 800, marginBottom: "0.6rem" }}>Moving between questions</div>
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.4rem",
+            fontSize: "0.85rem",
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          <input type="checkbox" checked={autoAdvance} onChange={(e) => setAutoAdvance(e.target.checked)} />
+          Auto-advance
+        </label>
+        <p style={{ fontSize: "0.8rem", opacity: 0.7, margin: "0.4rem 0 0" }}>
+          {autoAdvance
+            ? timerEnabled
+              ? "The answer shows when time is up or everyone has answered, then the next question starts by itself."
+              : "The answer shows when everyone has answered, then the next question starts by itself."
+            : "You click Show Answer and Next Question yourself."}
+        </p>
+        {autoAdvance && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginTop: "0.6rem" }}>
+            <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>Show the answer for</span>
+            <select
+              value={revealSeconds}
+              onChange={(e) => setRevealSeconds(Number(e.target.value))}
+              style={{
+                fontSize: "0.9rem",
+                fontWeight: 700,
+                padding: "0.3rem 0.5rem",
+                borderRadius: "6px",
+                border: `1px solid ${colors.inputBorder}`,
+              }}
+            >
+              {REVEAL_SECONDS_CHOICES.map((n) => (
+                <option key={n} value={n}>
+                  {n} seconds
+                </option>
+              ))}
+            </select>
           </div>
         )}
       </div>

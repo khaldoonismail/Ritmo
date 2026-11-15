@@ -5,7 +5,14 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { subscribeToTable } from "@/lib/supabase/realtime";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import TeamLeaderboard, { LeaderboardTeam } from "@/components/TeamLeaderboard";
-import { displaySecondsLeft, secondsLeft, timingFromSessionRow } from "@/lib/teamBattleTiming";
+import {
+  DEFAULT_REVEAL_SECONDS,
+  displaySecondsLeft,
+  revealSecondsLeft,
+  revealTimingFromSessionRow,
+  secondsLeft,
+  timingFromSessionRow,
+} from "@/lib/teamBattleTiming";
 
 // Small local copies of page.tsx's Kahoot-style answer-tile constants — kept
 // separate rather than shared, so the existing single-device Play Demo file
@@ -39,6 +46,15 @@ interface SessionRow {
   question_started_at: string | null;
   paused_at: string | null;
   paused_seconds: number | string;
+  reveal_started_at?: string | null;
+  reveal_paused_seconds?: number | string;
+}
+
+interface PlayerSettings {
+  timerEnabled?: boolean;
+  timeLimitSeconds?: number;
+  autoAdvance?: boolean;
+  revealSeconds?: number;
 }
 
 interface FinalTeam extends LeaderboardTeam {
@@ -49,7 +65,7 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   const [sessionRow, setSessionRow] = useState<SessionRow | null>(null);
   const [question, setQuestion] = useState<QuestionPayload | null>(null);
   const [reveal, setReveal] = useState<RevealPayload | null>(null);
-  const [settings, setSettings] = useState<{ timerEnabled?: boolean; timeLimitSeconds?: number }>({});
+  const [settings, setSettings] = useState<PlayerSettings>({});
   const [teams, setTeams] = useState<LeaderboardTeam[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   // Starts locked so the timeout effect can't fire before the current
@@ -69,6 +85,12 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   const questionIndex = sessionRow ? sessionRow.current_question_index : null;
   const timing = sessionRow ? timingFromSessionRow(sessionRow, settings.timeLimitSeconds || 20) : null;
   const timeLeft = timing ? displaySecondsLeft(timing, nowMs + clockOffsetMs) : 0;
+  // Reveal countdown before the next question (0026_auto_advance.sql).
+  const revealTiming =
+    sessionRow && sessionRow.status === "reveal" && settings.autoAdvance && sessionRow.reveal_started_at
+      ? revealTimingFromSessionRow(sessionRow, settings.revealSeconds ?? DEFAULT_REVEAL_SECONDS)
+      : null;
+  const revealLeft = revealTiming ? Math.max(0, Math.ceil(revealSecondsLeft(revealTiming, nowMs + clockOffsetMs))) : 0;
 
   async function loadTeams() {
     const { data } = await supabaseRef.current
@@ -81,7 +103,9 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   async function loadSessionState() {
     const { data } = await supabaseRef.current
       .from("game_sessions")
-      .select("status, current_question_index, time_extension_seconds, question_started_at, paused_at, paused_seconds")
+      .select(
+        "status, current_question_index, time_extension_seconds, question_started_at, paused_at, paused_seconds, reveal_started_at, reveal_paused_seconds"
+      )
       .eq("id", sessionId)
       .maybeSingle();
     if (data) setSessionRow(data as SessionRow);
@@ -146,12 +170,14 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
     }
   }, [status, sessionId]);
 
-  // Re-renders the countdown a few times a second while a question is live.
+  // Re-renders the countdown a few times a second while a question is live,
+  // or while the reveal counts down to the next question.
+  const revealCounting = !!revealTiming && !revealTiming.pausedAt;
   useEffect(() => {
-    if (status !== "question" || !settings.timerEnabled) return;
+    if (!(status === "question" && settings.timerEnabled) && !revealCounting) return;
     const id = setInterval(() => setNowMs(Date.now()), 250);
     return () => clearInterval(id);
-  }, [status, settings.timerEnabled]);
+  }, [status, settings.timerEnabled, revealCounting]);
 
   // Submits a blank answer once the server-anchored clock runs out.
   useEffect(() => {
@@ -337,7 +363,13 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
         )}
 
         {revealing ? (
-          <p style={{ textAlign: "center", fontWeight: 700 }}>Waiting for the next question…</p>
+          <p style={{ textAlign: "center", fontWeight: 700 }}>
+            {!revealTiming
+              ? "Waiting for the next question…"
+              : revealTiming.pausedAt
+                ? "⏸ Paused by your teacher"
+                : `Next up in ${revealLeft}s…`}
+          </p>
         ) : (
           locked &&
           question && <p style={{ textAlign: "center", fontWeight: 700 }}>Answer submitted — waiting for the next question…</p>

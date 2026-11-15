@@ -50,3 +50,43 @@ export function timingFromSessionRow(
     extensionSeconds: row.time_extension_seconds ?? 0,
   };
 }
+
+// Reveal countdown for auto-advance (supabase/migrations/
+// 0026_auto_advance.sql). While status = 'reveal', paused_at marks a paused
+// countdown and reveal_paused_seconds holds earlier paused stretches.
+export interface RevealTiming {
+  revealStartedAt: string | null;
+  pausedAt: string | null;
+  pausedSeconds: number;
+  revealSeconds: number;
+}
+
+// Matches the database default when settings.revealSeconds is missing.
+export const DEFAULT_REVEAL_SECONDS = 5;
+export const REVEAL_SECONDS_CHOICES = [3, 5, 10] as const;
+
+// Unrounded seconds left before the auto-advance, at `nowMs` (server time).
+// Frozen while paused; negative once the countdown is over.
+export function revealSecondsLeft(timing: RevealTiming, nowMs: number): number {
+  if (!timing.revealStartedAt) return timing.revealSeconds;
+  const measuredTo = timing.pausedAt ? Date.parse(timing.pausedAt) : nowMs;
+  const elapsed = (measuredTo - Date.parse(timing.revealStartedAt)) / 1000 - timing.pausedSeconds;
+  return timing.revealSeconds - elapsed;
+}
+
+export function revealTimingFromSessionRow(
+  row: {
+    status?: string;
+    reveal_started_at?: string | null;
+    paused_at?: string | null;
+    reveal_paused_seconds?: number | string | null;
+  },
+  revealSeconds: number
+): RevealTiming {
+  return {
+    revealStartedAt: row.reveal_started_at ?? null,
+    pausedAt: row.status === "reveal" ? row.paused_at ?? null : null,
+    pausedSeconds: Number(row.reveal_paused_seconds ?? 0),
+    revealSeconds,
+  };
+}

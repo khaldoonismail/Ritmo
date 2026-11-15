@@ -13,6 +13,7 @@ interface QuestionShape {
 interface SessionSettings {
   timerEnabled?: boolean;
   timeLimitSeconds?: number;
+  autoAdvance?: boolean;
 }
 
 // Grades one Team Battle answer server-side (never trusting the client for
@@ -109,6 +110,18 @@ export async function POST(request: NextRequest, { params }: { params: { session
       p_team_id: participant.team_id,
       p_participant_id: participant.id,
       p_points: points,
+    });
+  }
+
+  // With auto-advance on, the last answer in moves everyone to the reveal.
+  // The function re-checks everything itself (status, index, setting, and
+  // that every joined student has answered), so only the truly last
+  // answer changes anything, and only once.
+  if (settings.autoAdvance) {
+    await supabase.rpc("team_battle_reveal_internal", {
+      p_session_id: gameSession.id,
+      p_question_index: questionIndex,
+      p_reason: "all_answered",
     });
   }
 

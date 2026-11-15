@@ -8,7 +8,17 @@ import { colors, radius, solidShadow } from "@/lib/theme";
 import { shadowForColor } from "@/lib/teamColors";
 import TeamLeaderboard, { LeaderboardTeam } from "@/components/TeamLeaderboard";
 import TeamSetup, { TeamSetupConfig } from "./TeamSetup";
-import { displaySecondsLeft, timingFromSessionRow, type QuestionTiming } from "@/lib/teamBattleTiming";
+import {
+  DEFAULT_REVEAL_SECONDS,
+  LATE_ANSWER_GRACE_SECONDS,
+  displaySecondsLeft,
+  revealSecondsLeft,
+  revealTimingFromSessionRow,
+  secondsLeft,
+  timingFromSessionRow,
+  type QuestionTiming,
+  type RevealTiming,
+} from "@/lib/teamBattleTiming";
 
 interface Question {
   id: string;
@@ -51,8 +61,30 @@ interface ResumableSession {
   pin: string;
   status: string;
   current_question_index: number;
-  settings: { timerEnabled?: boolean; timeLimitSeconds?: number } | null;
+  settings: { timerEnabled?: boolean; timeLimitSeconds?: number; autoAdvance?: boolean; revealSeconds?: number } | null;
 }
+
+interface HostSettings {
+  timerEnabled: boolean;
+  timeLimitSeconds: number;
+  // Missing on sessions started before 0026_auto_advance.sql, which keep
+  // the manual Show Answer / Next Question flow.
+  autoAdvance: boolean;
+  revealSeconds: number;
+}
+
+function hostSettingsFrom(raw: ResumableSession["settings"]): HostSettings {
+  return {
+    timerEnabled: raw?.timerEnabled ?? true,
+    timeLimitSeconds: raw?.timeLimitSeconds ?? 20,
+    autoAdvance: raw?.autoAdvance ?? false,
+    revealSeconds: raw?.revealSeconds ?? DEFAULT_REVEAL_SECONDS,
+  };
+}
+
+// How often the host retries an automatic step the database turned down
+// (e.g. this device's clock ran slightly ahead of the database's).
+const AUTO_RETRY_MS = 1000;
 
 interface RevealStats {
   answered: number;
@@ -61,7 +93,7 @@ interface RevealStats {
 }
 
 const SESSION_TIMING_COLUMNS =
-  "status, current_question_index, time_extension_seconds, question_started_at, paused_at, paused_seconds";
+  "status, current_question_index, time_extension_seconds, question_started_at, paused_at, paused_seconds, reveal_started_at, reveal_paused_seconds";
 
 // Host-side state machine for a real, multi-device Team Battle session.
 // Fully separate from the Individual "Play Demo" stage machine in
@@ -85,16 +117,29 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   const [revealStats, setRevealStats] = useState<RevealStats | null>(null);
   const [ending, setEnding] = useState(false);
   const [resumable, setResumable] = useState<ResumableSession | null>(null);
-  const [settings, setSettings] = useState({ timerEnabled: true, timeLimitSeconds: 20 });
+  const [settings, setSettingsState] = useState<HostSettings>(() => hostSettingsFrom(null));
+  // Mirrors `settings` for the Realtime callback, which outlives renders.
+  const settingsRef = useRef(settings);
+  function setSettings(next: HostSettings) {
+    settingsRef.current = next;
+    setSettingsState(next);
+  }
   // The current question's server-anchored clock (lib/teamBattleTiming.ts),
   // refreshed from game_sessions after every host action.
   const [timing, setTiming] = useState<QuestionTiming | null>(null);
+  // The reveal countdown before an auto-advance (0026_auto_advance.sql).
+  const [revealTiming, setRevealTiming] = useState<RevealTiming | null>(null);
+  // Last time this device asked the database for an automatic reveal or
+  // advance, so the 250ms tick doesn't fire one per tick.
+  const autoRequestRef = useRef<{ key: string; at: number } | null>(null);
   // Database time minus this device's time, from the RPCs' returned now().
   const [clockOffsetMs, setClockOffsetMs] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const totalQuestions = game.questions.length;
   const extensionSeconds = timing?.extensionSeconds ?? 0;
   const timeLeft = timing ? displaySecondsLeft(timing, nowMs + clockOffsetMs) : 0;
+  const revealPaused = revealing && !!revealTiming?.pausedAt;
+  const revealLeft = revealTiming ? Math.max(0, Math.ceil(revealSecondsLeft(revealTiming, nowMs + clockOffsetMs))) : 0;
 
   // Memoized rather than recreated per render — a fresh client each render
   // gave its Realtime channel its own new websocket/auth handshake, which
@@ -126,13 +171,33 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
 
   // Re-reads the session's status, question and clock — the single source
   // of truth for the live screen, so a reload lands on the same state.
-  async function refreshSession(sid: string, timeLimitSeconds: number) {
+  async function refreshSession(sid: string) {
+    const { timeLimitSeconds, revealSeconds } = settingsRef.current;
     const { data } = await supabase.from("game_sessions").select(SESSION_TIMING_COLUMNS).eq("id", sid).maybeSingle();
     if (!data) return null;
     setCurrentQuestionIndex(data.current_question_index);
     setPaused(data.status === "paused");
     setRevealing(data.status === "reveal");
     setTiming(timingFromSessionRow(data, timeLimitSeconds));
+    setRevealTiming(data.status === "reveal" ? revealTimingFromSessionRow(data, revealSeconds) : null);
+    return data;
+  }
+
+  // Brings the live screen in line with the session row after any change —
+  // the host's own actions, and ones made elsewhere (the answer route's
+  // "everyone answered" reveal, the game ending in another tab).
+  async function syncLive(sid: string) {
+    const data = await refreshSession(sid);
+    if (!data) return null;
+    if (data.status === "reveal") {
+      await Promise.all([loadRevealStats(sid, data.current_question_index), loadTeams(sid)]);
+    } else {
+      setRevealStats(null);
+    }
+    if (data.status === "final") {
+      await Promise.all([loadTeams(sid), loadRoster(sid)]);
+      setStage("final");
+    }
     return data;
   }
 
@@ -191,15 +256,11 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
 
   async function handleResume(row: ResumableSession) {
     setError("");
-    const resumedSettings = {
-      timerEnabled: row.settings?.timerEnabled ?? true,
-      timeLimitSeconds: row.settings?.timeLimitSeconds ?? 20,
-    };
     setSessionId(row.id);
     setPin(row.pin);
-    setSettings(resumedSettings);
+    setSettings(hostSettingsFrom(row.settings));
     await Promise.all([loadTeams(row.id), loadRoster(row.id)]);
-    const current = await refreshSession(row.id, resumedSettings.timeLimitSeconds);
+    const current = await refreshSession(row.id);
     if (!current) {
       setError("That game could not be loaded.");
       return;
@@ -268,7 +329,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     if (startError) throw new Error(startError.message);
     syncClock(serverNow as string | null);
     setRevealStats(null);
-    await refreshSession(sessionId, settings.timeLimitSeconds);
+    await refreshSession(sessionId);
   }
 
   useEffect(() => {
@@ -282,24 +343,94 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
       return unsubscribe;
     }
     if (stage === "live") {
-      const unsubscribe = subscribeToTable(supabase, {
+      const unsubscribeTeams = subscribeToTable(supabase, {
         table: "teams",
         filter: `session_id=eq.${sessionId}`,
         onChange: () => loadTeams(sessionId),
       });
-      return unsubscribe;
+      const unsubscribeSession = subscribeToTable(supabase, {
+        table: "game_sessions",
+        filter: `id=eq.${sessionId}`,
+        onChange: () => syncLive(sessionId),
+      });
+      return () => {
+        unsubscribeTeams();
+        unsubscribeSession();
+      };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, stage]);
 
-  // Host-side countdown display, derived from the same server-anchored
-  // clock the answer route grades by. Purely a display: it never advances
-  // the question or locks answers.
+  // Host-side countdowns (question and reveal), derived from the same
+  // server-anchored clocks the database checks. With auto-advance on, the
+  // two effects below use them to ask the database to move on; the
+  // database decides on its own clock, so a host clock that runs fast just
+  // gets a refusal and retries.
+  const questionClockRunning = stage === "live" && settings.timerEnabled && !paused && !revealing;
+  const revealClockRunning = stage === "live" && settings.autoAdvance && revealing && !revealPaused;
   useEffect(() => {
-    if (stage !== "live" || !settings.timerEnabled || paused || revealing) return;
+    if (!questionClockRunning && !revealClockRunning) return;
     const id = setInterval(() => setNowMs(Date.now()), 250);
     return () => clearInterval(id);
-  }, [stage, settings.timerEnabled, paused, revealing]);
+  }, [questionClockRunning, revealClockRunning]);
+
+  // Claims the right to make automatic request `key` now, at most once per
+  // AUTO_RETRY_MS, so the 250ms tick doesn't send one per tick.
+  function claimAutoRequest(key: string) {
+    const last = autoRequestRef.current;
+    const now = Date.now();
+    if (last && last.key === key && now - last.at < AUTO_RETRY_MS) return false;
+    autoRequestRef.current = { key, at: now };
+    return true;
+  }
+
+  // Auto-reveal when time is up (plus the late-answer grace, which the
+  // database also requires). "Everyone answered" is handled by the answer
+  // route on the server, and arrives here through the session subscription.
+  useEffect(() => {
+    if (!questionClockRunning || !settings.autoAdvance || !timing?.questionStartedAt) return;
+    if (advancing || skipping || pausing) return;
+    if (secondsLeft(timing, nowMs + clockOffsetMs) > -LATE_ANSWER_GRACE_SECONDS) return;
+    const index = currentQuestionIndex;
+    if (!claimAutoRequest(`reveal:${index}`)) return;
+    (async () => {
+      const { data: serverNow, error: revealError } = await supabase.rpc("team_battle_reveal", {
+        p_session_id: sessionId,
+        p_question_index: index,
+        p_reason: "time_up",
+      });
+      if (revealError) return;
+      syncClock(serverNow as string | null);
+      await syncLive(sessionId);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nowMs, questionClockRunning]);
+
+  // Auto-advance once the reveal countdown runs out.
+  useEffect(() => {
+    if (!revealClockRunning || !revealTiming?.revealStartedAt) return;
+    if (advancing || pausing) return;
+    if (revealSecondsLeft(revealTiming, nowMs + clockOffsetMs) > 0) return;
+    const index = currentQuestionIndex;
+    if (!claimAutoRequest(`advance:${index}`)) return;
+    advanceFromReveal(index, false).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nowMs, revealClockRunning]);
+
+  // Leaves the reveal of question `fromIndex`: the next question, or Final
+  // Results after the last one. skipCountdown = true for Next Question /
+  // Next now; false for the auto-advance, which the database only allows
+  // once the countdown is over and not paused.
+  async function advanceFromReveal(fromIndex: number, skipCountdown: boolean) {
+    const { data: serverNow, error: advanceError } = await supabase.rpc("team_battle_advance", {
+      p_session_id: sessionId,
+      p_from_index: fromIndex,
+      p_skip_countdown: skipCountdown,
+    });
+    if (advanceError) throw new Error(advanceError.message);
+    syncClock(serverNow as string | null);
+    await syncLive(sessionId);
+  }
 
   async function handleStart(config: TeamSetupConfig) {
     setStarting(true);
@@ -332,6 +463,8 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
           settings: {
             timerEnabled: config.timerEnabled,
             timeLimitSeconds: config.timeLimitSeconds,
+            autoAdvance: config.autoAdvance,
+            revealSeconds: config.revealSeconds,
           },
         })
         .select("id")
@@ -359,7 +492,12 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
       setSessionId(sessionRow.id);
       setPin(newPin);
       setTeams(teamRows);
-      setSettings({ timerEnabled: config.timerEnabled, timeLimitSeconds: config.timeLimitSeconds });
+      setSettings({
+        timerEnabled: config.timerEnabled,
+        timeLimitSeconds: config.timeLimitSeconds,
+        autoAdvance: config.autoAdvance,
+        revealSeconds: config.revealSeconds,
+      });
       await loadRoster(sessionRow.id);
       setStage("waiting");
     } catch (e: any) {
@@ -390,15 +528,15 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     if (advancing || skipping || revealing) return;
     setAdvancing(true);
     try {
-      const { error: revealError } = await supabase
-        .from("game_sessions")
-        .update({ status: "reveal" })
-        .eq("id", sessionId)
-        .in("status", ["question", "paused"]);
+      const { data: serverNow, error: revealError } = await supabase.rpc("team_battle_reveal", {
+        p_session_id: sessionId,
+        p_question_index: currentQuestionIndex,
+        p_reason: "manual",
+      });
       if (revealError) throw new Error(revealError.message);
       setError("");
-      await refreshSession(sessionId, settings.timeLimitSeconds);
-      await Promise.all([loadRevealStats(sessionId, currentQuestionIndex), loadTeams(sessionId)]);
+      syncClock(serverNow as string | null);
+      await syncLive(sessionId);
     } catch (e: any) {
       setError(e.message || "Could not show the answer");
     } finally {
@@ -410,13 +548,14 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
     // Guards against a double-click (or anything else firing this twice in
     // quick succession) racing on currentQuestionIndex before the first
     // call's state update lands — without it, two rapid calls both read the
-    // same stale index and only one increment actually sticks. Also blocked
-    // while paused so the round can't be advanced out from under a frozen
-    // question.
-    if (advancing || paused || skipping) return;
+    // same stale index and only one increment actually sticks. The
+    // database also only moves on from the reveal of this exact index, so
+    // even a second tab can't skip a question. Allowed while the reveal
+    // countdown is paused ("Next now").
+    if (advancing || skipping || !revealing) return;
     setAdvancing(true);
     try {
-      await goToQuestion(currentQuestionIndex + 1);
+      await advanceFromReveal(currentQuestionIndex, true);
       setError("");
     } catch (e: any) {
       setError(e.message || "Could not move to the next question");
@@ -473,7 +612,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
         return;
       }
       setError("");
-      await refreshSession(sessionId, settings.timeLimitSeconds);
+      await refreshSession(sessionId);
     } finally {
       setAddingTime(false);
     }
@@ -483,14 +622,16 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   // team_battle_set_paused, which stamps the pause with the database clock
   // and, on resume, adds the paused stretch to paused_seconds — so the
   // server-anchored countdown on every device freezes and resumes in step,
-  // and paused time never counts against anyone's speed bonus.
+  // and paused time never counts against anyone's speed bonus. During an
+  // auto-advance reveal the same call pauses the reveal countdown instead.
   async function togglePause() {
-    if (pausing || skipping || revealing) return;
+    if (pausing || skipping || advancing) return;
+    if (revealing && !settings.autoAdvance) return;
     setPausing(true);
     try {
       const { data: serverNow, error: pauseError } = await supabase.rpc("team_battle_set_paused", {
         p_session_id: sessionId,
-        p_paused: !paused,
+        p_paused: revealing ? !revealPaused : !paused,
       });
       // Only flip the host's own local state once the write actually
       // lands — otherwise a failed update (e.g. a network blip) would show
@@ -500,7 +641,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
       } else {
         setError("");
         syncClock(serverNow as string | null);
-        await refreshSession(sessionId, settings.timeLimitSeconds);
+        await refreshSession(sessionId);
       }
     } finally {
       setPausing(false);
@@ -735,7 +876,26 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
                 +15s
               </button>
             )}
-            {!revealing && (
+            {revealing && settings.autoAdvance && (
+              <span
+                role="timer"
+                style={{
+                  fontSize: "0.95rem",
+                  fontWeight: 800,
+                  background: colors.white,
+                  color: colors.textPrimary,
+                  padding: "0.35rem 0.7rem",
+                  borderRadius: radius.pill,
+                }}
+              >
+                {revealPaused
+                  ? "Countdown paused"
+                  : currentQuestionIndex + 1 >= totalQuestions
+                    ? `Results in ${revealLeft}s`
+                    : `Next in ${revealLeft}s`}
+              </span>
+            )}
+            {(!revealing || settings.autoAdvance) && (
               <button
                 onClick={togglePause}
                 disabled={pausing || skipping}
@@ -752,7 +912,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
                   opacity: pausing || skipping ? 0.6 : 1,
                 }}
               >
-                {paused ? "▶ Resume" : "⏸ Pause"}
+                {(revealing ? revealPaused : paused) ? "▶ Resume" : "⏸ Pause"}
               </button>
             )}
             {/* Danger-styled (matches the "Delete" button convention in
@@ -881,7 +1041,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
         <TeamLeaderboard teams={teams} />
         <button
           onClick={revealing ? handleNextQuestion : handleReveal}
-          disabled={advancing || (revealing && paused) || skipping}
+          disabled={advancing || skipping}
           style={{
             fontSize: "1rem",
             fontWeight: 800,
@@ -895,7 +1055,15 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
             opacity: advancing || skipping ? 0.6 : 1,
           }}
         >
-          {!revealing ? "Show Answer" : currentQuestionIndex + 1 >= totalQuestions ? "See Final Results" : "Next Question"}
+          {!revealing
+            ? "Show Answer"
+            : currentQuestionIndex + 1 >= totalQuestions
+              ? settings.autoAdvance
+                ? "See Final Results now"
+                : "See Final Results"
+              : settings.autoAdvance
+                ? "Next now"
+                : "Next Question"}
         </button>
         <button onClick={handleEndGame} disabled={ending} style={{ ...secondaryButtonStyle, alignSelf: "center" }}>
           End game now
