@@ -4,17 +4,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import NoteStaff from "@/components/NoteStaff";
 import { colors, radius } from "@/lib/theme";
 import { playNote, unlockNoteAudio } from "@/lib/playNote";
-import { configLabel, type NoteReadingConfig } from "@/lib/noteReading";
+import { CLEF_LABELS, configLabel, noteName, type Step } from "@/lib/noteReading";
 import {
   GAP_SECONDS,
   GateSupply,
   NOTE_RUNNER_LIVES,
-  laneCount,
+  NOTE_RUNNER_MODE_LABELS,
+  WRONG_GAP_SECONDS,
+  gateSeconds,
   pointsFor,
-  runSpeed,
+  runnerLanes,
+  type NoteRunnerConfig,
   type RunnerGate,
 } from "@/lib/noteRunner";
 import { RunnerEngine } from "./RunnerEngine";
+import { detectQuality } from "./quality";
 
 // One Note Runner run: the 3D road (RunnerEngine), the note card, the HUD
 // and the controls. The whole run happens in the browser; `onRunEnd` gets
@@ -22,7 +26,9 @@ import { RunnerEngine } from "./RunnerEngine";
 
 export interface RunnerAnswer {
   note: RunnerGate["question"]["note"];
-  picked: string;
+  // Name mode: the sign the runner went through. Find mode: the staff
+  // position it was on.
+  picked: string | number;
   correct: boolean;
 }
 
@@ -36,9 +42,6 @@ export interface RunSummary {
 
 type Phase = "ready" | "playing" | "paused" | "over";
 
-// Longer pause after a mistake, so the student can see the right lane.
-const WRONG_GAP_SECONDS = 1.4;
-
 function playSound(kind: "wrong") {
   const audio = new Audio(`/sounds/${kind}.mp3`);
   audio.volume = 0.6;
@@ -51,7 +54,7 @@ export default function NoteRunnerGame({
   onChangeSettings,
   onRunEnd,
 }: {
-  config: NoteReadingConfig;
+  config: NoteRunnerConfig;
   // Start running as soon as the scene is ready (the click that mounted
   // this component already unlocked audio).
   autoStart?: boolean;
@@ -72,6 +75,9 @@ export default function NoteRunnerGame({
   const [stats, setStats] = useState(statsRef.current);
   const [feedback, setFeedback] = useState<{ correct: boolean; answer: string; points: number } | null>(null);
   const [webglError, setWebglError] = useState(false);
+  // Lanes are fixed for the life of this component (settings change
+  // remounts it).
+  const [laneLayout] = useState(() => runnerLanes(config));
 
   const setPhase = (p: Phase) => {
     phaseRef.current = p;
@@ -85,8 +91,9 @@ export default function NoteRunnerGame({
     gateRef.current = g;
     setGate(g);
     setFeedback(null);
-    engine.spawnGate(g.lanes, runSpeed(config.level, statsRef.current.correct));
-  }, [config.level]);
+    if (config.mode === "find") engine.setClef(g.clef);
+    engine.spawnGate(g.signs, gateSeconds(config, statsRef.current.correct));
+  }, [config]);
 
   const handleGateReached = useCallback(
     (lane: number) => {
@@ -94,7 +101,11 @@ export default function NoteRunnerGame({
       const g = gateRef.current;
       if (!engine || !g) return;
       const s = { ...statsRef.current };
-      const correct = lane === g.correctLane;
+      const correct = g.correctLanes.includes(lane);
+      // Show the right lane nearest to where the runner went.
+      const shownLane = correct
+        ? lane
+        : g.correctLanes.reduce((a, b) => (Math.abs(b - lane) < Math.abs(a - lane) ? b : a), g.correctLane);
       let points = 0;
       s.total++;
       if (correct) {
@@ -111,9 +122,10 @@ export default function NoteRunnerGame({
       }
       statsRef.current = s;
       setStats(s);
-      answersRef.current.push({ note: g.question.note, picked: g.lanes[lane], correct });
-      setFeedback({ correct, answer: g.lanes[g.correctLane], points });
-      engine.showResult(g.correctLane, lane, correct ? GAP_SECONDS : WRONG_GAP_SECONDS);
+      const picked = g.signs ? g.signs[lane] : laneLayout.lanes[lane];
+      answersRef.current.push({ note: g.question.note, picked, correct });
+      setFeedback({ correct, answer: g.signs ? g.signs[g.correctLane] : g.name, points });
+      engine.showResult(shownLane, lane, correct ? GAP_SECONDS : WRONG_GAP_SECONDS);
 
       if (s.lives <= 0) {
         // Let the red flash show, then stop.
@@ -128,7 +140,7 @@ export default function NoteRunnerGame({
         });
       }
     },
-    [onRunEnd]
+    [onRunEnd, laneLayout]
   );
 
   // Create the 3D scene once per mount.
@@ -137,10 +149,15 @@ export default function NoteRunnerGame({
     if (!el) return;
     let engine: RunnerEngine;
     try {
-      engine = new RunnerEngine(el, laneCount(config.level), {
-        onGateReached: (lane) => handleGateRef.current(lane),
-        onNeedGate: () => nextGateRef.current(),
-      });
+      engine = new RunnerEngine(
+        el,
+        { ...laneLayout, mode: config.mode },
+        {
+          onGateReached: (lane) => handleGateRef.current(lane),
+          onNeedGate: () => nextGateRef.current(),
+        },
+        detectQuality()
+      );
     } catch {
       setWebglError(true);
       return;
@@ -209,15 +226,15 @@ export default function NoteRunnerGame({
     engineRef.current?.start();
   };
 
-  // Keyboard: ← → (and A / D) change lane; P or Esc pauses.
+  // Keyboard: ↑ ↓ (and W / S) change lane; P or Esc pauses.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const p = phaseRef.current;
       if (p === "playing") {
-        if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+        if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") {
           engineRef.current?.moveLane(-1);
           e.preventDefault();
-        } else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+        } else if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") {
           engineRef.current?.moveLane(1);
           e.preventDefault();
         } else if (e.key === "p" || e.key === "P" || e.key === "Escape") {
@@ -242,8 +259,8 @@ export default function NoteRunnerGame({
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [pause]);
 
-  // Touch / mouse on the road: swipe left/right moves one lane, a tap
-  // moves to the lane under the finger.
+  // Touch / mouse: swipe up/down moves one lane (a long swipe moves more,
+  // one lane per 45 px), a tap moves to the lane under the finger.
   const pointerStart = useRef<{ x: number; y: number; id: number } | null>(null);
   const onPointerDown = (e: React.PointerEvent) => {
     if (phaseRef.current !== "playing") return;
@@ -256,8 +273,12 @@ export default function NoteRunnerGame({
     if (!startPt || startPt.id !== e.pointerId || !engine || phaseRef.current !== "playing") return;
     const dx = e.clientX - startPt.x;
     const dy = e.clientY - startPt.y;
-    if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy)) engine.moveLane(dx < 0 ? -1 : 1);
-    else if (Math.abs(dx) < 15 && Math.abs(dy) < 15) engine.setLane(engine.laneAtClientX(e.clientX));
+    if (Math.abs(dy) > 30 && Math.abs(dy) > Math.abs(dx)) {
+      const steps = Math.max(1, Math.round(Math.abs(dy) / 45));
+      for (let i = 0; i < steps; i++) engine.moveLane(dy < 0 ? -1 : 1);
+    } else if (Math.abs(dx) < 15 && Math.abs(dy) < 15) {
+      engine.setLane(engine.laneAtClientY(e.clientY));
+    }
   };
 
   const hearts = Array.from({ length: NOTE_RUNNER_LIVES }, (_, i) => (i < stats.lives ? "❤️" : "🤍")).join(" ");
@@ -281,7 +302,7 @@ export default function NoteRunnerGame({
         onPointerUp={onPointerUp}
         onPointerCancel={() => (pointerStart.current = null)}
         style={{ position: "absolute", inset: 0 }}
-        aria-label="Note Runner road. Use the left and right arrow keys, swipe, or tap a lane."
+        aria-label="Note Runner staff. Use the up and down arrow keys, swipe up or down, or tap a lane."
       />
 
       {/* HUD */}
@@ -343,16 +364,36 @@ export default function NoteRunnerGame({
             textAlign: "center",
           }}
         >
-          <NoteStaff note={gate.question.note} maxWidth="100%" />
+          {config.mode === "name" ? (
+            <NoteStaff note={gate.question.note} maxWidth="100%" />
+          ) : (
+            <div style={{ padding: "0.35rem 0 0.1rem" }}>
+              <div style={{ fontSize: "0.75rem", fontWeight: 800, opacity: 0.55 }}>
+                {CLEF_LABELS[gate.clef]} · find
+              </div>
+              <div style={{ fontSize: "2.6rem", fontWeight: 900, lineHeight: 1.1, color: colors.blueText }}>
+                {gate.name}
+              </div>
+              {config.naming === "solfege" && (
+                <div style={{ fontSize: "0.8rem", fontWeight: 700, opacity: 0.5 }}>
+                  ({noteName(gate.question.note.step as Step, gate.question.note.accidental, "letters")})
+                </div>
+              )}
+            </div>
+          )}
           <div style={{ minHeight: "1.3rem", fontSize: "0.9rem", fontWeight: 800 }}>
             {feedback ? (
               feedback.correct ? (
                 <span style={{ color: colors.greenCardShadow }}>✓ {feedback.answer} +{feedback.points}</span>
               ) : (
-                <span style={{ color: colors.coralText }}>✗ It was {feedback.answer}</span>
+                <span style={{ color: colors.coralText }}>
+                  {config.mode === "name" ? `✗ It was ${feedback.answer}` : "✗ It's the green note"}
+                </span>
               )
             ) : (
-              <span style={{ opacity: 0.55 }}>Run into the right lane</span>
+              <span style={{ opacity: 0.55 }}>
+                {config.mode === "name" ? "Run into the right name" : "Run onto its line or space"}
+              </span>
             )}
           </div>
         </div>
@@ -365,11 +406,15 @@ export default function NoteRunnerGame({
             {phase === "ready" && (
               <>
                 <h1 style={{ margin: 0, fontSize: "1.8rem", fontWeight: 900 }}>🏃 Note Runner</h1>
-                <p style={{ margin: 0, fontWeight: 700, opacity: 0.7 }}>{configLabel(config)}</p>
+                <p style={{ margin: 0, fontWeight: 700, opacity: 0.7 }}>
+                  {NOTE_RUNNER_MODE_LABELS[config.mode]} · {configLabel(config)}
+                </p>
                 <p style={{ margin: 0, fontWeight: 600, lineHeight: 1.45 }}>
-                  Read the note, then run into the lane with its name before you reach the gate.
+                  {config.mode === "name"
+                    ? "Read the note, then run into the lane with its name before you reach the gate."
+                    : "Read the name, then run onto its line or space of the staff before you reach the gate."}
                   <br />
-                  <strong>Computer:</strong> ← → keys · <strong>Phone:</strong> swipe or tap a lane
+                  <strong>Computer:</strong> ↑ ↓ keys · <strong>Tablet:</strong> swipe up/down or tap a lane
                 </p>
                 <button type="button" onClick={start} style={primaryButton}>
                   Start

@@ -96,7 +96,7 @@ export function staffPosition(note: Pick<NoteSpec, "clef" | "step" | "octave">):
 // side, Hard 3.
 //   Treble: Easy D4–G5, Medium A3–C6, Hard F3–E6
 //   Bass:   Easy F2–B3, Medium C2–E4, Hard A1–G4
-const LEVEL_RANGE: Record<NoteLevel, [number, number]> = {
+export const LEVEL_RANGE: Record<NoteLevel, [number, number]> = {
   easy: [-1, 9],
   medium: [-4, 12],
   hard: [-6, 14],
