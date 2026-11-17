@@ -120,6 +120,7 @@ export default function GamePlayer({
     return (
       <main style={{ ...outerStyle, background: colors.background, color: colors.textPrimary }}>
         <h1 style={{ fontSize: "1.75rem", fontWeight: 800, margin: 0 }}>Already completed</h1>
+        <p style={{ fontSize: "1.05rem", fontWeight: 700, opacity: 0.75, margin: 0 }}>{title}</p>
         {savedScore !== null && (
           <p style={{ fontSize: "1.2rem", fontWeight: 700 }}>Your score: {savedScore} pts</p>
         )}

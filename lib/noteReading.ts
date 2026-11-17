@@ -366,3 +366,26 @@ export function variantLabel(variant: string | null | undefined): string | null 
 export function configLabel(config: NoteReadingConfig): string {
   return variantLabel(noteReadingVariant(config)) ?? "";
 }
+
+// An assignment's display title: "Note Reading – Treble Easy" when it carries
+// Note Reading settings (assignments.game_settings), else the game's title.
+// Used everywhere an assignment is listed (reports, analytics, parent page).
+export function assignmentTitle(gameTitle: string, gameSettings: unknown): string {
+  if (!gameSettings || typeof gameSettings !== "object") return gameTitle;
+  return `${gameTitle} – ${configLabel(normalizeNoteReadingConfig(gameSettings))}`;
+}
+
+// A grouping key for "the same content": a game plus its Note Reading
+// settings, so Treble Easy and Mixed Hard assignments aren't merged.
+export function assignmentContentKey(a: {
+  lesson_id: string | null;
+  game_id: string | null;
+  game_settings?: unknown;
+}): string {
+  if (!a.game_id) return `lesson:${a.lesson_id}`;
+  const label =
+    a.game_settings && typeof a.game_settings === "object"
+      ? noteReadingVariant(normalizeNoteReadingConfig(a.game_settings))
+      : "";
+  return label ? `game:${a.game_id}|${label}` : `game:${a.game_id}`;
+}

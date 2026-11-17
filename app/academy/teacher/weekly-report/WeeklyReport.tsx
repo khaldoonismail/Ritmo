@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import ExcelJS from "exceljs";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { lessonTitle as legacyLessonTitle } from "@/lib/lessons";
+import { assignmentTitle } from "@/lib/noteReading";
 import { colors, radius, solidShadow } from "@/lib/theme";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -108,7 +109,7 @@ export default function WeeklyReport() {
           supabase.from("students").select("id, name, class_id").in("class_id", classIds),
           supabase
             .from("assignments")
-            .select("id, class_id, lesson_id, game_id, student_id, due_at")
+            .select("id, class_id, lesson_id, game_id, student_id, due_at, game_settings")
             .in("class_id", classIds),
         ]);
 
@@ -235,7 +236,7 @@ export default function WeeklyReport() {
       const nextUpcoming: UpcomingItem[] = dueSoon
         .map((a): UpcomingItem => {
           const title = a.game_id
-            ? gameTitleMap.get(a.game_id) ?? "Unknown game"
+            ? assignmentTitle(gameTitleMap.get(a.game_id) ?? "Unknown game", a.game_settings)
             : a.lesson_id
               ? lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id)
               : "Unknown assignment";

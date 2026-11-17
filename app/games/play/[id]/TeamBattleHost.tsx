@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useLeaveWarning } from "@/lib/useLeaveWarning";
 import { QRCodeSVG } from "qrcode.react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { subscribeToTable } from "@/lib/supabase/realtime";
@@ -108,6 +109,10 @@ const SESSION_TIMING_COLUMNS =
 // page.tsx — nothing here is shared with or affects that code path.
 export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl: string }) {
   const [stage, setStage] = useState<HostStage>("setup");
+  // Auto-advance and the timers run on this page, so leaving it mid-game
+  // stalls the round for every student (it can be resumed, but only by
+  // reopening this page).
+  useLeaveWarning(stage === "waiting" || stage === "live");
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
 

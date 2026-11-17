@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { lessonTitle as legacyLessonTitle } from "@/lib/lessons";
+import { assignmentContentKey, assignmentTitle, variantLabel } from "@/lib/noteReading";
 import { colors, radius, solidShadow } from "@/lib/theme";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -25,6 +26,7 @@ interface AssignmentRow {
   class_id: string;
   game_id: string | null;
   lesson_id: string | null;
+  game_settings: unknown;
 }
 interface ProgressRow {
   student_id: string;
@@ -44,6 +46,7 @@ interface SessionRow {
   play_mode: string;
   status: string;
   created_at: string;
+  settings: { variant?: string } | null;
 }
 
 interface ActivityItem {
@@ -127,7 +130,7 @@ export default function TeacherDashboard() {
         supabase.from("games").select("id, title").eq("teacher_id", teacherRow.id),
         supabase
           .from("game_sessions")
-          .select("id, class_id, game_id, play_mode, status, created_at")
+          .select("id, class_id, game_id, play_mode, status, created_at, settings")
           .eq("teacher_id", teacherRow.id)
           .order("created_at", { ascending: false })
           .limit(15),
@@ -146,7 +149,7 @@ export default function TeacherDashboard() {
 
       const [{ data: studentRows }, { data: assignmentRows }] = await Promise.all([
         supabase.from("students").select("id, name, class_id").in("class_id", classIds),
-        supabase.from("assignments").select("id, class_id, game_id, lesson_id").in("class_id", classIds),
+        supabase.from("assignments").select("id, class_id, game_id, lesson_id, game_settings").in("class_id", classIds),
       ]);
 
       const students: StudentRow[] = studentRows || [];
@@ -164,6 +167,15 @@ export default function TeacherDashboard() {
       }
 
       const gameTitleById = new Map(games.map((g) => [g.id, g.title]));
+      // Assigned or hosted games the teacher doesn't own (Community Games,
+      // e.g. the shared Note Reading game) still need their titles.
+      const otherGameIds = [
+        ...new Set([...assignments.map((a) => a.game_id), ...sessions.map((s) => s.game_id)]),
+      ].filter((id): id is string => !!id && !gameTitleById.has(id));
+      if (otherGameIds.length > 0) {
+        const { data } = await supabase.from("games").select("id, title").in("id", otherGameIds);
+        for (const g of data || []) gameTitleById.set(g.id, g.title);
+      }
       const studentNameById = new Map(students.map((s) => [s.id, s.name]));
       const studentClassById = new Map(students.map((s) => [s.id, s.class_id]));
       const classNameById = new Map(classes.map((c) => [c.id, c.name]));
@@ -237,10 +249,11 @@ export default function TeacherDashboard() {
       setClassSummaries(summaries);
 
       // --- Alerts: struggling content (condensed version of AnalyticsReport's logic) ---
-      const contentKey = (a: AssignmentRow) => (a.game_id ? `game:${a.game_id}` : `lesson:${a.lesson_id}`);
       const idsByContent = new Map<string, string[]>();
+      const settingsByContent = new Map<string, unknown>();
       for (const a of assignments) {
-        const key = contentKey(a);
+        const key = assignmentContentKey(a);
+        if (a.game_settings) settingsByContent.set(key, a.game_settings);
         const list = idsByContent.get(key) || [];
         list.push(a.id);
         idsByContent.set(key, list);
@@ -264,7 +277,7 @@ export default function TeacherDashboard() {
       const struggling: StrugglingItem[] = [];
       for (const [key, ids] of idsByContent.entries()) {
         const isGame = key.startsWith("game:");
-        const contentId = isGame ? key.slice(5) : key.slice(7);
+        const contentId = isGame ? key.slice(5).split("|")[0] : key.slice(7);
         const rows = ids.flatMap((aid) => progressByAssignment.get(aid) || []);
         const scored = rows
           .filter((r) => r.status === "completed" && r.score !== null)
@@ -273,7 +286,7 @@ export default function TeacherDashboard() {
         const struggleRate = scored.filter((s) => s < STRUGGLE_THRESHOLD).length / scored.length;
         if (struggleRate <= 0.5) continue;
         const title = isGame
-          ? gameTitleById.get(contentId) ?? "Unknown game"
+          ? assignmentTitle(gameTitleById.get(contentId) ?? "Unknown game", settingsByContent.get(key))
           : UUID_RE.test(contentId)
             ? lessonTitleById.get(contentId) ?? "Unknown lesson"
             : legacyLessonTitle(contentId);
@@ -294,7 +307,7 @@ export default function TeacherDashboard() {
             kind: "solo",
             studentName: studentNameById.get(p.student_id) ?? "A student",
             className: classNameById.get(studentClassById.get(p.student_id) ?? "") ?? "",
-            title: gameTitleById.get(a.game_id) ?? "a game",
+            title: assignmentTitle(gameTitleById.get(a.game_id) ?? "a game", a.game_settings),
             score: p.score,
           };
         })
@@ -309,7 +322,11 @@ export default function TeacherDashboard() {
           when: s.created_at,
           kind: "team_battle" as const,
           className: (s.class_id && classNameById.get(s.class_id)) || "a class",
-          title: gameTitleById.get(s.game_id) ?? "a game",
+          title: (() => {
+            const t = gameTitleById.get(s.game_id) ?? "a game";
+            const label = variantLabel(s.settings?.variant);
+            return label ? `${t} – ${label}` : t;
+          })(),
         }))
         .slice(0, 6);
 

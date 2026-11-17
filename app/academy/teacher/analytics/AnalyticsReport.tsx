@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { lessonTitle as legacyLessonTitle } from "@/lib/lessons";
+import { assignmentContentKey, assignmentTitle } from "@/lib/noteReading";
 import { colors, radius, solidShadow } from "@/lib/theme";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -42,7 +43,7 @@ export default function AnalyticsReport() {
 
       const { data: assignmentRows, error: assignmentsError } = await supabase
         .from("assignments")
-        .select("id, lesson_id, game_id");
+        .select("id, lesson_id, game_id, game_settings");
 
       if (assignmentsError) {
         setError(assignmentsError.message);
@@ -69,13 +70,14 @@ export default function AnalyticsReport() {
       }
 
       // Group assignments by the piece of content they point at (a lesson or
-      // a game may be assigned many times, across many classes).
-      const contentKey = (a: { lesson_id: string | null; game_id: string | null }) =>
-        a.game_id ? `game:${a.game_id}` : `lesson:${a.lesson_id}`;
-
+      // a game may be assigned many times, across many classes). Note
+      // Reading assignments with different settings count as different
+      // content, so Treble Easy and Mixed Hard aren't averaged together.
       const assignmentIdsByContent = new Map<string, string[]>();
+      const settingsByContent = new Map<string, unknown>();
       for (const a of assignmentRows || []) {
-        const key = contentKey(a);
+        const key = assignmentContentKey(a);
+        if (a.game_settings) settingsByContent.set(key, a.game_settings);
         const list = assignmentIdsByContent.get(key) || [];
         list.push(a.id);
         assignmentIdsByContent.set(key, list);
@@ -93,7 +95,7 @@ export default function AnalyticsReport() {
       // (matches the pattern used on the weekly report / dashboard).
       const gameIds = [...assignmentIdsByContent.keys()]
         .filter((k) => k.startsWith("game:"))
-        .map((k) => k.slice(5));
+        .map((k) => k.slice(5).split("|")[0]);
       const lessonIds = [...assignmentIdsByContent.keys()]
         .filter((k) => k.startsWith("lesson:"))
         .map((k) => k.slice(7));
@@ -114,12 +116,12 @@ export default function AnalyticsReport() {
       const nextStats: ContentStat[] = [...assignmentIdsByContent.entries()].map(
         ([key, ids]) => {
           const [kind, id] = key.startsWith("game:")
-            ? (["game", key.slice(5)] as const)
+            ? (["game", key.slice(5).split("|")[0]] as const)
             : (["lesson", key.slice(7)] as const);
 
           const title =
             kind === "game"
-              ? gameTitleMap.get(id) ?? "Unknown game"
+              ? assignmentTitle(gameTitleMap.get(id) ?? "Unknown game", settingsByContent.get(key))
               : UUID_RE.test(id)
                 ? lessonTitleMap.get(id) ?? "Unknown lesson"
                 : legacyLessonTitle(id);

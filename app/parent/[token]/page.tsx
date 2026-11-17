@@ -1,5 +1,6 @@
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { lessonTitle as legacyLessonTitle } from "@/lib/lessons";
+import { assignmentTitle } from "@/lib/noteReading";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import { levelForPoints } from "@/lib/studentLevels";
 
@@ -55,7 +56,7 @@ export default async function ParentPortalPage({ params }: { params: { token: st
 
   const { data: assignments } = await supabase
     .from("assignments")
-    .select("id, lesson_id, game_id, due_at, assigned_at")
+    .select("id, lesson_id, game_id, due_at, assigned_at, game_settings")
     .eq("class_id", student.class_id)
     .eq("is_active", true)
     .or(`student_id.is.null,student_id.eq.${student.id}`)
@@ -79,8 +80,8 @@ export default async function ParentPortalPage({ params }: { params: { token: st
     gameTitleMap = new Map((data || []).map((g) => [g.id, g.title]));
   }
 
-  function titleOf(a: { lesson_id: string | null; game_id: string | null }): string {
-    if (a.game_id) return gameTitleMap.get(a.game_id) ?? "Unknown game";
+  function titleOf(a: { lesson_id: string | null; game_id: string | null; game_settings: unknown }): string {
+    if (a.game_id) return assignmentTitle(gameTitleMap.get(a.game_id) ?? "Unknown game", a.game_settings);
     if (a.lesson_id) return lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id);
     return "Unknown assignment";
   }
