@@ -1,10 +1,12 @@
 import * as THREE from "three";
-import type { Clef } from "@/lib/noteReading";
+import type { Accidental, Clef } from "@/lib/noteReading";
 import { CartoonRunner, type RunnerCharacter } from "./character";
+import { COLUMN_GAP, HALF, NOTE_HEAD_WIDTH, createHead, layoutHeads, type HeadParts } from "./noteHeads";
 import {
   Materials,
   PALETTE,
   glyphGeometry,
+  hollowNoteHeadGeometry,
   noteHeadGeometry,
   paperTexture,
   skyTexture,
@@ -14,16 +16,18 @@ import type { RunnerQuality } from "./quality";
 
 // The 3D part of Note Runner, in plain Three.js: a side view, like a page
 // of a music book. The staff is an upright sheet of paper with five
-// horizontal lines; the runner runs left to right in front of it, and each
-// lane is a line or a space of the staff (top of the screen = higher
-// note). Gates come from the right. The camera looks straight at the page
-// (only a slight downward tilt, never a turn), so staff lines always stay
-// horizontal on screen; depth comes from the 3D runner, gates, trees,
-// hills and clouds.
+// horizontal lines and the clef at its left edge; the runner runs left to
+// right in front of it. Every line and space of the level's range is a
+// lane (top of the screen = higher note), and the lane the runner is on is
+// highlighted across the page. Each gate brings four hollow note heads,
+// drawn on their exact lines/spaces with proper ledger lines; the runner
+// must be on the right one when it arrives. The camera looks straight at
+// the page (only a slight downward tilt, never a turn), so staff lines
+// always stay horizontal on screen.
 //
-// Readability first: the paper, staff lines, clef and gate signs are drawn
-// unlit or in solid ink so lighting never dims them; decoration sits behind
-// the page or below it.
+// Readability first: paper, staff lines, clef and note heads are drawn in
+// solid ink and unlit paper, so lighting never dims them; decoration sits
+// behind the page or below it.
 //
 // Two quality levels (./quality.ts): "high" adds toon shading, more
 // scenery, beveled symbols and soft shadows; "low" keeps the same game with
@@ -31,40 +35,42 @@ import type { RunnerQuality } from "./quality";
 // are hidden; if still slow, fewer pixels are drawn.
 //
 // The React component owns the rules (score, lives, which note is next);
-// this class only draws, moves the gates and reports when a gate reaches
-// the runner.
+// this class only draws, moves the gates and reports when a gate arrives.
 
 // World units: one staff space = 1. Staff position p (half-spaces from the
 // bottom line, as in lib/noteReading.ts) sits at y = baseY + p / 2.
-const HALF = 0.5;
 const RUNNER_X = 0;
 const RUNNER_Z = 0.45;
-const PANEL_Z = 0.14;
+// The gate stops with its note heads just ahead of the runner, so the
+// answer shows right next to it.
+const HEADS_AHEAD = 1.35;
 const PAGE_WIDTH = 400;
 const RUNNER_SCREEN_X = 0.2; // runner's place across the screen (0 = left edge)
+const MAX_HEADS = 4;
 
 export interface RunnerLayout {
   // Staff position of each lane, top to bottom.
   lanes: number[];
   // Lowest and highest staff positions the page shows.
   range: [number, number];
-  // Find-the-note mode draws the clef on the page and uses bar-line gates
-  // with no signs; Name-the-note mode uses signed gates and no clef.
-  mode: "name" | "find";
 }
+
+type GateHead = HeadParts;
 
 interface Gate {
   group: THREE.Group;
-  panels: { mesh: THREE.Mesh; canvas: HTMLCanvasElement; texture: THREE.CanvasTexture }[];
-  labels: string[];
-  active: boolean;
+  heads: GateHead[];
+  positions: number[];
+  active: boolean; // coming toward the runner, not yet arrived
   visible: boolean;
+  stopped: boolean; // arrived: stays by the runner until the next gate
+  stopX: number; // where it stops (further right when it has ♯/♭ signs)
 }
 
 export interface RunnerEngineEvents {
-  // A gate reached the runner; `lane` is the lane the runner was in (or
-  // moving into).
-  onGateReached: (lane: number) => void;
+  // A gate arrived; `position` is the staff position the runner was on (or
+  // moving to).
+  onGateReached: (position: number) => void;
   // The pause after a gate is over; time for the next one.
   onNeedGate: () => void;
 }
@@ -86,12 +92,16 @@ export class RunnerEngine {
   private moverSpan = 60;
   private gates: Gate[] = [];
   private character: RunnerCharacter;
-  private marker!: THREE.Mesh;
+  private lineHighlight!: THREE.Mesh;
+  private spaceHighlight!: THREE.Mesh;
   private shadow: THREE.Mesh | null = null;
   private clefs: Partial<Record<Clef, THREE.Mesh>> = {};
-  private clef: Clef = "treble";
-  private resultMarks: THREE.Mesh[] = [];
-  private resultMarksLeft = 0;
+
+  private inkMat = new THREE.MeshBasicMaterial({ color: PALETTE.ink });
+  private headMat: THREE.Material;
+  private correctMat: THREE.Material;
+  private wrongMat: THREE.Material;
+  private flash: { head: GateHead; t: number } | null = null;
 
   private speed = 6;
   private lane = 0;
@@ -119,6 +129,9 @@ export class RunnerEngine {
     this.layout = layout;
     this.quality = quality;
     this.materials = new Materials(quality);
+    this.headMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+    this.correctMat = new THREE.MeshLambertMaterial({ color: PALETTE.correct, emissive: 0x0d3d1e });
+    this.wrongMat = new THREE.MeshLambertMaterial({ color: PALETTE.wrong, emissive: 0x3d0d0d });
     // Lowest shown position sits a little above the ground.
     this.baseY = 1.3 - layout.range[0] * HALF;
     this.lane = this.middleLane();
@@ -179,39 +192,44 @@ export class RunnerEngine {
     return this.quality;
   }
 
-  // Sends a new gate in from the right; it reaches the runner in
-  // `seconds`. `labels` are the lane signs (name mode) or null (find mode).
-  spawnGate(labels: string[] | null, seconds: number) {
-    this.speed = this.gateStartX / seconds;
+  // Sends a new gate in from the right with hollow note heads at these
+  // staff positions (each with `accidental` in front, if any); it arrives
+  // in `seconds`.
+  spawnGate(positions: number[], accidental: Accidental, seconds: number) {
+    // The answered gate scrolls away with the page instead of vanishing.
+    for (const g of this.gates) g.stopped = false;
     const gate = this.gates.find((g) => !g.visible) ?? this.gates[0];
-    gate.labels = labels ?? [];
-    gate.panels.forEach((p, i) => this.drawPanel(p, labels?.[i] ?? "", "normal"));
+    gate.positions = positions;
+    const reach = layoutHeads(gate.heads, positions, accidental, (p) => this.posY(p), this.headMat);
+    // Stop with the whole drawing (signs too) clear of the runner.
+    gate.stopX = RUNNER_X + Math.max(HEADS_AHEAD, reach + 0.75);
+    this.speed = (this.gateStartX - gate.stopX) / seconds;
     gate.group.position.x = this.gateStartX;
     gate.group.visible = true;
     gate.visible = true;
     gate.active = true;
+    gate.stopped = false;
   }
 
-  // Shows the answer and starts the pause before the next gate.
-  showResult(correctLane: number, pickedLane: number, gapSeconds: number) {
+  // Shows the answer on the gate that just arrived and starts the pause
+  // before the next gate. Right: that note head fills in. Wrong: the right
+  // one flashes green (and the one the runner chose, if any, turns red).
+  showResult(answer: number, picked: number, gapSeconds: number) {
     const gate = this.lastReached;
-    if (gate && this.layout.mode === "name") {
-      gate.panels.forEach((p, i) => {
-        if (i === correctLane) this.drawPanel(p, gate.labels[i], "correct");
-        else if (i === pickedLane) this.drawPanel(p, gate.labels[i], "wrong");
-      });
+    if (gate) {
+      const right = gate.heads[gate.positions.indexOf(answer)];
+      if (answer === picked) {
+        if (right) this.fill(right, this.headMat);
+      } else {
+        if (right) {
+          this.fill(right, this.correctMat);
+          this.flash = { head: right, t: 0 };
+        }
+        const chosen = gate.heads[gate.positions.indexOf(picked)];
+        if (chosen) this.fill(chosen, this.wrongMat);
+      }
     }
-    if (this.layout.mode === "find") {
-      // Green note head on the right line/space (red on the wrong one),
-      // just ahead of the runner, where the student is looking.
-      const [ok, bad] = this.resultMarks;
-      ok.position.y = this.laneY(correctLane);
-      ok.visible = true;
-      bad.visible = pickedLane !== correctLane;
-      bad.position.y = this.laneY(pickedLane);
-      this.resultMarksLeft = 1.6;
-    }
-    if (correctLane === pickedLane) {
+    if (answer === picked) {
       this.character.react("happy");
     } else {
       this.character.react("sad");
@@ -235,7 +253,18 @@ export class RunnerEngine {
     }
   }
 
-  // The lane nearest a tap at this screen y (client coordinates).
+  // Moves to a staff position (e.g. a tapped note head).
+  setPosition(position: number) {
+    const i = this.layout.lanes.indexOf(position);
+    if (i >= 0) this.setLane(i);
+  }
+
+  get position(): number {
+    return this.layout.lanes[this.lane];
+  }
+
+  // The lane nearest a tap at this screen y (client coordinates). Taps on
+  // a note head pick that head's line/space.
   laneAtClientY(clientY: number): number {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndcY = -(((clientY - rect.top) / rect.height) * 2 - 1);
@@ -252,14 +281,13 @@ export class RunnerEngine {
     return best;
   }
 
-  // Find mode: which clef the page shows (mixed games switch per gate).
+  // Which clef the page shows (mixed games switch per gate).
   setClef(clef: Clef) {
-    this.clef = clef;
     for (const [c, mesh] of Object.entries(this.clefs)) if (mesh) mesh.visible = c === clef;
     if (!this.running) this.render();
   }
 
-  // Pixels at the top covered by the note card: the lanes are fitted
+  // Pixels at the top covered by the name card: the lanes are fitted
   // below it.
   setTopReserved(px: number) {
     if (Math.abs(px - this.topReserved) < 2) return;
@@ -267,20 +295,15 @@ export class RunnerEngine {
     this.resize();
   }
 
-  // Back to the start: middle lane, no gates.
+  // Back to the start: middle line, no gates.
   reset() {
     this.lane = this.middleLane();
     this.runnerY = this.laneY(this.lane);
-    for (const g of this.gates) {
-      g.group.visible = false;
-      g.visible = false;
-      g.active = false;
-    }
+    this.gates.forEach((g) => this.hideGate(g));
     this.gapLeft = null;
     this.shake = 0;
+    this.flash = null;
     this.lastReached = null;
-    this.resultMarks.forEach((m) => (m.visible = false));
-    this.resultMarksLeft = 0;
     this.character.reset();
     this.renderOnce();
   }
@@ -289,6 +312,30 @@ export class RunnerEngine {
   renderOnce() {
     this.placeRunner(0);
     this.render();
+  }
+
+  // For tests: each visible note head's intended staff position, where it
+  // is actually drawn (computed back from its world y), and where its
+  // ledger lines are drawn, also as staff positions.
+  debugHeads(): { position: number; drawnAt: number; ledgers: number[] }[] {
+    const out: { position: number; drawnAt: number; ledgers: number[] }[] = [];
+    const toPos = (y: number) => Math.round(((y - this.baseY) / HALF) * 1000) / 1000;
+    for (const g of this.gates) {
+      if (!g.visible) continue;
+      g.heads.forEach((h, i) => {
+        if (!h.group.visible) return;
+        const world = new THREE.Vector3();
+        h.hollow.getWorldPosition(world);
+        out.push({
+          position: g.positions[i],
+          drawnAt: toPos(world.y),
+          ledgers: h.ledgers
+            .filter((l) => l.visible)
+            .map((l) => toPos(l.getWorldPosition(new THREE.Vector3()).y)),
+        });
+      });
+    }
+    return out;
   }
 
   dispose() {
@@ -327,22 +374,30 @@ export class RunnerEngine {
     }
 
     for (const g of this.gates) {
-      if (!g.visible) continue;
+      if (!g.visible || g.stopped) continue;
       g.group.position.x -= travel;
-      if (g.active && g.group.position.x <= RUNNER_X) {
+      if (g.active && g.group.position.x <= g.stopX) {
+        g.group.position.x = g.stopX;
         g.active = false;
+        g.stopped = true;
         this.lastReached = g;
-        this.events.onGateReached(this.lane);
+        this.events.onGateReached(this.position);
       }
-      if (g.group.position.x < this.viewLeft - 3) {
-        g.group.visible = false;
-        g.visible = false;
-      }
+      // An answered gate slides off briefly, then vanishes before its heads
+      // and signs reach the runner and the clef.
+      if (!g.active && !g.stopped && g.group.position.x < g.stopX - 1.1) this.hideGate(g);
     }
 
-    if (this.resultMarksLeft > 0) {
-      this.resultMarksLeft -= dt;
-      if (this.resultMarksLeft <= 0) this.resultMarks.forEach((m) => (m.visible = false));
+    if (this.flash) {
+      this.flash.t += dt;
+      const on = Math.floor(this.flash.t * 6) % 2 === 0;
+      this.flash.head.filled.visible = on;
+      this.flash.head.hollow.visible = !on;
+      if (this.flash.t > 1.5) {
+        this.flash.head.filled.visible = true;
+        this.flash.head.hollow.visible = false;
+        this.flash = null;
+      }
     }
 
     if (this.gapLeft !== null) {
@@ -363,8 +418,15 @@ export class RunnerEngine {
     this.character.update(dt, this.speed);
     // Body centred on the lane (feet ~0.7 spaces below it).
     this.character.object.position.set(RUNNER_X, this.runnerY - 0.7, RUNNER_Z);
-    this.marker.position.set(RUNNER_X + 0.05, this.runnerY, 0.012);
     if (this.shadow) this.shadow.position.set(RUNNER_X + 0.35, this.runnerY - 0.55, 0.01);
+
+    // Highlight the runner's line (a coloured stripe over it) or space (a
+    // soft band between its lines), across the whole page.
+    const onLine = this.position % 2 === 0;
+    this.lineHighlight.visible = onLine;
+    this.spaceHighlight.visible = !onLine;
+    this.lineHighlight.position.y = targetY;
+    this.spaceHighlight.position.y = targetY;
 
     this.shake = Math.max(0, this.shake - dt);
     const s = this.shake * 0.12;
@@ -413,11 +475,13 @@ export class RunnerEngine {
   }
 
   private middleLane() {
-    return Math.floor((this.layout.lanes.length - 1) / 2);
+    // Start on the middle line of the staff.
+    const i = this.layout.lanes.indexOf(4);
+    return i >= 0 ? i : Math.floor((this.layout.lanes.length - 1) / 2);
   }
 
-  // Fits the page's lanes between the note card and the bottom of the
-  // screen, with the runner a fifth of the way across.
+  // Fits the page's lanes between the name card and the bottom of the
+  // screen, with the runner a fifth of the way across (clear of the clef).
   private resize() {
     const w = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
@@ -440,9 +504,7 @@ export class RunnerEngine {
     // Put the span's middle at the middle of the usable area.
     const unitsPerPx = (2 * halfH) / h;
     const centerY = (spanLo + spanHi) / 2 + (top / 2 - 6) * unitsPerPx;
-    // Runner a fifth of the way across; in find mode at least clear of the
-    // clef at the left edge, even on narrow screens.
-    const runnerFromLeft = Math.max(2 * halfW * RUNNER_SCREEN_X, this.layout.mode === "find" ? 4.5 : 0);
+    const runnerFromLeft = Math.max(2 * halfW * RUNNER_SCREEN_X, 4.5);
     const centerX = RUNNER_X - runnerFromLeft + halfW;
 
     // A little above, looking slightly down (no turn or tilt sideways, so
@@ -454,7 +516,7 @@ export class RunnerEngine {
     this.camera.updateMatrixWorld();
 
     this.viewLeft = centerX - halfW;
-    this.gateStartX = centerX + halfW + 1.2 - RUNNER_X;
+    this.gateStartX = centerX + halfW + 1.5 - RUNNER_X;
     this.moverSpan = Math.max(60, 2 * halfW + 16);
     for (const c of Object.values(this.clefs)) if (c) c.position.x = this.viewLeft + 0.75;
     if (!this.running) this.render();
@@ -497,20 +559,31 @@ export class RunnerEngine {
       this.movers.push(post);
     }
 
-    // Five staff lines in solid ink, and faint guides where ledger lines
-    // would go (find mode only, so each lane above/below the staff shows).
-    const ink = new THREE.MeshBasicMaterial({ color: PALETTE.ink });
-    const guide = new THREE.MeshBasicMaterial({ color: 0xcdbfa6 });
+    // Five staff lines in solid ink, and very faint guides where ledger
+    // lines would go, so each lane above/below the staff can be seen.
+    const guide = new THREE.MeshBasicMaterial({ color: 0xe2d8c4 });
     const lineGeo = new THREE.PlaneGeometry(PAGE_WIDTH, 0.075);
-    const guideGeo = new THREE.PlaneGeometry(PAGE_WIDTH, 0.045);
+    const guideGeo = new THREE.PlaneGeometry(PAGE_WIDTH, 0.035);
     for (let p = lo; p <= hi; p++) {
       if (p % 2 !== 0) continue;
       const onStaff = p >= 0 && p <= 8;
-      if (!onStaff && this.layout.mode !== "find") continue;
-      const line = new THREE.Mesh(onStaff ? lineGeo : guideGeo, onStaff ? ink : guide);
+      const line = new THREE.Mesh(onStaff ? lineGeo : guideGeo, onStaff ? this.inkMat : guide);
       line.position.set(0, this.posY(p), 0.005);
       this.scene.add(line);
     }
+
+    // The runner's line/space highlight (see placeRunner).
+    this.lineHighlight = new THREE.Mesh(
+      new THREE.PlaneGeometry(PAGE_WIDTH, 0.24),
+      new THREE.MeshBasicMaterial({ color: PALETTE.marker, transparent: true, opacity: 0.45, depthWrite: false })
+    );
+    this.lineHighlight.position.z = 0.007;
+    this.spaceHighlight = new THREE.Mesh(
+      new THREE.PlaneGeometry(PAGE_WIDTH, 0.86),
+      new THREE.MeshBasicMaterial({ color: PALETTE.marker, transparent: true, opacity: 0.14, depthWrite: false })
+    );
+    this.spaceHighlight.position.z = 0.003;
+    this.scene.add(this.lineHighlight, this.spaceHighlight);
 
     // Bar lines across the staff scroll by to show the speed.
     const barGeo = new THREE.PlaneGeometry(0.06, 4);
@@ -524,37 +597,17 @@ export class RunnerEngine {
 
     this.buildScenery(pageTop, pageBottom);
 
-    // Find mode: the clef stays at the left edge of the page, as a solid
-    // 3D symbol. Both clefs are built so mixed games just switch.
-    if (this.layout.mode === "find") {
-      const clefMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
-      for (const clef of ["treble", "bass"] as Clef[]) {
-        const geo = glyphGeometry(clef === "treble" ? "gClef" : "fClef", 0.14, this.quality);
-        const mesh = new THREE.Mesh(geo, clefMat);
-        mesh.position.set(0, this.posY(clef === "treble" ? 2 : 6), 0.02);
-        mesh.visible = clef === this.clef;
-        this.scene.add(mesh);
-        this.clefs[clef] = mesh;
-      }
-
-      // Note heads that show the answer next to the runner.
-      const headGeo = noteHeadGeometry(0.22, this.quality);
-      for (const color of [PALETTE.correct, PALETTE.wrong]) {
-        const m = new THREE.Mesh(headGeo, mat.fresh(color));
-        m.position.set(RUNNER_X + 1.15, 0, 0.3);
-        m.visible = false;
-        this.scene.add(m);
-        this.resultMarks.push(m);
-      }
+    // The clef stays at the left edge of the page, as a solid 3D symbol.
+    // Both are built so mixed games just switch.
+    const clefMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+    for (const clef of ["treble", "bass"] as Clef[]) {
+      const geo = glyphGeometry(clef === "treble" ? "gClef" : "fClef", 0.14, this.quality);
+      const mesh = new THREE.Mesh(geo, clefMat);
+      mesh.position.set(0, this.posY(clef === "treble" ? 2 : 6), 0.02);
+      mesh.visible = clef === "treble";
+      this.scene.add(mesh);
+      this.clefs[clef] = mesh;
     }
-
-    // The runner's place on the staff: a soft blue note head behind it.
-    this.marker = new THREE.Mesh(
-      noteHeadGeometry(0.01, "low"),
-      new THREE.MeshBasicMaterial({ color: PALETTE.marker, transparent: true, opacity: 0.22, depthWrite: false })
-    );
-    this.marker.scale.setScalar(1.15);
-    this.scene.add(this.marker);
 
     // High quality: a soft shadow on the page behind the runner.
     if (high) {
@@ -581,7 +634,6 @@ export class RunnerEngine {
       if (decor) this.decor.push(o);
     };
 
-    // Rolling hills (high only).
     if (high) {
       const hillGeo = new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2);
       for (let i = 0; i < 8; i++) {
@@ -594,7 +646,6 @@ export class RunnerEngine {
       }
     }
 
-    // Clouds: a few overlapping puffs each.
     const puff = new THREE.SphereGeometry(1, high ? 12 : 8, high ? 8 : 6);
     const cloudCount = high ? 6 : 3;
     for (let i = 0; i < cloudCount; i++) {
@@ -611,7 +662,6 @@ export class RunnerEngine {
       add(cloud, 0.1, i >= 3, 96, 14);
     }
 
-    // Trees: round leafy ones and pines, behind the page.
     const blob = new THREE.IcosahedronGeometry(1, high ? 1 : 0);
     const trunkGeo = new THREE.CylinderGeometry(0.16, 0.24, 1, 7);
     const cone = new THREE.ConeGeometry(1, 1.6, high ? 8 : 6);
@@ -648,7 +698,6 @@ export class RunnerEngine {
       tree.position.set(x + ((k * 13) % 3) * 0.6, 0, -2.6 - ((k * 5) % 4));
       add(tree, 0.8, false);
 
-      // Bushes in front of the page, below the staff (high only).
       if (high && k % 2 === 0) {
         const bush = new THREE.Group();
         for (let b = 0; b < 3; b++) {
@@ -666,78 +715,46 @@ export class RunnerEngine {
     }
   }
 
+  // A gate: a column of up to four note heads, each with its own ledger
+  // lines and ♯/♭, plus a faint bar line behind them.
   private buildGate(): Gate {
     const group = new THREE.Group();
-    const { lanes, mode, range } = this.layout;
-    const mat = this.materials.get(PALETTE.gate);
-    const panels: Gate["panels"] = [];
+    const [lo, hi] = this.layout.range;
+    const bar = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.07, this.posY(hi) - this.posY(lo) + 0.6, 3, 8),
+      this.materials.get(PALETTE.gate)
+    );
+    bar.position.set(COLUMN_GAP + 1.0, (this.posY(hi) + this.posY(lo)) / 2, 0.05);
+    group.add(bar);
 
-    if (mode === "name") {
-      // A post spanning the lanes with one sign per lane.
-      const top = this.posY(lanes[0]) + 0.55;
-      const bottom = this.posY(lanes[lanes.length - 1]) - 0.55;
-      const post = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, top - bottom, 3, 8), mat);
-      post.position.set(0.95, (top + bottom) / 2, PANEL_Z - 0.05);
-      group.add(post);
-      const panelGeo = new THREE.PlaneGeometry(1.75, 0.88);
-      lanes.forEach((_, i) => {
-        const canvas = document.createElement("canvas");
-        canvas.width = 256;
-        canvas.height = 128;
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.anisotropy = 4;
-        const mesh = new THREE.Mesh(panelGeo, new THREE.MeshBasicMaterial({ map: texture, transparent: true }));
-        mesh.position.set(0, this.laneY(i), PANEL_Z);
-        group.add(mesh);
-        panels.push({ mesh, canvas, texture });
-      });
-    } else {
-      // A bar line to run through: a rounded blue pillar over the range.
-      const top = this.posY(range[1]) + 0.4;
-      const bottom = this.posY(range[0]) - 0.4;
-      const pillar = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, top - bottom, 3, 8), mat);
-      pillar.position.set(0, (top + bottom) / 2, PANEL_Z);
-      group.add(pillar);
+    const hollowGeo = hollowNoteHeadGeometry(0.2, this.quality);
+    const filledGeo = noteHeadGeometry(0.2, this.quality);
+    const ledgerGeo = new THREE.PlaneGeometry(NOTE_HEAD_WIDTH + 0.6, 0.075);
+    const sharpGeo = glyphGeometry("accidentalSharp", 0.12, this.quality);
+    const flatGeo = glyphGeometry("accidentalFlat", 0.12, this.quality);
+    const geos = { hollow: hollowGeo, filled: filledGeo, ledger: ledgerGeo, sharp: sharpGeo, flat: flatGeo };
+    const heads: GateHead[] = [];
+    for (let i = 0; i < MAX_HEADS; i++) {
+      const head = createHead(geos, this.headMat, this.inkMat);
+      group.add(head.group);
+      heads.push(head);
     }
     group.visible = false;
     this.scene.add(group);
-    return { group, panels, labels: [], active: false, visible: false };
+    return { group, heads, positions: [], active: false, visible: false, stopped: false, stopX: HEADS_AHEAD };
   }
 
-  private drawPanel(panel: Gate["panels"][number], label: string, state: "normal" | "correct" | "wrong") {
-    const ctx = panel.canvas.getContext("2d");
-    if (!ctx) return;
-    const { width, height } = panel.canvas;
-    const [top, bottom] =
-      state === "correct" ? ["#45C474", "#259150"] : state === "wrong" ? ["#E86262", "#B53A3A"] : ["#5B7BE0", "#3550B0"];
-    ctx.clearRect(0, 0, width, height);
-    // Darker base for a pressed-button look, then the face on top.
-    ctx.fillStyle = "rgba(20,30,70,0.35)";
-    ctx.beginPath();
-    ctx.roundRect(4, 10, width - 8, height - 12, 26);
-    ctx.fill();
-    const g = ctx.createLinearGradient(0, 0, 0, height);
-    g.addColorStop(0, top);
-    g.addColorStop(1, bottom);
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.roundRect(4, 2, width - 8, height - 14, 24);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.9)";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.roundRect(9, 7, width - 18, height - 24, 19);
-    ctx.stroke();
-    ctx.fillStyle = "#FFFFFF";
-    const size = label.length > 3 ? 60 : 72;
-    ctx.font = `900 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.shadowColor = "rgba(0,0,0,0.25)";
-    ctx.shadowOffsetY = 3;
-    ctx.fillText(label, width / 2, height / 2 - 3);
-    ctx.shadowColor = "transparent";
-    panel.texture.needsUpdate = true;
+  private fill(h: GateHead, material: THREE.Material) {
+    h.filled.material = material;
+    h.filled.visible = true;
+    h.hollow.visible = false;
+  }
+
+  private hideGate(g: Gate) {
+    g.group.visible = false;
+    g.visible = false;
+    g.active = false;
+    g.stopped = false;
+    if (this.flash && g.heads.includes(this.flash.head)) this.flash = null;
   }
 }

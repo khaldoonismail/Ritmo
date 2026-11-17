@@ -133,7 +133,7 @@ export function softShadowTexture(): THREE.Texture {
 
 // --- music symbols ---------------------------------------------------------
 
-type GlyphName = "gClef" | "fClef" | "noteheadBlack";
+type GlyphName = "gClef" | "fClef" | "noteheadBlack" | "accidentalSharp" | "accidentalFlat";
 
 // A Bravura glyph as a 3D shape, 1 unit per staff space, origin at the
 // glyph's own anchor (G line for the treble clef, F line for the bass
@@ -163,5 +163,26 @@ export function noteHeadGeometry(depth: number, quality: RunnerQuality): THREE.B
   geo.computeBoundingBox();
   const b = geo.boundingBox as THREE.Box3;
   geo.translate(-(b.min.x + b.max.x) / 2, -(b.min.y + b.max.y) / 2, -(b.min.z + b.max.z) / 2);
+  return geo;
+}
+
+// A hollow (half-note style) note head, centred, facing +z: a tilted oval
+// with a thinner tilted oval hole, sized like the filled Bravura head.
+export function hollowNoteHeadGeometry(depth: number, quality: RunnerQuality): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+  shape.absellipse(0, 0, 0.6, 0.47, 0, Math.PI * 2, false, 0.38);
+  const hole = new THREE.Path();
+  hole.absellipse(0, 0, 0.44, 0.25, 0, Math.PI * 2, true, 0.6);
+  shape.holes.push(hole);
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    curveSegments: quality === "high" ? 24 : 14,
+    bevelEnabled: quality === "high",
+    bevelThickness: 0.03,
+    bevelSize: 0.015,
+    bevelSegments: 2,
+  });
+  geo.translate(0, 0, -depth / 2);
+  geo.computeVertexNormals();
   return geo;
 }

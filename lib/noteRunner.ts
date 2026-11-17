@@ -1,68 +1,60 @@
 import {
-  DEFAULT_NOTE_READING_CONFIG,
   LEVEL_RANGE,
+  STEPS,
+  diatonicIndex,
   generateFromConfig,
-  normalizeNoteReadingConfig,
   noteName,
   staffPosition,
+  type Accidental,
   type Clef,
   type NoteLevel,
   type NoteReadingConfig,
   type NoteReadingQuestion,
+  type NoteSpec,
+  type Step,
 } from "@/lib/noteReading";
 
 // Note Runner's rules, kept apart from the 3D code so the server can use
-// the same numbers when it checks a submitted run (stage 2): modes, lanes,
-// gate timing, speed-up and scoring.
+// the same numbers when it checks a submitted run (stage 2).
 //
-// Two modes, both on a horizontal staff seen from the side:
-//  * "name" — Name the note: the note is shown in a card; the lanes are the
-//    staff's four spaces, each with a name sign on the gate.
-//  * "find" — Find the note: the note's name is shown; every line and space
-//    of the level's range is a lane, and the runner must be on the right one.
+// The game: a horizontal staff seen from the side. The card shows a note's
+// NAME ("Sol" / "G"). At each gate four hollow note heads stand on the
+// staff at four different lines/spaces; exactly one has that name. Every
+// line and space of the level's range is a lane, and the runner must be on
+// the right note head when the gate arrives.
 
-export type NoteRunnerMode = "name" | "find";
-
-export const NOTE_RUNNER_MODE_LABELS: Record<NoteRunnerMode, string> = {
-  name: "Name the note",
-  find: "Find the note",
-};
-
-export interface NoteRunnerConfig extends NoteReadingConfig {
-  mode: NoteRunnerMode;
-}
-
-export const DEFAULT_NOTE_RUNNER_CONFIG: NoteRunnerConfig = {
-  ...DEFAULT_NOTE_READING_CONFIG,
-  mode: "name",
-};
-
-export function normalizeNoteRunnerConfig(value: unknown): NoteRunnerConfig {
-  const v = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
-  return { ...normalizeNoteReadingConfig(value), mode: v.mode === "find" ? "find" : "name" };
-}
+export type NoteRunnerConfig = NoteReadingConfig;
 
 export const NOTE_RUNNER_LIVES = 3;
+export const OPTIONS_PER_GATE = 4;
 
 // Lanes, top to bottom, as staff positions (half-spaces above the bottom
-// line), and the range of positions the page shows.
-export function runnerLanes(config: Pick<NoteRunnerConfig, "mode" | "level">): {
-  lanes: number[];
-  range: [number, number];
-} {
-  if (config.mode === "name") return { lanes: [7, 5, 3, 1], range: [0, 8] };
-  const [lo, hi] = LEVEL_RANGE[config.level];
+// line, see lib/noteReading.ts), and the range the page shows.
+export function runnerLanes(level: NoteLevel): { lanes: number[]; range: [number, number] } {
+  const [lo, hi] = LEVEL_RANGE[level];
   const lanes: number[] = [];
   for (let p = hi; p >= lo; p--) lanes.push(p);
   return { lanes, range: [lo, hi] };
 }
 
-// Seconds from a gate appearing to reaching the runner, at the start. Find
-// mode has more lanes to move through, so it gets longer.
-export const BASE_GATE_SECONDS: Record<NoteRunnerMode, Record<NoteLevel, number>> = {
-  name: { easy: 5, medium: 5.5, hard: 6 },
-  find: { easy: 6, medium: 7, hard: 8 },
-};
+// Staff position ↔ note, per clef. Bottom line: E4 in treble, G2 in bass.
+const BOTTOM_LINE: Record<Clef, number> = { treble: diatonicIndex("E", 4), bass: diatonicIndex("G", 2) };
+
+export function noteAtPosition(clef: Clef, position: number, accidental: Accidental = null): NoteSpec {
+  const d = BOTTOM_LINE[clef] + position;
+  const octave = Math.floor(d / 7);
+  return { clef, step: STEPS[d - octave * 7] as Step, octave, accidental };
+}
+
+// E♯/B♯/C♭/F♭ never appear (same rule as Note Reading).
+function validSign(step: Step, accidental: Accidental): boolean {
+  if (accidental === "sharp") return step !== "E" && step !== "B";
+  if (accidental === "flat") return step !== "C" && step !== "F";
+  return true;
+}
+
+// Seconds from a gate appearing to reaching the runner, at the start.
+export const BASE_GATE_SECONDS: Record<NoteLevel, number> = { easy: 6, medium: 7, hard: 8 };
 
 // Every SPEEDUP_EVERY correct answers the run gets SPEEDUP_FACTOR faster,
 // up to MAX_SPEEDUP times the starting speed.
@@ -70,22 +62,22 @@ export const SPEEDUP_EVERY = 5;
 export const SPEEDUP_FACTOR = 1.06;
 export const MAX_SPEEDUP = 1.8;
 
-// Short breather after each gate before the next one appears (longer
-// after a mistake, so the student can see the right answer).
-export const GAP_SECONDS = 0.6;
-export const WRONG_GAP_SECONDS = 1.4;
+// Pause after each gate before the next one appears (longer after a
+// mistake, so the student can see the right note head).
+export const GAP_SECONDS = 1;
+export const WRONG_GAP_SECONDS = 1.6;
 
 export function speedMultiplier(correctSoFar: number): number {
   return Math.min(MAX_SPEEDUP, Math.pow(SPEEDUP_FACTOR, Math.floor(correctSoFar / SPEEDUP_EVERY)));
 }
 
-export function gateSeconds(config: Pick<NoteRunnerConfig, "mode" | "level">, correctSoFar: number): number {
-  return BASE_GATE_SECONDS[config.mode][config.level] / speedMultiplier(correctSoFar);
+export function gateSeconds(level: NoteLevel, correctSoFar: number): number {
+  return BASE_GATE_SECONDS[level] / speedMultiplier(correctSoFar);
 }
 
 // The fastest a gate can ever go by (used by the stage-2 run check).
-export function minSecondsPerGate(config: Pick<NoteRunnerConfig, "mode" | "level">): number {
-  return BASE_GATE_SECONDS[config.mode][config.level] / MAX_SPEEDUP + GAP_SECONDS;
+export function minSecondsPerGate(level: NoteLevel): number {
+  return BASE_GATE_SECONDS[level] / MAX_SPEEDUP + GAP_SECONDS;
 }
 
 // 100 per correct note plus 10 for each note already in the streak, up to
@@ -101,16 +93,78 @@ export function pointsFor(streakBefore: number): number {
 export interface RunnerGate {
   question: NoteReadingQuestion;
   clef: Clef;
-  // The note's name as the student should read it (find mode's prompt).
+  // What the card shows, e.g. "Sol", "G", "Fa♯".
   name: string;
-  // Name mode: the sign on each lane, top to bottom. Find mode: null.
-  signs: string[] | null;
-  // The generated note's lane.
-  correctLane: number;
-  // Every lane that counts as right. Find mode: a name like "Fa" can be on
-  // more than one line/space in the range (F4 and F5), and any of them
-  // counts. Name mode: just correctLane.
-  correctLanes: number[];
+  // The sign drawn in front of every note head (the asked note's), or null.
+  accidental: Accidental;
+  // The four note heads' staff positions, highest first. Exactly one is
+  // `answer`; no two share a letter name.
+  options: number[];
+  answer: number;
+}
+
+// The rules for one gate's four positions (also used by the automated
+// check, scripts/check-note-runner.ts):
+//  * all inside the level's range, the answer among them;
+//  * no two with the same letter name (positions 7 or 14 apart);
+//  * spread out: neighbouring options (sorted) are 2–5 steps apart, so the
+//    heads mostly stand in one clear column;
+//  * Hard only: sometimes one pair just one step apart (line next to
+//    space), for extra challenge. Easy and Medium never have that.
+export const MIN_OPTION_GAP = 2;
+export const MAX_OPTION_GAP = 5;
+// On Hard, how often a gate has one pair of options a step apart.
+export const HARD_ADJACENT_CHANCE = 0.3;
+
+export function optionGaps(options: number[]): number[] {
+  const sorted = [...options].sort((a, b) => b - a);
+  return sorted.slice(1).map((p, i) => sorted[i] - p);
+}
+
+export function sameNameClash(options: number[]): boolean {
+  return options.some((a, i) => options.some((b, j) => j > i && (a - b) % 7 === 0));
+}
+
+// Picks the three wrong positions: every valid set is listed (at most a
+// few thousand on Hard) and one is drawn at random, so the result always
+// follows the rules above when any valid set exists.
+export function pickOptionPositions(
+  answer: number,
+  level: NoteLevel,
+  clef: Clef,
+  accidental: Accidental,
+  rand: () => number = Math.random
+): number[] {
+  const [lo, hi] = LEVEL_RANGE[level];
+  const candidates: number[] = [];
+  for (let p = lo; p <= hi; p++) {
+    if (p !== answer && validSign(noteAtPosition(clef, p).step, accidental)) candidates.push(p);
+  }
+
+  const spread: number[][] = []; // all gaps 2–5
+  const oneAdjacent: number[][] = []; // one gap of 1, the others 2–5 (Hard)
+  const loose: number[][] = []; // fallback: any distinct names
+  for (let a = 0; a < candidates.length; a++) {
+    for (let b = a + 1; b < candidates.length; b++) {
+      for (let c = b + 1; c < candidates.length; c++) {
+        const set = [answer, candidates[a], candidates[b], candidates[c]];
+        if (sameNameClash(set)) continue;
+        const gaps = optionGaps(set);
+        loose.push(set);
+        if (gaps.some((g) => g > MAX_OPTION_GAP)) continue;
+        const ones = gaps.filter((g) => g === 1).length;
+        if (ones === 0) spread.push(set);
+        else if (ones === 1 && gaps.every((g) => g === 1 || g >= MIN_OPTION_GAP)) oneAdjacent.push(set);
+      }
+    }
+  }
+
+  let pool = spread;
+  if (level === "hard" && oneAdjacent.length > 0 && (spread.length === 0 || rand() < HARD_ADJACENT_CHANCE)) {
+    pool = oneAdjacent;
+  }
+  if (pool.length === 0) pool = loose; // never happens with the current ranges
+  return pool[Math.floor(rand() * pool.length)].sort((x, y) => y - x);
 }
 
 export function gateFromQuestion(
@@ -119,25 +173,15 @@ export function gateFromQuestion(
   rand: () => number = Math.random
 ): RunnerGate {
   const { note } = question;
-  const name = noteName(note.step, note.accidental, config.naming);
-  if (config.mode === "find") {
-    const { lanes } = runnerLanes(config);
-    const target = staffPosition(note);
-    // Positions 7 apart are the same letter an octave away.
-    const correctLanes = lanes
-      .map((p, i) => ((((p - target) % 7) + 7) % 7 === 0 ? i : -1))
-      .filter((i) => i >= 0);
-    return { question, clef: note.clef, name, signs: null, correctLane: lanes.indexOf(target), correctLanes };
-  }
-  // The right name plus three close wrong ones, shuffled.
-  const signs = [...question.options];
-  for (let i = signs.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [signs[i], signs[j]] = [signs[j], signs[i]];
-  }
-  const correct = question.options[question.correctIndex];
-  const correctLane = signs.indexOf(correct);
-  return { question, clef: note.clef, name, signs, correctLane, correctLanes: [correctLane] };
+  const answer = staffPosition(note);
+  return {
+    question,
+    clef: note.clef,
+    name: noteName(note.step, note.accidental, config.naming),
+    accidental: note.accidental,
+    options: pickOptionPositions(answer, config.level, note.clef, note.accidental, rand),
+    answer,
+  };
 }
 
 // An endless supply of gates: generates Note Reading questions in batches
