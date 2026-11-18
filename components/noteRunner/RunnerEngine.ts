@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { Accidental, Clef } from "@/lib/noteReading";
-import { CartoonRunner, type RunnerCharacter } from "./character";
+import { SpriteCharacter } from "@/components/characters/SpriteCharacter";
+import { DEFAULT_CHARACTER, type CharacterChoice } from "@/components/characters/choice";
 import { COLUMN_GAP, HALF, NOTE_HEAD_WIDTH, createHead, layoutHeads, type HeadParts } from "./noteHeads";
 import {
   Materials,
@@ -92,7 +93,7 @@ export class RunnerEngine {
   private decor: THREE.Object3D[] = []; // extras hidden when frames are slow
   private moverSpan = 60;
   private gates: Gate[] = [];
-  private character: RunnerCharacter;
+  private character: SpriteCharacter;
   private lineHighlight!: THREE.Mesh;
   private spaceHighlight!: THREE.Mesh;
   private shadow: THREE.Mesh | null = null;
@@ -124,7 +125,9 @@ export class RunnerEngine {
     container: HTMLElement,
     layout: RunnerLayout,
     private events: RunnerEngineEvents,
-    quality: RunnerQuality = "high"
+    quality: RunnerQuality = "high",
+    // The runner the child picked (a flat 2D Ritmo character, 2.5D).
+    character: CharacterChoice = DEFAULT_CHARACTER
   ) {
     this.container = container;
     this.layout = layout;
@@ -162,7 +165,7 @@ export class RunnerEngine {
     this.scene.add(sun);
 
     this.buildWorld();
-    this.character = new CartoonRunner(this.materials);
+    this.character = new SpriteCharacter(character, quality === "high" ? 1.2 : 0.8);
     this.scene.add(this.character.object);
     for (let i = 0; i < 2; i++) this.gates.push(this.buildGate());
 
@@ -342,6 +345,7 @@ export class RunnerEngine {
   dispose() {
     this.renderer.setAnimationLoop(null);
     this.resizeObserver.disconnect();
+    this.character.dispose();
     const textures = new Set<THREE.Texture>();
     this.scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;

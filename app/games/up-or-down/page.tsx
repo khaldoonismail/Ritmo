@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import { unlockNoteAudio } from "@/lib/playNote";
+import { RunnerCard, RunnerPickerScreen, useRunnerChoice } from "@/components/characters/RunnerChoice";
 import { LEVELS, type UpOrDownLevel } from "@/lib/upOrDown";
 
 // Up or Down, stage 1: an ear-training runner on its own unlisted page
@@ -26,13 +27,32 @@ const LEVEL_KEYS: UpOrDownLevel[] = ["easy", "medium", "hard"];
 export default function UpOrDownPage() {
   const [level, setLevel] = useState<UpOrDownLevel>("easy");
   const [runKey, setRunKey] = useState<number | null>(null);
+  const { runner, chosen, picking, setPicking, save } = useRunnerChoice();
 
   useEffect(() => {
     loadGame().catch(() => {});
   }, []);
 
   if (runKey !== null) {
-    return <UpOrDownGame key={runKey} level={level} autoStart onChangeSettings={() => setRunKey(null)} />;
+    return (
+      <UpOrDownGame key={runKey} level={level} character={runner} autoStart onChangeSettings={() => setRunKey(null)} />
+    );
+  }
+
+  // Choose a runner (first time: before the first run).
+  if (picking) {
+    return (
+      <RunnerPickerScreen
+        initial={runner}
+        mode={picking}
+        onDone={(c) => {
+          unlockNoteAudio();
+          save(c);
+          setPicking(null);
+          if (picking === "start") setRunKey(Date.now());
+        }}
+      />
+    );
   }
 
   return (
@@ -98,11 +118,14 @@ export default function UpOrDownPage() {
             );
           })}
         </section>
+        <RunnerCard runner={runner} onChange={() => setPicking("change")} />
         <button
           type="button"
           onClick={() => {
             unlockNoteAudio();
-            setRunKey(Date.now());
+            // No runner picked yet on this device: choose one first.
+            if (!chosen) setPicking("start");
+            else setRunKey(Date.now());
           }}
           style={{
             fontSize: "1.25rem",

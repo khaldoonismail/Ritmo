@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { CartoonRunner, type RunnerCharacter } from "@/components/noteRunner/character";
+import { SpriteCharacter } from "@/components/characters/SpriteCharacter";
+import { DEFAULT_CHARACTER, type CharacterChoice } from "@/components/characters/choice";
 import { Materials, PALETTE, skyTexture, softShadowTexture } from "@/components/noteRunner/look";
 import type { RunnerQuality } from "@/components/noteRunner/quality";
 import { buildScenery } from "@/components/noteRunner/scenery";
@@ -15,7 +16,8 @@ import type { Direction } from "@/lib/upOrDown";
 // While the kid is on the straight stretch the child picks a path (an arrow
 // badge over the kid and a bigger sign show the pick); at the fork the kid
 // takes it. With no pick, the kid bumps into a rock at the fork and waits
-// there (skipFork moves it on), so no path ever looks like the answer.
+// there, dizzy (skipFork moves it on), so no path ever looks like the
+// answer. The runner is the child's chosen 2D character (SpriteCharacter).
 //
 // Timing is the React component's job, with one helper here: setArrival()
 // says "reach the fork no sooner than N seconds from now", and the runner
@@ -96,7 +98,7 @@ export class ForkEngine {
   private viewLeft = -6;
   private topReserved = 0;
   private chunks: Chunk[] = [];
-  private character: RunnerCharacter;
+  private character: SpriteCharacter;
   private shadow: THREE.Mesh | null = null;
   private badge: THREE.Mesh;
   private badgeMats: Record<Direction, THREE.MeshBasicMaterial>;
@@ -122,7 +124,9 @@ export class ForkEngine {
     container: HTMLElement,
     private hasSame: boolean,
     private events: ForkEngineEvents,
-    quality: RunnerQuality = "high"
+    quality: RunnerQuality = "high",
+    // The runner the child picked (a flat 2D Ritmo character, 2.5D).
+    character: CharacterChoice = DEFAULT_CHARACTER
   ) {
     this.container = container;
     this.quality = quality;
@@ -176,7 +180,7 @@ export class ForkEngine {
       false
     );
 
-    this.character = new CartoonRunner(this.materials);
+    this.character = new SpriteCharacter(character, quality === "high" ? 1.2 : 0.8);
     this.scene.add(this.character.object);
     if (quality === "high") {
       this.shadow = new THREE.Mesh(
@@ -310,7 +314,6 @@ export class ForkEngine {
     this.bumped = null;
     this.rock.visible = false;
     this.character.reset();
-    this.character.object.rotation.z = 0;
     this.distance = (this.forkN + 1) * CHUNK + 0.2;
     this.speed = this.baseSpeed * 0.5;
     this.layoutChunks(true);
@@ -356,6 +359,7 @@ export class ForkEngine {
   }
 
   dispose() {
+    this.character.dispose();
     this.renderer.setAnimationLoop(null);
     this.resizeObserver.disconnect();
     this.scene.traverse((o) => {
@@ -427,7 +431,7 @@ export class ForkEngine {
         this.distance = nextFork * CHUNK + STRAIGHT;
         this.speed = 0;
         this.bumped = { t: 0 };
-        this.character.react("sad");
+        this.character.react("bump");
       }
       this.events.onFork(this.choice);
     }
@@ -448,17 +452,14 @@ export class ForkEngine {
     const y = onFork && !this.bumped ? pathY(this.taken, lx) : PLAT;
     const o = this.character.object;
     if (this.bumped) {
-      // Bump: a little hop back off the rock, a lean back, then standing
-      // still, frozen mid sad reaction (frown, head down) until moving on.
-      const t = this.bumped.t;
-      this.character.update(t < 0.5 ? Math.min(dt, 0.5 - t + 0.001) : 0, 0);
-      const k = Math.min(1, t / 0.15);
-      const hop = t < 0.35 ? Math.sin((Math.PI * t) / 0.35) * 0.22 : 0;
-      o.position.set(-0.3 * k, y + 0.1 + hop, RUNNER_Z);
-      o.rotation.z = 0.3 * k * (t < 0.6 ? 1 : Math.max(0.4, 1 - (t - 0.6)));
+      // Bump: the character's own "Too late!" animation (knocked back off
+      // the rock, dizzy, stars) plays and holds until skipFork().
+      this.character.update(dt, 0);
+      o.position.set(0, y + 0.1, RUNNER_Z);
+      o.rotation.z = 0;
       this.rock.visible = true;
       // The rock pops up as the kid arrives.
-      const pop = Math.min(1, t / 0.12);
+      const pop = Math.min(1, this.bumped.t / 0.12);
       this.rock.scale.setScalar(pop < 1 ? pop * 1.15 : 1);
       if (this.shadow) this.shadow.position.set(-0.2, y + 0.13, RUNNER_Z);
       this.badge.visible = false;

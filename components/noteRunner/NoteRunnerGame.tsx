@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DEFAULT_CHARACTER, type CharacterChoice } from "@/components/characters/choice";
 import { colors, radius } from "@/lib/theme";
 import { playFeedback, playNote, unlockNoteAudio } from "@/lib/playNote";
 import { configLabel } from "@/lib/noteReading";
@@ -42,11 +43,14 @@ type Phase = "ready" | "playing" | "paused" | "over";
 
 export default function NoteRunnerGame({
   config,
+  character = DEFAULT_CHARACTER,
   autoStart = false,
   onChangeSettings,
   onRunEnd,
 }: {
   config: NoteRunnerConfig;
+  // The runner the child picked.
+  character?: CharacterChoice;
   // Start running as soon as the scene is ready (the click that mounted
   // this component already unlocked audio).
   autoStart?: boolean;
@@ -152,7 +156,8 @@ export default function NoteRunnerGame({
           onGateReached: (lane) => handleGateRef.current(lane),
           onNeedGate: () => nextGateRef.current(),
         },
-        detectQuality()
+        detectQuality(),
+        character
       );
     } catch {
       setWebglError(true);

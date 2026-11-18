@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DEFAULT_CHARACTER, type CharacterChoice } from "@/components/characters/choice";
 import { colors, radius } from "@/lib/theme";
 import { playFeedback, playPianoMidi, unlockNoteAudio } from "@/lib/playNote";
 import {
@@ -46,10 +47,13 @@ const SAID: Record<Direction, string> = { up: "Higher!", down: "Lower!", same: "
 
 export default function UpOrDownGame({
   level,
+  character = DEFAULT_CHARACTER,
   autoStart = false,
   onChangeSettings,
 }: {
   level: UpOrDownLevel;
+  // The runner the child picked.
+  character?: CharacterChoice;
   autoStart?: boolean;
   onChangeSettings: () => void;
 }) {
@@ -224,7 +228,8 @@ export default function UpOrDownGame({
           onApproach: () => approachRef.current(),
           onFork: (c) => forkRef.current(c),
         },
-        detectQuality()
+        detectQuality(),
+        character
       );
     } catch {
       setWebglError(true);

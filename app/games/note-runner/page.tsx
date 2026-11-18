@@ -6,6 +6,7 @@ import Link from "next/link";
 import NoteReadingSettings from "@/components/NoteReadingSettings";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import { unlockNoteAudio } from "@/lib/playNote";
+import { RunnerCard, RunnerPickerScreen, useRunnerChoice } from "@/components/characters/RunnerChoice";
 import { DEFAULT_NOTE_READING_CONFIG, configLabel } from "@/lib/noteReading";
 import type { NoteRunnerConfig } from "@/lib/noteRunner";
 
@@ -26,6 +27,7 @@ const NoteRunnerGame = dynamic(loadGame, {
 export default function NoteRunnerPage() {
   const [config, setConfig] = useState<NoteRunnerConfig>({ ...DEFAULT_NOTE_READING_CONFIG, count: 1 });
   const [runKey, setRunKey] = useState<number | null>(null);
+  const { runner, chosen, picking, setPicking, save } = useRunnerChoice();
 
   // Start downloading the 3D code while the student picks settings.
   useEffect(() => {
@@ -34,7 +36,23 @@ export default function NoteRunnerPage() {
 
   if (runKey !== null) {
     return (
-      <NoteRunnerGame key={runKey} config={config} autoStart onChangeSettings={() => setRunKey(null)} />
+      <NoteRunnerGame key={runKey} config={config} character={runner} autoStart onChangeSettings={() => setRunKey(null)} />
+    );
+  }
+
+  // Choose a runner (first time: before the first run).
+  if (picking) {
+    return (
+      <RunnerPickerScreen
+        initial={runner}
+        mode={picking}
+        onDone={(c) => {
+          unlockNoteAudio();
+          save(c);
+          setPicking(null);
+          if (picking === "start") setRunKey(Date.now());
+        }}
+      />
     );
   }
 
@@ -76,11 +94,14 @@ export default function NoteRunnerPage() {
           </div>
           <NoteReadingSettings value={config} onChange={setConfig} showCount={false} />
         </section>
+        <RunnerCard runner={runner} onChange={() => setPicking("change")} />
         <button
           type="button"
           onClick={() => {
             unlockNoteAudio();
-            setRunKey(Date.now());
+            // No runner picked yet on this device: choose one first.
+            if (!chosen) setPicking("start");
+            else setRunKey(Date.now());
           }}
           style={{
             fontSize: "1.25rem",
