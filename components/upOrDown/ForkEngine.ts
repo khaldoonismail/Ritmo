@@ -14,7 +14,8 @@ import type { Direction } from "@/lib/upOrDown";
 //   ⬇️ down  a sandy slope into a tunnel through the hill
 // While the kid is on the straight stretch the child picks a path (an arrow
 // badge over the kid and a bigger sign show the pick); at the fork the kid
-// takes it.
+// takes it. With no pick, the kid bumps into a rock at the fork and waits
+// there (skipFork moves it on), so no path ever looks like the answer.
 //
 // Timing is the React component's job, with one helper here: setArrival()
 // says "reach the fork no sooner than N seconds from now", and the runner
@@ -112,6 +113,10 @@ export class ForkEngine {
   private choice: Direction | null = null;
   private taken: Direction = "same";
   private pulse: { n: number; correct: Direction; wrong: Direction | null; t: number } | null = null;
+  // No pick at the fork: the kid bumps into a rock and waits (see
+  // skipFork) instead of taking a path, so it never looks like an answer.
+  private bumped: { t: number } | null = null;
+  private rock: THREE.Group;
 
   constructor(
     container: HTMLElement,
@@ -194,6 +199,20 @@ export class ForkEngine {
     this.badge.visible = false;
     this.scene.add(this.badge);
 
+    // The rock that blocks the fork when no path was picked.
+    this.rock = new THREE.Group();
+    const stone = new THREE.DodecahedronGeometry(1, 0);
+    const big = new THREE.Mesh(stone, this.materials.get(0x9c968a));
+    big.scale.set(0.42, 0.36, 0.38);
+    big.position.y = 0.3;
+    const small = new THREE.Mesh(stone, this.materials.get(0xb5afa2));
+    small.scale.set(0.22, 0.2, 0.22);
+    small.position.set(0.38, 0.16, 0.12);
+    this.rock.add(big, small);
+    this.rock.position.set(0.75, PLAT + 0.1, RUNNER_Z);
+    this.rock.visible = false;
+    this.scene.add(this.rock);
+
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.reset();
@@ -226,6 +245,8 @@ export class ForkEngine {
     this.choice = null;
     this.taken = "same";
     this.pulse = null;
+    this.bumped = null;
+    this.rock.visible = false;
     this.character.reset();
     this.layoutChunks(true);
     this.placeRunner(0);
@@ -282,6 +303,25 @@ export class ForkEngine {
     return options[0][0];
   }
 
+  // After a no-pick bump: move the kid on to the start of the next
+  // straight stretch (the game hides the jump with a quick flash).
+  skipFork() {
+    if (!this.bumped) return;
+    this.bumped = null;
+    this.rock.visible = false;
+    this.character.reset();
+    this.character.object.rotation.z = 0;
+    this.distance = (this.forkN + 1) * CHUNK + 0.2;
+    this.speed = this.baseSpeed * 0.5;
+    this.layoutChunks(true);
+    this.placeRunner(0);
+    if (!this.running) this.render();
+  }
+
+  get isBumped(): boolean {
+    return this.bumped !== null;
+  }
+
   // After a fork: ring the right path's sign green (and a wrong pick red).
   showResult(correct: Direction, picked: Direction | null) {
     const ok = picked === correct;
@@ -308,6 +348,8 @@ export class ForkEngine {
       secondsToArrival: this.arrivalAt - this.time,
       choice: this.choice,
       taken: this.taken,
+      bumped: this.bumped !== null,
+      distance: this.distance,
       quality: this.quality,
       pixelRatio: this.pixelRatio,
     };
@@ -346,7 +388,7 @@ export class ForkEngine {
     // listening time is over.
     const toFork = (this.forkN + 1) * CHUNK + STRAIGHT - this.distance;
     const left = this.arrivalAt - this.time;
-    let target = this.baseSpeed;
+    let target = this.bumped ? 0 : this.baseSpeed;
     if (this.canChoose() && left > 0.05) target = Math.max(MIN_SPEED, Math.min(this.baseSpeed, toFork / left));
     // Ease into speed changes (slowing is quicker than speeding up).
     const k = target < this.speed ? 6 : 1.5;
@@ -356,6 +398,10 @@ export class ForkEngine {
       this.speed = Math.max(MIN_SPEED, Math.min(this.speed, toFork / Math.max(left, 0.01)));
     }
 
+    if (this.bumped) {
+      this.bumped.t += dt;
+      this.speed = 0;
+    }
     const travel = this.speed * dt;
     this.distance += travel;
     for (const m of this.movers) {
@@ -375,7 +421,14 @@ export class ForkEngine {
     const nextFork = this.forkN + 1;
     if (this.approachedN >= nextFork && this.distance >= nextFork * CHUNK + STRAIGHT) {
       this.forkN = nextFork;
-      this.taken = this.choice ?? (this.hasSame ? "same" : "down");
+      this.taken = this.choice ?? "same";
+      if (this.choice === null) {
+        // Too late: stop right at the fork, in front of the rock.
+        this.distance = nextFork * CHUNK + STRAIGHT;
+        this.speed = 0;
+        this.bumped = { t: 0 };
+        this.character.react("sad");
+      }
       this.events.onFork(this.choice);
     }
 
@@ -392,9 +445,26 @@ export class ForkEngine {
   private placeRunner(dt: number) {
     const lx = this.distance - (this.forkN * CHUNK + STRAIGHT);
     const onFork = this.forkN >= 0 && lx > 0 && lx < FORK_LEN;
-    const y = onFork ? pathY(this.taken, lx) : PLAT;
-    this.character.update(dt, this.speed);
+    const y = onFork && !this.bumped ? pathY(this.taken, lx) : PLAT;
     const o = this.character.object;
+    if (this.bumped) {
+      // Bump: a little hop back off the rock, a lean back, then standing
+      // still, frozen mid sad reaction (frown, head down) until moving on.
+      const t = this.bumped.t;
+      this.character.update(t < 0.5 ? Math.min(dt, 0.5 - t + 0.001) : 0, 0);
+      const k = Math.min(1, t / 0.15);
+      const hop = t < 0.35 ? Math.sin((Math.PI * t) / 0.35) * 0.22 : 0;
+      o.position.set(-0.3 * k, y + 0.1 + hop, RUNNER_Z);
+      o.rotation.z = 0.3 * k * (t < 0.6 ? 1 : Math.max(0.4, 1 - (t - 0.6)));
+      this.rock.visible = true;
+      // The rock pops up as the kid arrives.
+      const pop = Math.min(1, t / 0.12);
+      this.rock.scale.setScalar(pop < 1 ? pop * 1.15 : 1);
+      if (this.shadow) this.shadow.position.set(-0.2, y + 0.13, RUNNER_Z);
+      this.badge.visible = false;
+      return;
+    }
+    this.character.update(dt, this.speed);
     o.position.set(0, y + 0.1, RUNNER_Z);
     // Lean into ramps.
     let slope = 0;
@@ -440,7 +510,7 @@ export class ForkEngine {
         s.board.scale.setScalar(scale);
         // Front signs fade while the kid runs past them.
         const kidX = this.distance - c.n * CHUNK;
-        const near = s.front && Math.abs(kidX - s.x) < 1.3;
+        const near = s.front && Math.abs(kidX - s.x) < 1.5;
         s.mat.opacity = near ? 0.3 : other ? 0.7 : 1;
         // Result rings.
         const p = this.pulse;

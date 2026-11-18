@@ -31,7 +31,10 @@ import { ForkEngine } from "./ForkEngine";
 // reaches the fork after both notes plus thinking time (the engine slows
 // the runner if needed). After the answer, bubble ♪2 moves up, down or
 // stays level, so the child sees what they heard. A wrong answer costs a
-// heart and plays both notes again.
+// heart and plays both notes again. No pick by the fork ("Too late!"):
+// the kid bumps into a rock and stops there instead of taking any path
+// (so it never looks like an answer), both notes replay, then the kid
+// moves on to the next straight stretch.
 
 type Phase = "ready" | "playing" | "paused" | "over";
 
@@ -76,6 +79,12 @@ export default function UpOrDownGame({
   const [result, setResult] = useState<{ correct: boolean; answer: Direction; picked: Direction | null; points: number } | null>(null);
   const [musicOn, setMusicOn] = useState(true);
   const [webglError, setWebglError] = useState(false);
+  const [flash, setFlashState] = useState(false);
+  const flashRef = useRef(false);
+  const setFlash = (on: boolean) => {
+    flashRef.current = on;
+    setFlashState(on);
+  };
 
   const setPhase = (p: Phase) => {
     phaseRef.current = p;
@@ -181,6 +190,12 @@ export default function UpOrDownGame({
             setPhase("over");
             syncMusic();
             engineRef.current?.pause();
+          } else if (choice === null) {
+            // Too late: after the replay, a quick flash hides the kid
+            // moving on to the next straight stretch.
+            setFlash(true);
+            later(180, () => engineRef.current?.skipFork());
+            later(260, () => setFlash(false));
           }
         });
       }
@@ -208,6 +223,7 @@ export default function UpOrDownGame({
     questionRef.current = null;
     setQuestion(null);
     setResult(null);
+    setFlash(false);
     engine.reset();
     engine.setSpeed(runSpeed(0));
     setPhase("playing");
@@ -243,6 +259,7 @@ export default function UpOrDownGame({
         question: () => questionRef.current,
         music: () => musicRef.current,
         listening: () => listeningRef.current,
+        flash: () => flashRef.current,
       };
     }
     setMusicOn(musicOnRef.current);
@@ -485,10 +502,18 @@ export default function UpOrDownGame({
             {result ? (
               <>
                 <div style={{ fontSize: "1.35rem", fontWeight: 900, lineHeight: 1.15, whiteSpace: "nowrap", color: result.correct ? colors.greenCardShadow : colors.coralText }}>
-                  {result.correct ? `✓ ${ARROW[result.answer]} ${SAID[result.answer]} +${result.points}` : `✗ It was ${ARROW[result.answer]} ${SAID[result.answer]}`}
+                  {result.correct
+                    ? `✓ ${ARROW[result.answer]} ${SAID[result.answer]} +${result.points}`
+                    : result.picked
+                      ? `✗ It was ${ARROW[result.answer]} ${SAID[result.answer]}`
+                      : "⏰ Too late!"}
                 </div>
                 <div style={{ fontSize: "0.85rem", fontWeight: 800, opacity: 0.6 }}>
-                  {result.correct ? "Great ears!" : result.picked ? "Listen again…" : `Pick a path: ${same ? "⬆️ ➡️ ⬇️" : "⬆️ or ⬇️"}`}
+                  {result.correct
+                    ? "Great ears!"
+                    : result.picked
+                      ? "Listen again…"
+                      : `It was ${ARROW[result.answer]} ${SAID[result.answer].replace("!", "")} · pick a path before the fork`}
                 </div>
               </>
             ) : (
@@ -516,6 +541,19 @@ export default function UpOrDownGame({
           </button>
         </div>
       )}
+
+      {/* Quick flash while the kid moves on after "Too late!" */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "#FFFFFF",
+          opacity: flash ? 0.9 : 0,
+          transition: flash ? "opacity 0.15s ease-in" : "opacity 0.35s ease-out",
+          pointerEvents: "none",
+        }}
+      />
 
       {phase !== "playing" && (
         <div style={overlay}>
