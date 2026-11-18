@@ -10,7 +10,8 @@
     "seed": "node --env-file=.env.local scripts/seed.mjs",
     "verify:db": "node --env-file=.env.local scripts/verify.mjs",
     "verify:lessons": "node --env-file=.env.local scripts/verify-lessons.mjs",
-    "check:note-runner": "tsx scripts/check-note-runner.ts"
+    "check:note-runner": "tsx scripts/check-note-runner.ts",
+    "check:up-or-down": "tsx scripts/check-up-or-down.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.1",
