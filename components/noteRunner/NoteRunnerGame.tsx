@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { colors, radius } from "@/lib/theme";
-import { playNote, unlockNoteAudio } from "@/lib/playNote";
+import { playFeedback, playNote, unlockNoteAudio } from "@/lib/playNote";
 import { configLabel } from "@/lib/noteReading";
 import {
   GAP_SECONDS,
@@ -40,12 +40,6 @@ export interface RunSummary {
 
 type Phase = "ready" | "playing" | "paused" | "over";
 
-function playSound(kind: "wrong") {
-  const audio = new Audio(`/sounds/${kind}.mp3`);
-  audio.volume = 0.6;
-  audio.play().catch(() => {});
-}
-
 export default function NoteRunnerGame({
   config,
   autoStart = false,
@@ -68,12 +62,12 @@ export default function NoteRunnerGame({
   const answersRef = useRef<RunnerAnswer[]>([]);
   const phaseRef = useRef<Phase>("ready");
   const musicRef = useRef<RunnerMusic | null>(null);
-  // Background music on/off, remembered on the device. The ref has the
+  // Background music on/off (off by default), remembered on the device. The ref has the
   // saved choice from the start (the run may auto-start on mount); the
   // button's state follows after mount, as localStorage isn't there during
   // server rendering.
-  const musicOnRef = useRef(typeof window === "undefined" ? true : loadMusicOn());
-  const [musicOn, setMusicOn] = useState(true);
+  const musicOnRef = useRef(typeof window === "undefined" ? false : loadMusicOn());
+  const [musicOn, setMusicOn] = useState(false);
 
   const [phase, setPhaseState] = useState<Phase>("ready");
   const [gate, setGate] = useState<RunnerGate | null>(null);
@@ -120,7 +114,7 @@ export default function NoteRunnerGame({
       } else {
         s.lives--;
         s.streak = 0;
-        playSound("wrong");
+        playFeedback("wrong");
       }
       statsRef.current = s;
       setStats(s);

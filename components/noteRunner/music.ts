@@ -239,14 +239,15 @@ export class RunnerMusic {
   }
 }
 
-// On/off choice, remembered on this device. On unless turned off.
+// On/off choice, remembered on this device. Off unless turned on (kids
+// focus better on the notes without it).
 const STORAGE_KEY = "ritmo.noteRunner.music";
 
 export function loadMusicOn(): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEY) !== "off";
+    return localStorage.getItem(STORAGE_KEY) === "on";
   } catch {
-    return true;
+    return false;
   }
 }
 

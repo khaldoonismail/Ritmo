@@ -109,3 +109,46 @@ export function playPianoMidi(midi: number, delay = 0, seconds = 0.85): boolean 
   window.setTimeout(() => out.disconnect(), (end - c.currentTime + 0.2) * 1000);
   return true;
 }
+
+// Short, quiet feedback sounds (about 0.2 s), so they never cover the
+// next notes. Each is ONE steady pitch with no slide, so in an
+// ear-training game it can't hint "up" or "down":
+//   correct  a soft, bright "ding"
+//   wrong    a soft, low "bump"
+export function playFeedback(kind: "correct" | "wrong"): void {
+  const c = getAudioContext();
+  if (!c) return;
+  if (c.state === "suspended") c.resume().catch(() => {});
+  const start = c.currentTime + 0.01;
+  const correct = kind === "correct";
+  const length = correct ? 0.22 : 0.18;
+  const peak = correct ? 0.09 : 0.12;
+
+  const out = c.createGain();
+  out.gain.setValueAtTime(0.0001, start);
+  out.gain.exponentialRampToValueAtTime(peak, start + 0.006);
+  out.gain.exponentialRampToValueAtTime(0.0001, start + length);
+  // Rounds the "bump" off so it is a soft thud, not a buzz.
+  const soften = c.createBiquadFilter();
+  soften.type = "lowpass";
+  soften.frequency.setValueAtTime(correct ? 6000 : 700, start);
+  soften.connect(out);
+  out.connect(c.destination);
+
+  const partials: [OscillatorType, number, number][] = correct
+    ? [["sine", 1318.5, 1], ["sine", 2637, 0.25]]
+    : [["triangle", 155.6, 1]];
+  for (const [type, freq, level] of partials) {
+    const osc = c.createOscillator();
+    const g = c.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, start);
+    g.gain.setValueAtTime(level, start);
+    osc.connect(g);
+    g.connect(soften);
+    osc.start(start);
+    osc.stop(start + length + 0.02);
+    osc.onended = () => g.disconnect();
+  }
+  window.setTimeout(() => out.disconnect(), (length + 0.3) * 1000);
+}

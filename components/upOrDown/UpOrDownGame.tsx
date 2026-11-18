@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { colors, radius } from "@/lib/theme";
-import { playPianoMidi, unlockNoteAudio } from "@/lib/playNote";
+import { playFeedback, playPianoMidi, unlockNoteAudio } from "@/lib/playNote";
 import {
   LEAD_IN,
   LEVELS,
@@ -20,16 +20,16 @@ import {
   type UpOrDownQuestion,
 } from "@/lib/upOrDown";
 import { detectQuality } from "@/components/noteRunner/quality";
-import { RunnerMusic, loadMusicOn, saveMusicOn } from "@/components/noteRunner/music";
 import { ForkEngine } from "./ForkEngine";
 
 // One run of Up or Down: the 3D road (ForkEngine), the listening card, the
 // HUD and the controls. Ear only: no staff and no note names.
 //
-// Each fork: the background music stops completely, the two notes play
-// (the card lights bubble ♪1, then ♪2), the music comes back, and the kid
-// reaches the fork after both notes plus thinking time (the engine slows
-// the runner if needed). After the answer, bubble ♪2 moves up, down or
+// No background music (kids found it hard to focus on the notes): only
+// the two notes and short, soft feedback sounds, with silence between
+// questions. Each fork: the two notes play (the card lights bubble ♪1,
+// then ♪2), and the kid reaches the fork after both notes plus thinking
+// time (the engine slows the runner if needed). After the answer, bubble ♪2 moves up, down or
 // stays level, so the child sees what they heard. A wrong answer costs a
 // heart and plays both notes again. No pick by the fork ("Too late!"):
 // the kid bumps into a rock and stops there instead of taking any path
@@ -38,14 +38,11 @@ import { ForkEngine } from "./ForkEngine";
 
 type Phase = "ready" | "playing" | "paused" | "over";
 
+// Seconds of quiet after a replay before the next question's notes.
+const SILENCE_BEFORE_NEXT = 1.2;
+
 const ARROW: Record<Direction, string> = { up: "⬆️", down: "⬇️", same: "➡️" };
 const SAID: Record<Direction, string> = { up: "Higher!", down: "Lower!", same: "Same!" };
-
-function playWrong() {
-  const audio = new Audio("/sounds/wrong.mp3");
-  audio.volume = 0.5;
-  audio.play().catch(() => {});
-}
 
 export default function UpOrDownGame({
   level,
@@ -67,8 +64,6 @@ export default function UpOrDownGame({
   const timersRef = useRef<number[]>([]);
   const listeningRef = useRef(false);
   const busyUntilRef = useRef(0); // wall-clock ms until the current notes end
-  const musicRef = useRef<RunnerMusic | null>(null);
-  const musicOnRef = useRef(typeof window === "undefined" ? true : loadMusicOn());
   const same = hasSamePath(level);
 
   const [phase, setPhaseState] = useState<Phase>("ready");
@@ -77,7 +72,6 @@ export default function UpOrDownGame({
   const [lit, setLit] = useState<0 | 1 | 2>(0);
   const [listening, setListening] = useState(false);
   const [result, setResult] = useState<{ correct: boolean; answer: Direction; picked: Direction | null; points: number } | null>(null);
-  const [musicOn, setMusicOn] = useState(true);
   const [webglError, setWebglError] = useState(false);
   const [flash, setFlashState] = useState(false);
   const flashRef = useRef(false);
@@ -91,19 +85,6 @@ export default function UpOrDownGame({
     setPhaseState(p);
   };
 
-  // Music plays only while running, switched on, and not during the notes.
-  const syncMusic = useCallback(() => {
-    const want = phaseRef.current === "playing" && musicOnRef.current && !listeningRef.current;
-    if (want) {
-      if (!musicRef.current) musicRef.current = new RunnerMusic();
-      musicRef.current.play();
-    } else if (phaseRef.current === "over") {
-      musicRef.current?.stop();
-    } else {
-      musicRef.current?.pause();
-    }
-  }, []);
-
   const later = (ms: number, fn: () => void) => {
     timersRef.current.push(window.setTimeout(fn, ms));
   };
@@ -113,16 +94,14 @@ export default function UpOrDownGame({
     timersRef.current = [];
   };
 
-  // Plays the two notes (after `delay` seconds), lighting the bubbles, with
-  // the music stopped from just before until just after. `then` runs when
-  // the notes are over.
+  // Plays the two notes (after `delay` seconds), lighting the bubbles.
+  // `then` runs when the notes are over.
   const playPair = useCallback(
     (q: UpOrDownQuestion, delay = 0, then?: () => void) => {
       const ms = (s: number) => Math.round((delay + s) * 1000);
       later(Math.max(0, ms(0) - 10), () => {
         listeningRef.current = true;
         setListening(true);
-        syncMusic(); // stops the music before the first note
         playPianoMidi(q.first, LEAD_IN, NOTE_SECONDS);
         playPianoMidi(q.second, LEAD_IN + NOTE_SECONDS + NOTE_GAP, NOTE_SECONDS);
       });
@@ -132,13 +111,13 @@ export default function UpOrDownGame({
       later(ms(PAIR_SECONDS + 0.3), () => {
         listeningRef.current = false;
         setListening(false);
-        syncMusic();
         then?.();
       });
-      busyUntilRef.current = Date.now() + ms(PAIR_SECONDS + 0.3);
+      // A new question waits for a moment of silence after these notes.
+      busyUntilRef.current = Date.now() + ms(PAIR_SECONDS + 0.3 + SILENCE_BEFORE_NEXT);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [syncMusic]
+    []
   );
 
   // The kid left a fork: here comes the next question.
@@ -182,13 +161,13 @@ export default function UpOrDownGame({
       setStats(s);
       setResult({ correct, answer: q.answer, picked: choice, points });
       engine.showResult(q.answer, choice);
+      if (correct) playFeedback("correct");
       if (!correct) {
-        playWrong();
+        playFeedback("wrong");
         // Both notes again, so the child hears the difference.
         playPair(q, 0.45, () => {
           if (statsRef.current.lives <= 0) {
             setPhase("over");
-            syncMusic();
             engineRef.current?.pause();
           } else if (choice === null) {
             // Too late: after the replay, a quick flash hides the kid
@@ -200,7 +179,7 @@ export default function UpOrDownGame({
         });
       }
     },
-    [playPair, syncMusic]
+    [playPair]
   );
 
   const approachRef = useRef(handleApproach);
@@ -228,7 +207,6 @@ export default function UpOrDownGame({
     engine.setSpeed(runSpeed(0));
     setPhase("playing");
     engine.start();
-    syncMusic();
   };
   const startRef = useRef(start);
   startRef.current = start;
@@ -257,17 +235,13 @@ export default function UpOrDownGame({
       (window as unknown as { __upOrDown?: unknown }).__upOrDown = {
         engine,
         question: () => questionRef.current,
-        music: () => musicRef.current,
         listening: () => listeningRef.current,
         flash: () => flashRef.current,
       };
     }
-    setMusicOn(musicOnRef.current);
     if (autoStart) startRef.current();
     return () => {
       clearTimers();
-      musicRef.current?.dispose();
-      musicRef.current = null;
       engine.dispose();
       engineRef.current = null;
     };
@@ -294,15 +268,13 @@ export default function UpOrDownGame({
     if (phaseRef.current !== "playing") return;
     engineRef.current?.pause();
     setPhase("paused");
-    syncMusic();
-  }, [syncMusic]);
+  }, []);
 
   const resume = () => {
     if (phaseRef.current !== "paused") return;
     unlockNoteAudio();
     setPhase("playing");
     engineRef.current?.start();
-    syncMusic();
   };
 
   const hearAgain = () => {
@@ -313,15 +285,6 @@ export default function UpOrDownGame({
     playPair(q);
     // Costs a little time: the runner slows so the fork waits for the notes.
     engine.setArrival(PAIR_SECONDS + 1.8);
-  };
-
-  const toggleMusic = () => {
-    unlockNoteAudio();
-    const on = !musicOnRef.current;
-    musicOnRef.current = on;
-    setMusicOn(on);
-    saveMusicOn(on);
-    syncMusic();
   };
 
   // Keyboard: ↑ ↓ (W / S) pick a path, → (D) "Same" on Hard, H hears
@@ -444,16 +407,6 @@ export default function UpOrDownGame({
               </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={toggleMusic}
-            aria-pressed={musicOn}
-            aria-label={musicOn ? "Music on. Tap to turn the music off" : "Music off. Tap to turn the music on"}
-            style={{ ...hudPill, pointerEvents: "auto", cursor: "pointer", border: "none", fontSize: "0.95rem", opacity: musicOn ? 1 : 0.75 }}
-          >
-            <span aria-hidden="true">{musicOn ? "🎵" : "🔇"}</span>
-            <span style={{ fontSize: "0.8rem" }}>{musicOn ? "Music on" : "Music off"}</span>
-          </button>
           {phase === "playing" && (
             <button
               type="button"

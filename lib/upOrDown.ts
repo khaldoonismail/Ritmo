@@ -86,7 +86,7 @@ export function runSpeed(correctSoFar: number): number {
 // between them so the first note has stopped before the second starts.
 export const NOTE_SECONDS = 0.85;
 export const NOTE_GAP = 0.25;
-export const LEAD_IN = 0.3; // music fades out first
+export const LEAD_IN = 0.3; // a short silence before the first note
 export const PAIR_SECONDS = LEAD_IN + NOTE_SECONDS * 2 + NOTE_GAP;
 
 // Time from the first note to the fork: both notes, then time to think.
