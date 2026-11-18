@@ -10,7 +10,9 @@ import { noteFrequency, type NoteSpec } from "@/lib/noteReading";
 
 let ctx: AudioContext | null = null;
 
-function getContext(): AudioContext | null {
+// Shared with the Note Runner background music (components/noteRunner/music.ts)
+// so one tap unlocks both.
+export function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
   if (!ctx) {
     const Ctor =
@@ -27,12 +29,12 @@ function getContext(): AudioContext | null {
 }
 
 export function unlockNoteAudio(): void {
-  const c = getContext();
+  const c = getAudioContext();
   if (c && c.state === "suspended") c.resume().catch(() => {});
 }
 
 export function playNote(note: Pick<NoteSpec, "step" | "octave" | "accidental">): void {
-  const c = getContext();
+  const c = getAudioContext();
   if (!c) return;
   if (c.state === "suspended") c.resume().catch(() => {});
 

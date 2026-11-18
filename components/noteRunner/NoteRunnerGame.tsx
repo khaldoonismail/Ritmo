@@ -17,6 +17,7 @@ import {
 } from "@/lib/noteRunner";
 import { RunnerEngine } from "./RunnerEngine";
 import { detectQuality } from "./quality";
+import { RunnerMusic, loadMusicOn, saveMusicOn } from "./music";
 
 // One Note Runner run: the 3D road (RunnerEngine), the note card, the HUD
 // and the controls. The whole run happens in the browser; `onRunEnd` gets
@@ -66,6 +67,13 @@ export default function NoteRunnerGame({
   const statsRef = useRef({ score: 0, lives: NOTE_RUNNER_LIVES, streak: 0, bestStreak: 0, correct: 0, total: 0 });
   const answersRef = useRef<RunnerAnswer[]>([]);
   const phaseRef = useRef<Phase>("ready");
+  const musicRef = useRef<RunnerMusic | null>(null);
+  // Background music on/off, remembered on the device. The ref has the
+  // saved choice from the start (the run may auto-start on mount); the
+  // button's state follows after mount, as localStorage isn't there during
+  // server rendering.
+  const musicOnRef = useRef(typeof window === "undefined" ? true : loadMusicOn());
+  const [musicOn, setMusicOn] = useState(true);
 
   const [phase, setPhaseState] = useState<Phase>("ready");
   const [gate, setGate] = useState<RunnerGate | null>(null);
@@ -107,6 +115,7 @@ export default function NoteRunnerGame({
         s.correct++;
         s.streak++;
         s.bestStreak = Math.max(s.bestStreak, s.streak);
+        musicRef.current?.duck();
         playNote(g.question.note);
       } else {
         s.lives--;
@@ -122,6 +131,7 @@ export default function NoteRunnerGame({
       if (s.lives <= 0) {
         // Let the red flash show, then stop.
         setPhase("over");
+        musicRef.current?.stop();
         window.setTimeout(() => engineRef.current?.pause(), 700);
         onRunEnd?.({
           score: s.score,
@@ -158,10 +168,16 @@ export default function NoteRunnerGame({
     // ?debug in the URL exposes the engine and current gate to tests
     // (scripts/check-note-runner.mjs checks every note head's position).
     if (new URLSearchParams(window.location.search).has("debug")) {
-      (window as unknown as { __noteRunner?: unknown }).__noteRunner = { engine, gate: () => gateRef.current };
+      (window as unknown as { __noteRunner?: unknown }).__noteRunner = {
+        engine,
+        gate: () => gateRef.current,
+        music: () => musicRef.current,
+      };
     }
     if (autoStart) startRef.current();
     return () => {
+      musicRef.current?.dispose();
+      musicRef.current = null;
       engine.dispose();
       engineRef.current = null;
     };
@@ -205,6 +221,7 @@ export default function NoteRunnerGame({
     setPhase("playing");
     engine.start();
     nextGate();
+    syncMusic("playing");
   };
 
   const startRef = useRef(start);
@@ -214,6 +231,7 @@ export default function NoteRunnerGame({
     if (phaseRef.current !== "playing") return;
     engineRef.current?.pause();
     setPhase("paused");
+    musicRef.current?.pause();
   }, []);
 
   const resume = () => {
@@ -221,6 +239,28 @@ export default function NoteRunnerGame({
     unlockNoteAudio();
     setPhase("playing");
     engineRef.current?.start();
+    syncMusic("playing");
+  };
+
+  // Music plays only while running, and only when switched on.
+  function syncMusic(p: Phase) {
+    if (p === "playing" && musicOnRef.current) {
+      if (!musicRef.current) musicRef.current = new RunnerMusic();
+      musicRef.current.play();
+    } else if (p === "playing") {
+      musicRef.current?.pause();
+    }
+  }
+
+  useEffect(() => setMusicOn(musicOnRef.current), []);
+
+  const toggleMusic = () => {
+    unlockNoteAudio();
+    const on = !musicOnRef.current;
+    musicOnRef.current = on;
+    setMusicOn(on);
+    saveMusicOn(on);
+    if (phaseRef.current === "playing") syncMusic("playing");
   };
 
   // Keyboard: ↑ ↓ (and W / S) change lane; P or Esc pauses.
@@ -262,6 +302,9 @@ export default function NoteRunnerGame({
   // one lane per 45 px), a tap moves to the lane under the finger.
   const pointerStart = useRef<{ x: number; y: number; id: number } | null>(null);
   const onPointerDown = (e: React.PointerEvent) => {
+    // Any tap unlocks sound (iPad Safari / Android Chrome need a gesture);
+    // if the music was waiting for one, it starts now.
+    unlockNoteAudio();
     if (phaseRef.current !== "playing") return;
     pointerStart.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
   };
@@ -316,6 +359,7 @@ export default function NoteRunnerGame({
           alignItems: "flex-start",
           padding: "max(10px, env(safe-area-inset-top)) 12px 0",
           pointerEvents: "none",
+          zIndex: 2,
         }}
       >
         <div style={hudPill}>
@@ -330,6 +374,24 @@ export default function NoteRunnerGame({
               </span>
             )}
           </div>
+          <button
+            type="button"
+            onClick={toggleMusic}
+            aria-pressed={musicOn}
+            aria-label={musicOn ? "Music on. Tap to turn the music off" : "Music off. Tap to turn the music on"}
+            title={musicOn ? "Music: on" : "Music: off"}
+            style={{
+              ...hudPill,
+              pointerEvents: "auto",
+              cursor: "pointer",
+              border: "none",
+              fontSize: "0.95rem",
+              opacity: musicOn ? 1 : 0.75,
+            }}
+          >
+            <span aria-hidden="true">{musicOn ? "🎵" : "🔇"}</span>
+            <span style={{ fontSize: "0.8rem" }}>{musicOn ? "Music on" : "Music off"}</span>
+          </button>
           {phase === "playing" && (
             <button
               type="button"
