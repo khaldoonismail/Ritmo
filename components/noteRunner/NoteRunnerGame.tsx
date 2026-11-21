@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_CHARACTER, type CharacterChoice } from "@/components/characters/choice";
 import { colors, radius } from "@/lib/theme";
-import { RotateDeviceOverlay, usePhonePortrait } from "@/components/RotateDevice";
+import { RotateDeviceOverlay, usePhonePortrait, useShortLandscape } from "@/components/RotateDevice";
 import { playFeedback, playNote, unlockNoteAudio } from "@/lib/playNote";
 import { configLabel } from "@/lib/noteReading";
 import {
@@ -82,6 +82,9 @@ export default function NoteRunnerGame({
   // Lanes are fixed for the life of this component (settings change
   // remounts it).
   const [laneLayout] = useState(() => runnerLanes(config.level));
+  // Phone on its side: a one-line note card up in the top bar, so the
+  // whole staff stays visible.
+  const compact = useShortLandscape();
 
   const setPhase = (p: Phase) => {
     phaseRef.current = p;
@@ -200,7 +203,7 @@ export default function NoteRunnerGame({
       ro.disconnect();
       window.removeEventListener("resize", update);
     };
-  }, [gate !== null]);
+  }, [gate !== null, compact]);
 
   // The engine calls the latest handlers through refs.
   const handleGateRef = useRef(handleGateReached);
@@ -409,7 +412,7 @@ export default function NoteRunnerGame({
             }}
           >
             <span aria-hidden="true">{musicOn ? "🎵" : "🔇"}</span>
-            <span style={{ fontSize: "0.8rem" }}>{musicOn ? "Music on" : "Music off"}</span>
+            {!compact && <span style={{ fontSize: "0.8rem" }}>{musicOn ? "Music on" : "Music off"}</span>}
           </button>
           {phase === "playing" && (
             <button
@@ -424,8 +427,49 @@ export default function NoteRunnerGame({
         </div>
       </div>
 
+      {/* The note to read, compact: one line in the top bar. */}
+      {gate && phase !== "ready" && compact && (
+        <div
+          ref={cardRef}
+          style={{
+            position: "absolute",
+            top: "max(8px, env(safe-area-inset-top))",
+            left: "50%",
+            transform: "translateX(-50%)",
+            maxWidth: "calc(100vw - 330px)",
+            height: 44,
+            boxSizing: "border-box",
+            background: colors.white,
+            borderRadius: 999,
+            padding: "0 14px",
+            boxShadow: feedback
+              ? `0 0 0 3px ${feedback.correct ? colors.greenCard : colors.coralText}, 0 3px 0 rgba(0,0,0,0.12)`
+              : "0 3px 0 rgba(0,0,0,0.12)",
+            pointerEvents: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            whiteSpace: "nowrap",
+            zIndex: 3,
+          }}
+        >
+          <span style={{ fontSize: "1.7rem", fontWeight: 900, lineHeight: 1, color: colors.blueText }}>{gate.name}</span>
+          <span style={{ fontSize: "0.85rem", fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+            {feedback ? (
+              feedback.correct ? (
+                <span style={{ color: colors.greenCardShadow }}>✓ +{feedback.points}</span>
+              ) : (
+                <span style={{ color: colors.coralText }}>✗ the green one</span>
+              )
+            ) : (
+              <span style={{ opacity: 0.55 }}>Run to it</span>
+            )}
+          </span>
+        </div>
+      )}
+
       {/* The note to read */}
-      {gate && phase !== "ready" && (
+      {gate && phase !== "ready" && !compact && (
         <div
           ref={cardRef}
           style={{

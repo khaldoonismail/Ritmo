@@ -106,3 +106,24 @@ export function RotateDeviceOverlay() {
     </div>
   );
 }
+
+// A short landscape screen (a phone on its side: 320–500 px tall, less
+// with Safari's bars). The games then use a compact, one-line card in the
+// top bar so the whole road stays visible.
+const SHORT_LANDSCAPE = "(orientation: landscape) and (max-height: 500px)";
+
+export function useShortLandscape(): boolean {
+  const [short, setShort] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(SHORT_LANDSCAPE);
+    const update = () => setShort(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    window.addEventListener("resize", update);
+    return () => {
+      mq.removeEventListener("change", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+  return short;
+}

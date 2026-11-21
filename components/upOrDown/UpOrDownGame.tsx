@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_CHARACTER, type CharacterChoice } from "@/components/characters/choice";
 import { colors, radius } from "@/lib/theme";
-import { RotateDeviceOverlay, usePhonePortrait } from "@/components/RotateDevice";
+import { RotateDeviceOverlay, usePhonePortrait, useShortLandscape } from "@/components/RotateDevice";
 import { playFeedback, playPianoMidi, unlockNoteAudio } from "@/lib/playNote";
 import {
   LEAD_IN,
@@ -70,6 +70,8 @@ export default function UpOrDownGame({
   const listeningRef = useRef(false);
   const busyUntilRef = useRef(0); // wall-clock ms until the current notes end
   const same = hasSamePath(level);
+  // Phone on its side: a one-line card up in the top bar instead.
+  const compact = useShortLandscape();
 
   const [phase, setPhaseState] = useState<Phase>("ready");
   const [question, setQuestion] = useState<UpOrDownQuestion | null>(null);
@@ -268,7 +270,7 @@ export default function UpOrDownGame({
       ro.disconnect();
       window.removeEventListener("resize", update);
     };
-  }, [phase !== "ready"]);
+  }, [phase !== "ready", compact]);
 
   const pause = useCallback(() => {
     if (phaseRef.current !== "playing") return;
@@ -445,8 +447,88 @@ export default function UpOrDownGame({
         </div>
       </div>
 
+      {/* The listening card, compact: one line in the top bar, between the
+          hearts and the score, so the road, bridge, tunnel and signs all
+          stay visible on a short screen. */}
+      {phase !== "ready" && compact && (
+        <div
+          ref={cardRef}
+          style={{
+            position: "absolute",
+            top: "max(8px, env(safe-area-inset-top))",
+            left: "50%",
+            transform: "translateX(-50%)",
+            maxWidth: "calc(100vw - 250px)",
+            height: 44,
+            boxSizing: "border-box",
+            background: colors.white,
+            borderRadius: 999,
+            padding: "0 4px 0 10px",
+            boxShadow: result
+              ? `0 0 0 3px ${result.correct ? colors.greenCard : colors.coralText}, 0 3px 0 rgba(0,0,0,0.12)`
+              : "0 3px 0 rgba(0,0,0,0.12)",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            zIndex: 3,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }} aria-hidden="true">
+            <NoteBubble n={1} lit={lit === 1} small />
+            <span style={{ fontSize: "0.8rem", fontWeight: 900, opacity: 0.3 }}>→</span>
+            <NoteBubble n={2} lit={lit === 2} move={moved} small />
+          </div>
+          <div
+            aria-live="polite"
+            style={{
+              fontSize: "1rem",
+              fontWeight: 900,
+              lineHeight: 1,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              minWidth: 0,
+              color: result ? (result.correct ? colors.greenCardShadow : colors.coralText) : colors.blueText,
+            }}
+          >
+            {result
+              ? result.correct
+                ? `✓ ${ARROW[result.answer]} ${SAID[result.answer]} +${result.points}`
+                : result.picked
+                  ? `✗ It was ${ARROW[result.answer]} ${SAID[result.answer]}`
+                  : `⏰ Too late! It was ${ARROW[result.answer]}`
+              : question
+                ? questionText
+                : "Get ready…"}
+          </div>
+          <button
+            type="button"
+            onClick={hearAgain}
+            disabled={!question || !!result || listening || phase !== "playing"}
+            aria-label={listening ? "Listening" : "Hear again"}
+            title="Hear again"
+            style={{
+              ...hearButton,
+              width: 36,
+              height: 36,
+              padding: 0,
+              borderRadius: "50%",
+              flexShrink: 0,
+              fontSize: "1.05rem",
+              display: "grid",
+              placeItems: "center",
+              boxShadow: `0 2px 0 ${colors.greenButtonShadow}`,
+              opacity: !question || result ? 0.45 : 1,
+              cursor: !question || result || listening ? "default" : "pointer",
+            }}
+          >
+            🔊
+          </button>
+        </div>
+      )}
+
       {/* The listening card */}
-      {phase !== "ready" && (
+      {phase !== "ready" && !compact && (
         <div
           ref={cardRef}
           style={{
@@ -606,21 +688,33 @@ export default function UpOrDownGame({
 
 // A note bubble (no staff, no name). The one sounding glows; after the
 // answer, ♪2 glides up, down, or stays level with a little pulse.
-function NoteBubble({ n, lit, move = null }: { n: 1 | 2; lit: boolean; move?: Direction | null }) {
-  const shift = move === "up" ? -24 : move === "down" ? 24 : 0;
+function NoteBubble({
+  n,
+  lit,
+  move = null,
+  small = false,
+}: {
+  n: 1 | 2;
+  lit: boolean;
+  move?: Direction | null;
+  // The compact card (short landscape): smaller, and a smaller jump.
+  small?: boolean;
+}) {
+  const jump = small ? 7 : 24;
+  const shift = move === "up" ? -jump : move === "down" ? jump : 0;
   return (
     <div
       style={{
-        width: 44,
-        height: 44,
+        width: small ? 28 : 44,
+        height: small ? 28 : 44,
         borderRadius: "50%",
         display: "grid",
         placeItems: "center",
-        fontSize: "1.45rem",
+        fontSize: small ? "0.95rem" : "1.45rem",
         fontWeight: 900,
         color: lit || move ? colors.white : colors.textPrimary,
         background: lit ? "#F28C28" : move ? MOVE_COLOR[move] : "#EFE7D8",
-        boxShadow: lit ? "0 0 0 6px rgba(242,140,40,0.3)" : "none",
+        boxShadow: lit ? `0 0 0 ${small ? 3 : 6}px rgba(242,140,40,0.3)` : "none",
         position: "relative",
         transform: `translateY(${shift}px) scale(${lit ? 1.12 : 1})`,
         transition: "transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, box-shadow 0.2s",
@@ -631,9 +725,9 @@ function NoteBubble({ n, lit, move = null }: { n: 1 | 2; lit: boolean; move?: Di
       <span
         style={{
           position: "absolute",
-          bottom: -4,
-          right: -4,
-          fontSize: "0.7rem",
+          bottom: small ? -3 : -4,
+          right: small ? -5 : -4,
+          fontSize: small ? "0.55rem" : "0.7rem",
           background: colors.white,
           color: colors.textPrimary,
           borderRadius: 999,
