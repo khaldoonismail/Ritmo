@@ -10,33 +10,94 @@ import { noteFrequency, type NoteSpec } from "@/lib/noteReading";
 
 let ctx: AudioContext | null = null;
 
+// iPhone / iPad: ask for the "playback" audio session (Safari 17+), so the
+// game sounds play even with the silent switch on, like a music app.
+// Other browsers don't have navigator.audioSession and skip this.
+function requestPlaybackSession(): void {
+  try {
+    const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+    if (session && session.type !== "playback") session.type = "playback";
+  } catch {
+    // not supported
+  }
+}
+
+function createContext(): AudioContext | null {
+  const Ctor =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctor) return null;
+  requestPlaybackSession();
+  try {
+    const c = new Ctor();
+    // iOS moves the context to "interrupted" (a call, Siri, an alarm,
+    // another app's audio) or "suspended" (locked screen). Try to come
+    // back on our own when the page is visible; if iOS still wants a tap,
+    // the next touch does it (see installUnlock).
+    c.addEventListener("statechange", () => {
+      if (c === ctx && c.state !== "running" && c.state !== "closed" && !document.hidden) {
+        c.resume().catch(() => {});
+      }
+    });
+    return c;
+  } catch {
+    return null;
+  }
+}
+
 // Shared with the Note Runner background music (components/noteRunner/music.ts)
 // so one tap unlocks both.
 export function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
-  if (!ctx) {
-    const Ctor =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctor) return null;
-    try {
-      ctx = new Ctor();
-    } catch {
-      return null;
-    }
-  }
+  if (!ctx || ctx.state === "closed") ctx = createContext();
+  installUnlock();
   return ctx;
 }
 
 export function unlockNoteAudio(): void {
+  requestPlaybackSession();
   const c = getAudioContext();
-  if (c && c.state === "suspended") c.resume().catch(() => {});
+  if (!c || c.state === "running") return;
+  c.resume().catch(() => {});
+  // Rarely, iOS leaves a context "interrupted" for good after a call. If a
+  // tap can't bring it back, start a fresh one (the old one is dead anyway).
+  const stuck = c;
+  window.setTimeout(() => {
+    if (stuck === ctx && (stuck.state as string) === "interrupted" && !document.hidden) {
+      stuck.close().catch(() => {});
+      ctx = createContext();
+      ctx?.resume().catch(() => {});
+    }
+  }, 600);
 }
+
+// Every touch, click or key (not just the first) resumes the sound, so it
+// also comes back after iOS interrupted it. Listeners are on window in the
+// capture phase, so they run even where a game stops the event.
+let unlockInstalled = false;
+function installUnlock(): void {
+  if (unlockInstalled || typeof window === "undefined") return;
+  unlockInstalled = true;
+  const onGesture = () => {
+    if (!ctx || ctx.state !== "running") unlockNoteAudio();
+  };
+  for (const type of ["pointerdown", "touchend", "click", "keydown"]) {
+    window.addEventListener(type, onGesture, { capture: true, passive: true });
+  }
+  // Coming back to the app: iOS often needs a nudge.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && ctx && ctx.state !== "running") ctx.resume().catch(() => {});
+  });
+}
+
+// Start listening for the first touch as soon as a page with sound loads,
+// so even a tap before any sound was asked for unlocks it.
+if (typeof window !== "undefined") installUnlock();
 
 export function playNote(note: Pick<NoteSpec, "step" | "octave" | "accidental">): void {
   const c = getAudioContext();
   if (!c) return;
-  if (c.state === "suspended") c.resume().catch(() => {});
+  if (c.state !== "running") c.resume().catch(() => {});
 
   const freq = noteFrequency(note);
   const now = c.currentTime + 0.02;
@@ -73,7 +134,7 @@ export function playNote(note: Pick<NoteSpec, "step" | "octave" | "accidental">)
 export function playPianoMidi(midi: number, delay = 0, seconds = 0.85): boolean {
   const c = getAudioContext();
   if (!c) return false;
-  if (c.state === "suspended") c.resume().catch(() => {});
+  if (c.state !== "running") c.resume().catch(() => {});
   const freq = 440 * Math.pow(2, (midi - 69) / 12);
   const start = c.currentTime + 0.02 + delay;
   const end = start + seconds;
@@ -118,7 +179,7 @@ export function playPianoMidi(midi: number, delay = 0, seconds = 0.85): boolean 
 export function playFeedback(kind: "correct" | "wrong"): void {
   const c = getAudioContext();
   if (!c) return;
-  if (c.state === "suspended") c.resume().catch(() => {});
+  if (c.state !== "running") c.resume().catch(() => {});
   const start = c.currentTime + 0.01;
   const correct = kind === "correct";
   const length = correct ? 0.22 : 0.18;

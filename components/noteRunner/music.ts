@@ -92,8 +92,10 @@ export class RunnerMusic {
   private live = new Set<OscillatorNode>();
 
   private setup(): AudioContext | null {
-    if (this.ctx) return this.ctx;
     const ctx = getAudioContext();
+    if (this.ctx && this.ctx === ctx) return this.ctx;
+    // (A new context after iOS killed the old one: build the nodes again.)
+    this.ctx = null;
     if (!ctx) return null;
     try {
       const out = ctx.createGain();

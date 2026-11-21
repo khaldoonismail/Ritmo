@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_CHARACTER, type CharacterChoice } from "@/components/characters/choice";
 import { colors, radius } from "@/lib/theme";
+import { RotateDeviceOverlay, usePhonePortrait } from "@/components/RotateDevice";
 import { playFeedback, playNote, unlockNoteAudio } from "@/lib/playNote";
 import { configLabel } from "@/lib/noteReading";
 import {
@@ -240,6 +241,25 @@ export default function NoteRunnerGame({
     engineRef.current?.start();
     syncMusic("playing");
   };
+
+  // Phones play in landscape only: held upright, the game pauses behind a
+  // "rotate" screen and carries on by itself once turned sideways (unless
+  // the child had paused it first). Tablets play either way.
+  const phonePortrait = usePhonePortrait();
+  const rotatePausedRef = useRef(false);
+  const resumeRef = useRef(resume);
+  resumeRef.current = resume;
+  useEffect(() => {
+    if (phonePortrait) {
+      if (phaseRef.current === "playing") {
+        pause();
+        rotatePausedRef.current = true;
+      }
+    } else if (rotatePausedRef.current) {
+      rotatePausedRef.current = false;
+      resumeRef.current();
+    }
+  }, [phonePortrait, pause]);
 
   // Music plays only while running, and only when switched on.
   function syncMusic(p: Phase) {
@@ -499,6 +519,8 @@ export default function NoteRunnerGame({
         </div>
       )}
 
+      {phonePortrait && <RotateDeviceOverlay />}
+
       {webglError && (
         <div style={overlay}>
           <div style={panel}>
@@ -542,11 +564,14 @@ const panel: React.CSSProperties = {
   background: colors.background,
   color: colors.textPrimary,
   borderRadius: "20px",
-  padding: "1.5rem 1.25rem",
+  // Tighter on short screens (a phone in landscape is ~390 px tall).
+  padding: "min(1.5rem, 4vh) 1.25rem",
   width: "min(400px, 100%)",
+  maxHeight: "100%",
+  overflowY: "auto",
   display: "flex",
   flexDirection: "column",
-  gap: "0.8rem",
+  gap: "min(0.8rem, 2.4vh)",
   alignItems: "stretch",
   textAlign: "center",
   boxShadow: "0 8px 0 rgba(0,0,0,0.15)",
