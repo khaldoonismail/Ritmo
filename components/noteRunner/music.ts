@@ -241,21 +241,21 @@ export class RunnerMusic {
   }
 }
 
-// On/off choice, remembered on this device. Off unless turned on (kids
-// focus better on the notes without it).
+// On/off choice, remembered on this device per game (`key`). Off unless
+// turned on (kids focus better on the notes without it).
 const STORAGE_KEY = "ritmo.noteRunner.music";
 
-export function loadMusicOn(): boolean {
+export function loadMusicOn(key = STORAGE_KEY): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEY) === "on";
+    return localStorage.getItem(key) === "on";
   } catch {
     return false;
   }
 }
 
-export function saveMusicOn(on: boolean): void {
+export function saveMusicOn(on: boolean, key = STORAGE_KEY): void {
   try {
-    localStorage.setItem(STORAGE_KEY, on ? "on" : "off");
+    localStorage.setItem(key, on ? "on" : "off");
   } catch {
     // private mode or blocked storage: the choice lasts for this visit only
   }
