@@ -9,6 +9,7 @@ import NoteStaff from "@/components/NoteStaff";
 import { isNoteSpec } from "@/lib/noteReading";
 import { playNote, unlockNoteAudio } from "@/lib/playNote";
 import { usePianoSamples } from "@/lib/usePianoSamples";
+import { ExitButton, LeaveConfirm, STUDENT_HOME, useGameExit } from "@/components/GameExit";
 import {
   DEFAULT_REVEAL_SECONDS,
   displaySecondsLeft,
@@ -103,6 +104,19 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
 
   // Note Reading: load the piano samples once a note question shows up.
   usePianoSamples(isNoteSpec(question?.note));
+  // Exit (✕ top right): asks first, then back to the dashboard. The game
+  // is the teacher's to pause, so "Keep playing" just closes the question.
+  const exit = useGameExit({ to: STUDENT_HOME });
+  const exitUi = (
+    <>
+      <ExitButton
+        onClick={exit.ask}
+        dark={status !== "lobby"}
+        style={{ position: "fixed", top: "max(12px, env(safe-area-inset-top))", right: 12, zIndex: 5 }}
+      />
+      {exit.asking && <LeaveConfirm onStay={exit.stay} onLeave={exit.leave} />}
+    </>
+  );
 
   // Note Reading: the answer reveal plays the note. Tapping an answer has
   // already let this page make sound; a student who didn't answer just
@@ -237,6 +251,7 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   if (status === "lobby") {
     return (
       <main style={mainStyle(colors.background, colors.textPrimary)}>
+        {exitUi}
         <h1 style={{ fontSize: "1.5rem", fontWeight: 800, margin: 0 }}>Waiting for your teacher…</h1>
         <p style={{ opacity: 0.7, fontWeight: 600 }}>The game will start any moment.</p>
         <div style={{ width: "100%", maxWidth: "420px" }}>
@@ -273,6 +288,7 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   const revealing = status === "reveal" && reveal !== null;
   return (
     <main style={mainStyle(stageBg, colors.white)}>
+      {exitUi}
       <div style={{ width: "100%", maxWidth: "480px", display: "flex", flexDirection: "column", gap: "1rem" }}>
         {paused && (
           <div

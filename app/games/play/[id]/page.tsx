@@ -8,6 +8,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import TeamBattleHost from "./TeamBattleHost";
+import { ExitButton, LeaveConfirm, TEACHER_HOME, useGameExit } from "@/components/GameExit";
 import NoteStaff from "@/components/NoteStaff";
 import NoteReadingSettings from "@/components/NoteReadingSettings";
 import {
@@ -121,6 +122,17 @@ export default function PlayGamePage() {
   const [selected, setSelected] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
   const [paused, setPaused] = useState(false);
+  // Exit (✕ next to Pause while answering): pauses and asks first; "Keep
+  // playing" restores the pause state from before.
+  const pausedBeforeExitRef = useRef(false);
+  const exit = useGameExit({
+    to: TEACHER_HOME,
+    pause: () => {
+      pausedBeforeExitRef.current = paused;
+      setPaused(true);
+    },
+    resume: () => setPaused(pausedBeforeExitRef.current),
+  });
   const [players, setPlayers] = useState<Player[]>([
     { name: "You", score: 0 },
     { name: "RhythmRex", score: 0 },
@@ -371,7 +383,8 @@ export default function PlayGamePage() {
         color: isLobby ? colors.textPrimary : colors.white,
       }}
     >
-      {stage !== "final" && (
+      {/* The setup screen (and the Team Battle host, shown in it). */}
+      {stage === "lobby" && (
         <Link
           href="/games/teacher/library"
           style={{
@@ -774,12 +787,14 @@ export default function PlayGamePage() {
               justifyContent: "space-between",
               alignItems: "center",
               marginBottom: "1rem",
+              flexWrap: "wrap",
+              gap: "0.6rem",
             }}
           >
             <span style={{ fontWeight: 700, opacity: 0.85 }}>
               Question {currentIndex + 1} / {activeQuestions.length}
             </span>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginLeft: "auto" }}>
               <span
                 style={{
                   fontSize: timerEnabled ? "1.5rem" : "1rem",
@@ -846,6 +861,7 @@ export default function PlayGamePage() {
               >
                 ⏭ Skip
               </button>
+              <ExitButton onClick={exit.ask} dark />
             </div>
           </div>
 
@@ -990,6 +1006,8 @@ export default function PlayGamePage() {
           </div>
         </div>
       )}
+
+      {exit.asking && <LeaveConfirm onStay={exit.stay} onLeave={exit.leave} />}
 
       {stage === "final" && (
         <div style={{ width: "100%", maxWidth: "500px" }}>

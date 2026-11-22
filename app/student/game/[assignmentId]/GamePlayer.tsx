@@ -7,6 +7,7 @@ import NoteStaff from "@/components/NoteStaff";
 import { isNoteSpec } from "@/lib/noteReading";
 import { playNote } from "@/lib/playNote";
 import { usePianoSamples } from "@/lib/usePianoSamples";
+import { ExitButton, LeaveConfirm, STUDENT_HOME, useGameExit } from "@/components/GameExit";
 
 type MediaType = "text" | "image" | "video" | "audio" | "note";
 
@@ -60,6 +61,10 @@ export default function GamePlayer({
 
   const q = questions[currentIndex];
   usePianoSamples(questions.some((x) => isNoteSpec(x.note)));
+  // Exit (✕ in the top row while answering): asks first, then back to the
+  // dashboard. Answers so far aren't sent (as before: only a finished game
+  // is submitted).
+  const exit = useGameExit({ to: STUDENT_HOME });
 
   async function submitAnswers(finalAnswers: { questionId: string; selectedIndex: number | null }[]) {
     setSubmitting(true);
@@ -222,8 +227,19 @@ export default function GamePlayer({
         <p style={{ color: "#ffb3b3", fontWeight: 700, fontSize: "0.9rem" }}>{submitError}</p>
       )}
       <div style={{ width: "100%", maxWidth: "800px" }}>
-        <div style={{ marginBottom: "1rem", fontWeight: 700, opacity: 0.85 }}>
-          Question {currentIndex + 1} / {questions.length}
+        <div
+          style={{
+            marginBottom: "1rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "0.6rem",
+          }}
+        >
+          <span style={{ fontWeight: 700, opacity: 0.85 }}>
+            Question {currentIndex + 1} / {questions.length}
+          </span>
+          <ExitButton onClick={exit.ask} dark />
         </div>
 
         <div
@@ -292,6 +308,7 @@ export default function GamePlayer({
           })}
         </div>
       </div>
+      {exit.asking && <LeaveConfirm onStay={exit.stay} onLeave={exit.leave} />}
     </main>
   );
 }

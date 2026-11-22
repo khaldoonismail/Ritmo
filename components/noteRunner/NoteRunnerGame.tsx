@@ -21,6 +21,7 @@ import { RunnerEngine } from "./RunnerEngine";
 import { detectQuality } from "./quality";
 import { RunnerMusic, loadMusicOn, saveMusicOn } from "./music";
 import { usePianoSamples } from "@/lib/usePianoSamples";
+import { ExitButton, LeaveConfirm, useGameExit } from "@/components/GameExit";
 
 // One Note Runner run: the 3D road (RunnerEngine), the note card, the HUD
 // and the controls. The whole run happens in the browser; `onRunEnd` gets
@@ -63,7 +64,7 @@ export default function NoteRunnerGame({
   // Called as each run starts (an assigned game asks the server for a run
   // id here) and when it ends: the last heart lost, or Quit with answers.
   onRunStart?: () => void;
-  onRunEnd?: (summary: RunSummary) => void;
+  onRunEnd?: (summary: RunSummary) => void | Promise<unknown>;
   // The button that leaves the game ("Change settings"; "Back" when the
   // settings were chosen by the teacher).
   exitLabel?: string;
@@ -156,12 +157,15 @@ export default function NoteRunnerGame({
     [onRunEnd]
   );
 
-  // Quit from the pause menu: a run with answers still counts.
-  const quit = () => {
+  // A run cut short (Quit or Exit from a pause) with answers still counts.
+  const endRunEarly = (): void | Promise<unknown> => {
     if (phaseRef.current === "paused" && statsRef.current.total > 0) {
       setPhase("over");
-      onRunEnd?.(summary());
+      return onRunEnd?.(summary());
     }
+  };
+  const quit = () => {
+    endRunEarly();
     onChangeSettings();
   };
 
@@ -309,9 +313,18 @@ export default function NoteRunnerGame({
     if (phaseRef.current === "playing") syncMusic("playing");
   };
 
+  // Exit (✕ in the top bar): pauses and asks first while a run is on.
+  const exit = useGameExit({
+    pause: () => pause(),
+    resume: () => resume(),
+    inRun: () => phaseRef.current === "playing" || phaseRef.current === "paused",
+    beforeLeave: () => endRunEarly(),
+  });
+
   // Keyboard: ↑ ↓ (and W / S) change lane; P or Esc pauses.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (exit.askingRef.current) return;
       const p = phaseRef.current;
       if (p === "playing") {
         if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") {
@@ -448,6 +461,7 @@ export default function NoteRunnerGame({
               ❚❚
             </button>
           )}
+          <ExitButton onClick={exit.ask} compact={compact} />
         </div>
       </div>
 
@@ -460,7 +474,7 @@ export default function NoteRunnerGame({
             top: "max(8px, env(safe-area-inset-top))",
             left: "50%",
             transform: "translateX(-50%)",
-            maxWidth: "calc(100vw - 330px)",
+            maxWidth: "calc(100vw - 382px)",
             height: 44,
             boxSizing: "border-box",
             background: colors.white,
@@ -531,7 +545,7 @@ export default function NoteRunnerGame({
       )}
 
       {/* Start / pause / game over */}
-      {phase !== "playing" && (
+      {phase !== "playing" && !exit.asking && (
         <div style={overlay}>
           <div style={panel}>
             {phase === "ready" && (
@@ -588,6 +602,7 @@ export default function NoteRunnerGame({
         </div>
       )}
 
+      {exit.asking && <LeaveConfirm onStay={exit.stay} onLeave={exit.leave} />}
       {phonePortrait && <RotateDeviceOverlay />}
 
       {webglError && (

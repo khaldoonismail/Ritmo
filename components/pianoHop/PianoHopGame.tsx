@@ -22,6 +22,7 @@ import { RotateDeviceOverlay, usePhonePortrait, useShortLandscape } from "@/comp
 import { PianoEngine } from "./PianoEngine";
 import { playKey } from "./sound";
 import { usePianoSamples } from "@/lib/usePianoSamples";
+import { ExitButton, LeaveConfirm, useGameExit } from "@/components/GameExit";
 
 // One Piano Hop game: the 3D keyboard (PianoEngine), the name card with
 // its countdown, the HUD and the controls. The card shows a note name;
@@ -373,10 +374,18 @@ export default function PianoHopGame({
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [pause]);
 
+  // Exit (✕ in the top bar): pauses and asks first while a run is on.
+  const exit = useGameExit({
+    pause: () => pause(),
+    resume: () => resume(),
+    inRun: () => phaseRef.current === "playing" || phaseRef.current === "paused",
+  });
+
   // Keyboard: ← → (A / D) move the cursor, Space / Enter hops, P / Esc
   // pauses. The cursor appears with the first arrow press.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (exit.askingRef.current) return;
       const p = phaseRef.current;
       const engine = engineRef.current;
       if (p === "playing" && engine) {
@@ -489,6 +498,7 @@ export default function PianoHopGame({
               ❚❚
             </button>
           )}
+          <ExitButton onClick={exit.ask} compact={compact} />
         </div>
       </div>
 
@@ -502,7 +512,7 @@ export default function PianoHopGame({
               top: "max(8px, env(safe-area-inset-top))",
               left: "50%",
               transform: "translateX(-50%)",
-              maxWidth: "calc(100vw - 300px)",
+              maxWidth: "calc(100vw - 352px)",
               height: 44,
               boxSizing: "border-box",
               background: colors.white,
@@ -551,7 +561,7 @@ export default function PianoHopGame({
           </div>
         ))}
 
-      {phase !== "playing" && (
+      {phase !== "playing" && !exit.asking && (
         <div style={overlay}>
           <div style={panel}>
             {phase === "ready" && (
@@ -605,6 +615,7 @@ export default function PianoHopGame({
         </div>
       )}
 
+      {exit.asking && <LeaveConfirm onStay={exit.stay} onLeave={exit.leave} />}
       {phonePortrait && <RotateDeviceOverlay />}
 
       {webglError && (

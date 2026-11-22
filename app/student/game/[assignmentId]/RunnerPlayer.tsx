@@ -82,6 +82,8 @@ export default function RunnerPlayer({
     try {
       const r = await fetch("/api/student/runs/finish", {
         method: "POST",
+        // Still sent if the student leaves the page right away (Exit).
+        keepalive: true,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ runId, answers }),
       });

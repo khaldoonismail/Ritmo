@@ -12,6 +12,7 @@ import { VillageEngine } from "./VillageEngine";
 import { PiecePlayer } from "./player";
 import { signImage } from "./icons";
 import { usePianoSamples } from "@/lib/usePianoSamples";
+import { ExitButton, LeaveConfirm, useGameExit } from "@/components/GameExit";
 
 // Happy or Sad ("Weather Village"): a short piece plays; the child taps
 // ☀️ Sun (happy / major) or 🌧️ Cloud (sad / minor). Right: the village's
@@ -298,9 +299,17 @@ export default function HappyOrSadGame({
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [pause]);
 
+  // Exit (✕ in the top bar): pauses and asks first while a run is on.
+  const exit = useGameExit({
+    pause: () => pause(),
+    resume: () => resume(),
+    inRun: () => phaseRef.current === "playing" || phaseRef.current === "paused",
+  });
+
   // Keyboard: ← or S = Sun, → or C = Cloud, H = hear again, P / Esc pause.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (exit.askingRef.current) return;
       const p = phaseRef.current;
       if (p === "playing") {
         if (e.key === "ArrowLeft" || e.key === "s" || e.key === "S") answerRef.current("major");
@@ -432,16 +441,19 @@ export default function HappyOrSadGame({
                 </span>
               )}
             </div>
-            {phase === "playing" && (
-              <button
-                type="button"
-                onClick={pause}
-                aria-label="Pause"
-                style={{ ...hudPill, pointerEvents: "auto", cursor: "pointer", border: "none", fontSize: "1rem" }}
-              >
-                ❚❚
-              </button>
-            )}
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+              {phase === "playing" && (
+                <button
+                  type="button"
+                  onClick={pause}
+                  aria-label="Pause"
+                  style={{ ...hudPill, pointerEvents: "auto", cursor: "pointer", border: "none", fontSize: "1rem" }}
+                >
+                  ❚❚
+                </button>
+              )}
+              <ExitButton onClick={exit.ask} compact={compact} />
+            </div>
           </div>
 
           {/* The card */}
@@ -455,7 +467,7 @@ export default function HappyOrSadGame({
               transform: "translateX(-50%)",
               height: compact ? 44 : undefined,
               boxSizing: "border-box",
-              maxWidth: compact ? "calc(100vw - 230px)" : "calc(100vw - 24px)",
+              maxWidth: compact ? "calc(100vw - 282px)" : "calc(100vw - 24px)",
               background: colors.white,
               borderRadius: compact ? 999 : radius.card,
               padding: compact ? "0 4px 0 10px" : "8px 10px 8px 14px",
@@ -561,7 +573,7 @@ export default function HappyOrSadGame({
         </div>
       )}
 
-      {(phase === "ready" || phase === "paused") && (
+      {(phase === "ready" || phase === "paused") && !exit.asking && (
         <div style={overlay}>
           <div style={panel}>
             {phase === "ready" ? (
@@ -593,6 +605,7 @@ export default function HappyOrSadGame({
         </div>
       )}
 
+      {exit.asking && <LeaveConfirm onStay={exit.stay} onLeave={exit.leave} />}
       {phonePortrait && <RotateDeviceOverlay />}
 
       {webglError && (

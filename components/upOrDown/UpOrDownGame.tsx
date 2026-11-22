@@ -24,6 +24,7 @@ import {
 import { detectQuality } from "@/components/noteRunner/quality";
 import { ForkEngine } from "./ForkEngine";
 import { usePianoSamples } from "@/lib/usePianoSamples";
+import { ExitButton, LeaveConfirm, useGameExit } from "@/components/GameExit";
 
 // One run of Up or Down: the 3D road (ForkEngine), the listening card, the
 // HUD and the controls. Ear only: no staff and no note names.
@@ -81,7 +82,7 @@ export default function UpOrDownGame({
   // Called as each run starts (an assigned game asks the server for a run
   // id here) and when it ends: the last heart lost, or Quit with answers.
   onRunStart?: () => void;
-  onRunEnd?: (summary: UpOrDownRunSummary) => void;
+  onRunEnd?: (summary: UpOrDownRunSummary) => void | Promise<unknown>;
   // The button that leaves the game ("Change level"; "Back" when the
   // teacher chose the level).
   exitLabel?: string;
@@ -347,13 +348,16 @@ export default function UpOrDownGame({
     }
   }, [phonePortrait, pause]);
 
-  // Quit from the pause menu: a run with answers still counts.
-  const quit = () => {
+  // A run cut short (Quit or Exit from a pause) with answers still counts.
+  const endRunEarly = (): void | Promise<unknown> => {
     if (phaseRef.current === "paused" && statsRef.current.total > 0 && statsRef.current.lives > 0) {
       clearTimers();
       setPhase("over");
-      onRunEndRef.current?.(summary());
+      return onRunEndRef.current?.(summary());
     }
+  };
+  const quit = () => {
+    endRunEarly();
     onChangeSettings();
   };
 
@@ -367,10 +371,19 @@ export default function UpOrDownGame({
     engine.setArrival(PAIR_SECONDS + 1.8);
   };
 
+  // Exit (✕ in the top bar): pauses and asks first while a run is on.
+  const exit = useGameExit({
+    pause: () => pause(),
+    resume: () => resume(),
+    inRun: () => phaseRef.current === "playing" || phaseRef.current === "paused",
+    beforeLeave: () => endRunEarly(),
+  });
+
   // Keyboard: ↑ ↓ (W / S) pick a path, → (D) "Same" on Hard, H hears
   // again, P or Esc pauses.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (exit.askingRef.current) return;
       const p = phaseRef.current;
       const engine = engineRef.current;
       if (p === "playing" && engine) {
@@ -497,6 +510,7 @@ export default function UpOrDownGame({
               ❚❚
             </button>
           )}
+          <ExitButton onClick={exit.ask} compact={compact} />
         </div>
       </div>
 
@@ -511,7 +525,7 @@ export default function UpOrDownGame({
             top: "max(8px, env(safe-area-inset-top))",
             left: "50%",
             transform: "translateX(-50%)",
-            maxWidth: "calc(100vw - 250px)",
+            maxWidth: "calc(100vw - 302px)",
             height: 44,
             boxSizing: "border-box",
             background: colors.white,
@@ -668,7 +682,7 @@ export default function UpOrDownGame({
         }}
       />
 
-      {phase !== "playing" && (
+      {phase !== "playing" && !exit.asking && (
         <div style={overlay}>
           <div style={panel}>
             {phase === "ready" && (
@@ -722,6 +736,7 @@ export default function UpOrDownGame({
         </div>
       )}
 
+      {exit.asking && <LeaveConfirm onStay={exit.stay} onLeave={exit.leave} />}
       {phonePortrait && <RotateDeviceOverlay />}
 
       {webglError && (
