@@ -20,6 +20,8 @@ export const BLACK_LEN = 2.2;
 export const BLACK_H = 0.3; // above the white keys' tops
 export const BACK_Z = -1.8; // the keyboard's back edge (towards the trees)
 export const FRONT_Z = BACK_Z + WHITE_LEN;
+// How far the wooden frame reaches past the keys on every side.
+export const FRAME_RIM = 0.14;
 // Taps a little either side of a black key still count as that key, so
 // the narrow keys are easy for a child's finger (neighbouring black keys
 // are at least 1.1 apart, so their targets never overlap: checked by
@@ -63,8 +65,11 @@ export function buildKeyboard(
   marker: THREE.Texture | null = null
 ): KeyMesh[] {
   const width = keyboardWidth(keys);
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(width + 0.24, 0.22, WHITE_LEN + 0.4), mat.get(KEY_COLORS.frame));
-  frame.position.set(width / 2, 0.11, (BACK_Z + FRONT_Z) / 2 - 0.1);
+  const frame = new THREE.Mesh(
+    new THREE.BoxGeometry(width + 2 * FRAME_RIM, 0.22, WHITE_LEN + 2 * FRAME_RIM),
+    mat.get(KEY_COLORS.frame)
+  );
+  frame.position.set(width / 2, 0.11, (BACK_Z + FRONT_Z) / 2);
   add(frame);
 
   const whiteGeo = new THREE.BoxGeometry(WHITE_W - WHITE_GAP, WHITE_H, WHITE_LEN);

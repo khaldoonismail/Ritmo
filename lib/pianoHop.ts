@@ -9,10 +9,18 @@ export type PianoLevel = "easy" | "medium" | "hard";
 
 export const PIANO_HOP_LIVES = 3;
 
-export const PIANO_LEVELS: Record<PianoLevel, { label: string; detail: string; octaves: number; black: boolean; markers: boolean }> = {
-  easy: { label: "Easy", detail: "One octave, white keys, with “Do” marked", octaves: 1, black: false, markers: true },
-  medium: { label: "Medium", detail: "Two octaves, white keys, no markers", octaves: 2, black: false, markers: false },
-  hard: { label: "Hard", detail: "Two octaves with the black keys (♯ and ♭)", octaves: 2, black: true, markers: false },
+// Every level shows a real keyboard, black keys included: their groups of
+// 2 and 3 are how children find the notes (C is just left of the 2-group,
+// F just left of the 3-group). `blackQuestions`: whether the card also asks
+// for black keys (♯/♭). On Easy and Medium it doesn't, but the black keys
+// can still be tapped, and count as a wrong answer, like on a real piano.
+export const PIANO_LEVELS: Record<
+  PianoLevel,
+  { label: string; detail: string; octaves: number; blackQuestions: boolean; markers: boolean }
+> = {
+  easy: { label: "Easy", detail: "One octave, white-key notes, with “Do” marked", octaves: 1, blackQuestions: false, markers: true },
+  medium: { label: "Medium", detail: "Two octaves, white-key notes, no markers", octaves: 2, blackQuestions: false, markers: false },
+  hard: { label: "Hard", detail: "Two octaves, black keys too (♯ and ♭)", octaves: 2, blackQuestions: true, markers: false },
 };
 
 // The lowest key is middle C (C4, MIDI 60).
@@ -50,7 +58,7 @@ export interface PianoKey {
 }
 
 export function pianoKeys(level: PianoLevel): PianoKey[] {
-  const { octaves, black } = PIANO_LEVELS[level];
+  const { octaves } = PIANO_LEVELS[level];
   const top = LOWEST_MIDI + 12 * octaves; // ends on a C
   const keys: PianoKey[] = [];
   let white = 0;
@@ -59,7 +67,7 @@ export function pianoKeys(level: PianoLevel): PianoKey[] {
     if (pc in WHITE_PC) {
       keys.push({ midi, black: false, x: white + 0.5, step: WHITE_PC[pc] });
       white++;
-    } else if (black) {
+    } else {
       keys.push({ midi, black: true, x: white + BLACK_OFFSET[pc], step: null });
     }
   }
@@ -91,7 +99,7 @@ export function isRight(key: PianoKey, q: PianoQuestion): boolean {
 
 // Questions for one run: every name on the level comes up, never the same
 // note twice in a row. Hard asks about black keys about 1 time in 3, as a
-// sharp or a flat at random.
+// sharp or a flat at random; Easy and Medium ask white keys only.
 export class PianoQuestionSupply {
   private last = -1;
   constructor(
@@ -101,7 +109,7 @@ export class PianoQuestionSupply {
   ) {}
 
   next(): PianoQuestion {
-    const black = PIANO_LEVELS[this.level].black && this.random() < 0.35;
+    const black = PIANO_LEVELS[this.level].blackQuestions && this.random() < 0.35;
     const pool = black ? [1, 3, 6, 8, 10] : [0, 2, 4, 5, 7, 9, 11];
     let pc: number;
     do pc = pool[Math.floor(this.random() * pool.length)];

@@ -13,6 +13,7 @@ import {
   KEY_COLORS,
   WHITE_H,
   WHITE_W,
+  FRAME_RIM,
   buildKeyboard,
   keyboardWidth,
   markerTexture,
@@ -31,25 +32,24 @@ export type { KeyState } from "./keyboard";
 // from key to key. The game (./PianoHopGame.tsx) decides what happens;
 // this only draws it.
 
-// The narrowest keyboard the camera frames, in white keys: Easy's single
-// octave is framed as if it were this wide, so its big keys don't fill the
-// whole screen and the sky still shows.
-const MIN_VIEW_KEYS = 11;
+// The narrowest keyboard the camera frames, in white keys (Easy's single
+// octave is a little wider than itself on screen, so its keys stay a
+// sensible size on a tablet).
+const MIN_VIEW_KEYS = 9;
 
 // Where the character stands on a key: white keys at the front (in front
 // of the black keys), black keys on their own top.
 const STAND_Z_WHITE = FRONT_Z - 0.75;
 const STAND_Z_BLACK = BACK_Z + BLACK_LEN - 0.55;
 
-// The camera sees the keyboard from this angle above (so the key tops are
-// big enough to tap) but aims nearer the horizon, with the keyboard
-// fitted to the bottom of the frame. The character is tilted to face it.
-// Two octaves need a steeper view so their narrower keys are still deep
-// enough to tap on a small phone (at least ~40 px each way on a 667 × 375
-// iPhone SE, 44 px and up on larger phones); Easy's big keys can show more
-// sky.
-const ELEVATION_TWO_OCTAVES = THREE.MathUtils.degToRad(42);
-const ELEVATION_ONE_OCTAVE = THREE.MathUtils.degToRad(30);
+// The camera looks down at the keyboard from an angle chosen per screen
+// (see resize): as steep as fits, between these two, so the keyboard fills
+// the screen and its keys are as deep (easy to tap) as possible.
+const MIN_ELEVATION = THREE.MathUtils.degToRad(28);
+const MAX_ELEVATION = THREE.MathUtils.degToRad(62);
+
+// Pixels kept clear below the keyboard's front edge.
+const BOTTOM_MARGIN = 12;
 
 const HOP_SECONDS = 0.3;
 
@@ -88,7 +88,7 @@ export class PianoEngine {
   ) {
     this.materials = new Materials(quality);
     this.width = keyboardWidth(keys);
-    this.elevation = this.width > MIN_VIEW_KEYS ? ELEVATION_TWO_OCTAVES : ELEVATION_ONE_OCTAVE;
+    this.elevation = MIN_ELEVATION;
 
     const dpr = window.devicePixelRatio || 1;
     this.renderer = new THREE.WebGLRenderer({ antialias: quality === "high" && dpr < 1.5, powerPreference: "high-performance" });
@@ -112,16 +112,18 @@ export class PianoEngine {
     grass.rotation.x = -Math.PI / 2;
     grass.position.z = -20;
     this.scene.add(grass);
-    // The shared scenery is laid out for the runner games' paper staff;
-    // here it stands further back, behind the keyboard, so the trees frame
-    // the sky instead of filling it.
+    // The shared scenery (laid out for the runner games' paper staff),
+    // standing just behind the keyboard so the trees fill the space above
+    // it instead of empty grass.
     buildScenery(
       this.materials,
       quality,
-      2.6,
+      // Tree height: short enough that whole trees (crowns too) show above
+      // the keyboard from the camera's steep angle.
+      0.9,
       0,
       (o) => {
-        o.position.z -= 7;
+        o.position.z += BACK_Z - 0.3;
         o.position.x += 4;
         this.scene.add(o);
       },
@@ -377,11 +379,15 @@ export class PianoEngine {
     this.renderer.render(this.scene, this.camera);
   }
 
-  // Fits the whole keyboard (and the character standing on it) across the
-  // screen below the card: the camera is placed from `elevation` at the
-  // closest distance where everything fits, then tilted so the keyboard's
-  // front edge sits at the bottom of the screen. The rest of the screen
-  // shows sky, hills and trees, like the other games.
+  // Fits the whole keyboard, frame and front edge included, plus room for
+  // the character above it, into the screen below the card, as big as it
+  // can be:
+  //   * the camera's distance makes the keyboard span the full width;
+  //   * its tilt puts the frame's front edge just above the bottom;
+  //   * its angle above the keyboard (elevation) is the steepest at which
+  //     everything still fits under the card: steeper shows the keys
+  //     deeper, so on wide-and-short or tall screens alike the keyboard
+  //     fills the space instead of leaving empty grass above it.
   private resize() {
     const w = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
@@ -389,25 +395,24 @@ export class PianoEngine {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
 
-    // Every key edge to edge (only the wooden frame's rim may go off
-    // screen), so on small phones each key is as wide as it can be.
-    const half = Math.max(this.width, MIN_VIEW_KEYS) / 2 + 0.04;
+    const half = Math.max(this.width, MIN_VIEW_KEYS) / 2 + FRAME_RIM;
     const pts: THREE.Vector3[] = [];
     for (const x of [this.width / 2 - half, this.width / 2 + half]) {
-      for (const z of [BACK_Z, FRONT_Z]) pts.push(new THREE.Vector3(x, WHITE_H, z));
+      // The frame's front-bottom corners and back-top corners.
+      pts.push(new THREE.Vector3(x, 0, FRONT_Z + FRAME_RIM));
+      pts.push(new THREE.Vector3(x, WHITE_H, BACK_Z - FRAME_RIM));
       // Room above the keys for the character's head, hops and the cursor.
       pts.push(new THREE.Vector3(x, WHITE_H + BLACK_H + 2.1, BACK_Z + 0.6));
     }
     const top = Math.min(this.topReserved, h * 0.45);
-    const yLo = -1 + (2 * 6) / h; // keyboard's front edge, just above the bottom
-    const yHi = 1 - (2 * (top + 6)) / h; // character's head, just below the card
-    const xMax = 1 - (2 * 3) / w;
+    const yLo = -1 + (2 * BOTTOM_MARGIN) / h;
+    const yHi = 1 - (2 * (top + 6)) / h;
+    const xMax = 1 - (2 * 6) / w;
     const halfFov = THREE.MathUtils.degToRad(this.camera.fov / 2);
-
     const centre = new THREE.Vector3(this.width / 2, WHITE_H, (BACK_Z + FRONT_Z) / 2);
-    const dir = new THREE.Vector3(0, Math.sin(this.elevation), Math.cos(this.elevation));
-    const project = (d: number, tilt: number) => {
-      this.camera.position.copy(centre).addScaledVector(dir, d);
+
+    const project = (elev: number, d: number, tilt: number) => {
+      this.camera.position.set(centre.x, centre.y + Math.sin(elev) * d, centre.z + Math.cos(elev) * d);
       this.camera.rotation.set(-tilt, 0, 0);
       this.camera.updateMatrixWorld();
       let x1 = -Infinity;
@@ -421,28 +426,59 @@ export class PianoEngine {
       }
       return { x1, y0, y1 };
     };
-    // For a distance: the tilt that puts the keyboard's front edge exactly
-    // at yLo (tilting further down moves everything up the screen, so a
-    // bisection finds it).
-    const tiltFor = (d: number) => {
-      let down = this.elevation + halfFov; // front edge well above yLo
-      let up = this.elevation - halfFov * 2; // front edge below the screen
-      for (let i = 0; i < 30; i++) {
+    // The tilt that puts the front edge exactly at yLo (tilting further
+    // down moves everything up the screen).
+    const tiltFor = (elev: number, d: number) => {
+      let down = elev + halfFov;
+      let up = elev - halfFov * 2;
+      for (let i = 0; i < 22; i++) {
         const mid = (down + up) / 2;
-        if (project(d, mid).y0 > yLo) down = mid;
+        if (project(elev, d, mid).y0 > yLo) down = mid;
         else up = mid;
       }
       return (down + up) / 2;
     };
-    let lo = 4;
-    let hi = 80;
-    for (let i = 0; i < 28; i++) {
-      const d = (lo + hi) / 2;
-      const b = project(d, tiltFor(d));
-      if (b.x1 <= xMax && b.y1 <= yHi) hi = d;
-      else lo = d;
+    // The closest distance at which the keyboard fits the width (and,
+    // when `vertical`, also fits under the card).
+    const fitDistance = (elev: number, vertical: boolean) => {
+      let lo = 3;
+      let hi = 120;
+      for (let i = 0; i < 22; i++) {
+        const d = (lo + hi) / 2;
+        const b = project(elev, d, tiltFor(elev, d));
+        if (b.x1 <= xMax && (!vertical || b.y1 <= yHi)) hi = d;
+        else lo = d;
+      }
+      return hi;
+    };
+    const fitsUnderCard = (elev: number) => {
+      const d = fitDistance(elev, false);
+      return project(elev, d, tiltFor(elev, d)).y1 <= yHi;
+    };
+
+    let elev: number;
+    let d: number;
+    if (!fitsUnderCard(MIN_ELEVATION)) {
+      // Very short screen: the flattest view, pulled back until it fits.
+      elev = MIN_ELEVATION;
+      d = fitDistance(elev, true);
+    } else {
+      // Steeper = taller on screen: the steepest that still fits.
+      let lo = MIN_ELEVATION;
+      let hi = MAX_ELEVATION;
+      if (fitsUnderCard(hi)) lo = hi;
+      else
+        for (let i = 0; i < 14; i++) {
+          const mid = (lo + hi) / 2;
+          if (fitsUnderCard(mid)) lo = mid;
+          else hi = mid;
+        }
+      elev = lo;
+      d = fitDistance(elev, false);
     }
-    project(hi, tiltFor(hi));
+    this.elevation = elev;
+    project(elev, d, tiltFor(elev, d));
+    this.placeCharacter(0);
     if (!this.running) this.render();
   }
 }

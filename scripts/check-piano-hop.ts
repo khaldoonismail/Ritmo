@@ -5,8 +5,8 @@
 // For every level it builds the exact 3D keys the game draws
 // (components/pianoHop/keyboard.ts) and checks them against facts written
 // out independently here (not taken from the game's code):
-//   * the right keys exist: Easy C4–C5 white keys, Medium C4–C6 white
-//     keys, Hard C4–C6 with every black key;
+//   * the right keys exist: Easy C4–C5, Medium and Hard C4–C6, every
+//     level with all its black keys (they're how children find the notes);
 //   * every white key sits in its own slot, left to right, one key wide;
 //   * every black key sits on the line between the right two white keys
 //     (C♯ between C and D…), raised above and towards the back, so the
@@ -20,8 +20,8 @@
 //     frequency (A4 = 440 Hz, equal temperament);
 //   * names: every name the game asks (Do-Re-Mi and C-D-E, ♯ and ♭) is
 //     right for exactly the keys with that pitch, both spellings of a
-//     black key (C♯ = D♭) are accepted, and Easy/Medium never ask for a
-//     black key.
+//     black key (C♯ = D♭) are accepted, Easy/Medium never ask for a black
+//     key, and a tap on a black key there is wrong for every question.
 // Exits with code 1 and lists failures if anything is wrong.
 
 import * as THREE from "three";
@@ -99,8 +99,8 @@ const KNOWN_HZ: Record<number, number> = { 60: 261.626, 64: 329.628, 69: 440, 72
 const hzOf = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 
 const EXPECTED: Record<string, number[]> = {
-  easy: [60, 62, 64, 65, 67, 69, 71, 72],
-  medium: [60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84],
+  easy: Array.from({ length: 13 }, (_, i) => 60 + i),
+  medium: Array.from({ length: 25 }, (_, i) => 60 + i),
   hard: Array.from({ length: 25 }, (_, i) => 60 + i),
 };
 
@@ -147,9 +147,9 @@ async function main() {
     }
 
     const blacks = built.filter((k) => k.key.black);
+    if (blacks.length !== (EXPECTED[level].length - whites.length)) fail(`${level}: ${blacks.length} black keys`);
     const whiteTop = Math.max(...whites.map((w) => new THREE.Box3().setFromObject(w.mesh).max.y));
     if (whiteTop < WHITE_H) fail(`${level}: white keys only ${whiteTop} tall`);
-    if (!PIANO_LEVELS[level].black && blacks.length) fail(`${level}: has black keys`);
     for (const k of blacks) {
       const pc = k.key.midi % 12;
       if (!BLACK_PCS.includes(pc)) fail(`${level}: ${k.key.midi} drawn as a black key`);
@@ -170,12 +170,20 @@ async function main() {
       if (box.min.z > BACK_Z + 0.05 || box.max.z > FRONT_Z - 0.8) fail(`${level}: black key ${k.key.midi} not at the back`);
     }
     // Groups: in each octave black keys come 2 then 3 (none at E–F, B–C).
-    if (PIANO_LEVELS[level].black) {
+    {
       const pattern = whites
         .slice(0, -1)
         .map((w) => (blacks.some((b) => b.key.midi === w.key.midi + 1) ? "■" : "·"))
         .join("");
-      if (pattern !== "■■·■■■·■■·■■■·") fail(`${level}: black-key pattern ${pattern}`);
+      const octave = "■■·■■■·";
+      if (pattern !== octave.repeat(PIANO_LEVELS[level].octaves)) fail(`${level}: black-key pattern ${pattern}`);
+      // C sits just left of each 2-group, F just left of each 3-group.
+      whites.forEach((w, i) => {
+        const pc = w.key.midi % 12;
+        const startsGroup = pattern[i] === "■" && (i === 0 || pattern[i - 1] === "·");
+        const groupOf = startsGroup ? pattern.slice(i).indexOf("·") : 0;
+        if (startsGroup && !((groupOf === 2 && pc === 0) || (groupOf === 3 && pc === 5))) fail(`${level}: a ${groupOf}-group starts right of ${w.key.midi}`);
+      });
     }
 
     // Taps: a ray straight down onto each key picks that key.
@@ -239,9 +247,10 @@ async function main() {
         const ok = BLACK_PCS.includes(q.pc) ? [NAMES_SHARP[q.pc], NAMES_FLAT[q.pc]].map(say) : [say(NAMES_SHARP[q.pc])];
         if (!ok.includes(q.name)) fail(`${level}: asked "${q.name}" for pitch ${q.pc}`);
         if (!keys.some((k) => isRight(k, q))) fail(`${level}: asked "${q.name}", which has no key`);
-        if (!PIANO_LEVELS[level].black && BLACK_PCS.includes(q.pc)) fail(`${level}: asked a black key`);
+        if (!PIANO_LEVELS[level].blackQuestions && BLACK_PCS.includes(q.pc)) fail(`${level}: asked a black key`);
+        if (!PIANO_LEVELS[level].blackQuestions && keys.some((k) => k.black && isRight(k, q))) fail(`${level}: a black key counts as right for "${q.name}"`);
       }
-      const expectedNames = PIANO_LEVELS[level].black ? 17 : 7; // 7 white + 5 black × 2 spellings
+      const expectedNames = PIANO_LEVELS[level].blackQuestions ? 17 : 7; // 7 white + 5 black × 2 spellings
       if (seen.size !== expectedNames) fail(`${level} ${naming}: asked ${seen.size} different names, expected ${expectedNames}`);
     }
 
