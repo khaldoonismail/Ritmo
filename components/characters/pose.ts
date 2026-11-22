@@ -8,9 +8,11 @@ import type { Expression, Fx } from "./art";
 //   happy  a big cheer: jump, arms up, wiggle, eyes squint, mouth wide
 //   sad    head and arms droop, droopy eyes, frown, a tear
 //   bump   "Too late!": knocked back, leaning back, dizzy with stars (held)
+//   shrug  "oh well": arms out to the sides, shoulders up, head tilted, a
+//          calm face (no tear): Happy or Sad's gentle wrong answer
 //   idle   breathing, a little sway, blinking
 
-export type State = "idle" | "run" | "hop" | "happy" | "sad" | "bump";
+export type State = "idle" | "run" | "hop" | "happy" | "sad" | "bump" | "shrug";
 
 export interface Pose {
   x: number;
@@ -39,6 +41,7 @@ export const STATE_LENGTH: Record<State, number> = {
   happy: 0.9,
   sad: 1.0,
   bump: Infinity,
+  shrug: 1.0,
 };
 
 const blinkAt = (t: number) => t % 3.1 < 0.13 || (t + 1.3) % 5.7 < 0.13;
@@ -122,6 +125,20 @@ export function pose(state: State, t: number, clock: number, speed = 1): Pose {
     p.tail = Math.sin(t * 18) * 20;
     p.expr = "happy";
     p.fx = "sparkle";
+    return p;
+  }
+
+  if (state === "shrug") {
+    // Up quickly, hold, then let go.
+    const k = t < 0.2 ? t / 0.2 : t > 0.75 ? Math.max(0, (1 - t) / 0.25) : 1;
+    p.y = -6 * k;
+    p.sy = 1 + 0.03 * k;
+    p.head = -11 * k;
+    p.headY = -3 * k;
+    p.armF = -58 * k;
+    p.armB = 62 * k;
+    p.armStretch = 1 + 0.1 * k;
+    p.lean = Math.sin(t * 6) * 1.5 * k;
     return p;
   }
 

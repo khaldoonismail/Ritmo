@@ -13,7 +13,7 @@ import { STATE_LENGTH, pose, type State } from "./pose";
 // facing right (+x); update(dt, speed) runs or idles; react() plays hop,
 // happy, sad or bump.
 
-export type SpriteReaction = "jump" | "happy" | "sad" | "bump";
+export type SpriteReaction = "jump" | "happy" | "sad" | "bump" | "shrug";
 
 const HEIGHT = 1.5; // world units for the 240-unit character
 const S = HEIGHT / 240;

@@ -28,3 +28,7 @@ next-env.d.ts
 /supabase/.temp/
 .vercel
 .env*
+
+# Downloaded reference files (Mutopia MIDI etc.) and review screenshots, not part of the app
+/music-sources/
+/mockups/
