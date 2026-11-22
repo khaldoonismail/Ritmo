@@ -21,6 +21,7 @@ import { RunnerMusic, loadMusicOn, saveMusicOn } from "@/components/noteRunner/m
 import { RotateDeviceOverlay, usePhonePortrait, useShortLandscape } from "@/components/RotateDevice";
 import { PianoEngine } from "./PianoEngine";
 import { playKey } from "./sound";
+import { usePianoSamples } from "@/lib/usePianoSamples";
 
 // One Piano Hop game: the 3D keyboard (PianoEngine), the name card with
 // its countdown, the HUD and the controls. The card shows a note name;
@@ -55,6 +56,8 @@ export default function PianoHopGame({
   autoStart?: boolean;
   onChangeSettings: () => void;
 }) {
+  // Real piano samples for the notes (synth tone until they load).
+  usePianoSamples();
   const containerRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<PianoEngine | null>(null);

@@ -9,6 +9,7 @@ import { unlockNoteAudio } from "@/lib/playNote";
 import { RunnerCard, RunnerPickerScreen, useRunnerChoice } from "@/components/characters/RunnerChoice";
 import { DEFAULT_NOTE_READING_CONFIG, configLabel } from "@/lib/noteReading";
 import type { NoteRunnerConfig } from "@/lib/noteRunner";
+import { usePianoSamples } from "@/lib/usePianoSamples";
 
 // Note Runner, stage 1: a playable version on its own unlisted page (not in
 // the library yet). Three.js is only in NoteRunnerGame's chunk, loaded by
@@ -25,6 +26,8 @@ const NoteRunnerGame = dynamic(loadGame, {
 });
 
 export default function NoteRunnerPage() {
+  // Start loading the piano samples while the child picks a level.
+  usePianoSamples();
   const [config, setConfig] = useState<NoteRunnerConfig>({ ...DEFAULT_NOTE_READING_CONFIG, count: 1 });
   const [runKey, setRunKey] = useState<number | null>(null);
   const { runner, chosen, picking, setPicking, save } = useRunnerChoice();

@@ -20,6 +20,7 @@ import {
 } from "@/lib/noteReading";
 import { playNote, unlockNoteAudio } from "@/lib/playNote";
 import { clampTimeLimit } from "@/lib/teamBattleTiming";
+import { usePianoSamples } from "@/lib/usePianoSamples";
 
 type PlayMode = "individual" | "team_battle";
 
@@ -110,6 +111,7 @@ export default function PlayGamePage() {
   const [labels, setLabels] = useState<string[]>([]);
   const [selectedLabels, setSelectedLabels] = useState<Set<string>>(new Set());
   const [questionCount, setQuestionCount] = useState(1);
+  usePianoSamples(!!game?.questions.some((q) => isNoteSpec(q.note)));
   const [mediaMode, setMediaMode] = useState<MediaMode>("sound");
   const [noteConfig, setNoteConfig] = useState<NoteReadingConfig>(DEFAULT_NOTE_READING_CONFIG);
   const [timerEnabled, setTimerEnabled] = useState(true);

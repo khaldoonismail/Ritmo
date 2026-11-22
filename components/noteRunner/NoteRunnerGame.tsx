@@ -20,6 +20,7 @@ import {
 import { RunnerEngine } from "./RunnerEngine";
 import { detectQuality } from "./quality";
 import { RunnerMusic, loadMusicOn, saveMusicOn } from "./music";
+import { usePianoSamples } from "@/lib/usePianoSamples";
 
 // One Note Runner run: the 3D road (RunnerEngine), the note card, the HUD
 // and the controls. The whole run happens in the browser; `onRunEnd` gets
@@ -69,6 +70,8 @@ export default function NoteRunnerGame({
   // Shown on the game-over panel (e.g. "Saved! Your best: 1,240").
   endNote?: React.ReactNode;
 }) {
+  // Real piano samples for the notes (synth tone until they load).
+  usePianoSamples();
   const containerRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<RunnerEngine | null>(null);

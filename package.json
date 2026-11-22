@@ -14,7 +14,8 @@
     "check:up-or-down": "tsx scripts/check-up-or-down.ts",
     "check:run-scoring": "tsx scripts/check-run-scoring.ts",
     "check:piano-hop": "tsx scripts/check-piano-hop.ts",
-    "check:happy-or-sad": "tsx scripts/check-happy-or-sad.ts"
+    "check:happy-or-sad": "tsx scripts/check-happy-or-sad.ts",
+    "check:piano-sound": "tsx scripts/check-piano-sound.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.1",

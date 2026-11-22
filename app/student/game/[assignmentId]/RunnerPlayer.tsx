@@ -9,6 +9,7 @@ import { RunnerCard, RunnerPickerScreen, useRunnerChoice } from "@/components/ch
 import { noteRunnerConfig, type RunnerSettings } from "@/lib/runnerGames";
 import type { RunSummary } from "@/components/noteRunner/NoteRunnerGame";
 import type { UpOrDownRunSummary } from "@/components/upOrDown/UpOrDownGame";
+import { usePianoSamples } from "@/lib/usePianoSamples";
 
 // An assigned Note Runner / Up or Down game. The teacher chose the
 // settings; the student can play as many runs as they like, and the best
@@ -44,6 +45,8 @@ export default function RunnerPlayer({
   settings: RunnerSettings;
   initialBest: number | null;
 }) {
+  // Start loading the piano samples while the child picks a level.
+  usePianoSamples();
   const [runKey, setRunKey] = useState<number | null>(null);
   const [best, setBest] = useState(initialBest);
   const [save, setSave] = useState<Save>({ state: "idle" });

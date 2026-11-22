@@ -8,6 +8,7 @@ import { unlockNoteAudio } from "@/lib/playNote";
 import { RunnerCard, RunnerPickerScreen, useRunnerChoice } from "@/components/characters/RunnerChoice";
 import type { HappyOrSadLevel } from "@/lib/happyOrSad/pieces";
 import type { Labels } from "@/lib/happyOrSad/round";
+import { usePianoSamples } from "@/lib/usePianoSamples";
 
 // Happy or Sad ("Weather Village"), stage 1: hear whether music is happy
 // (major) or sad (minor) and grow a village. An unlisted page (not in the
@@ -34,6 +35,8 @@ const LABELS: { key: Labels; label: string }[] = [
 ];
 
 export default function HappyOrSadPage() {
+  // Start loading the piano samples while the child picks a level.
+  usePianoSamples();
   const [level, setLevel] = useState<HappyOrSadLevel>("easy");
   const [labels, setLabels] = useState<Labels>("mood");
   const [runKey, setRunKey] = useState<number | null>(null);

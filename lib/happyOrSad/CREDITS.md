@@ -9,7 +9,9 @@ Every piece in Happy or Sad is one of:
 
 Each is a short excerpt (4–8 seconds) in a simple arrangement written for
 Ritmo: the melody plus a light accompaniment, played in the browser with
-Web Audio. No recordings are used, and no modern edition's arrangement is
+Web Audio on recorded piano samples (Salamander Grand Piano by Alexander
+Holm, CC BY 3.0; see `public/sounds/piano/CREDITS.md`). No recordings of
+the pieces themselves are used, and no modern edition's arrangement is
 copied.
 
 Three pieces were checked note by note against public-domain MIDI files

@@ -17,7 +17,9 @@
 //   * Easy's "Do" marker is on every C and nowhere else;
 //   * each key plays its own pitch: the sound code is run with a stand-in
 //     AudioContext and the note it starts must match the key's real
-//     frequency (A4 = 440 Hz, equal temperament);
+//     frequency (A4 = 440 Hz, equal temperament). This runs the synth
+//     fallback; scripts/check-piano-sound.ts checks the recorded-piano
+//     path for every note, Piano Hop's keys included;
 //   * names: every name the game asks (Do-Re-Mi and C-D-E, ♯ and ♭) is
 //     right for exactly the keys with that pitch, both spellings of a
 //     black key (C♯ = D♭) are accepted, Easy/Medium never ask for a black

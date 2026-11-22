@@ -23,6 +23,7 @@ import {
 } from "@/lib/upOrDown";
 import { detectQuality } from "@/components/noteRunner/quality";
 import { ForkEngine } from "./ForkEngine";
+import { usePianoSamples } from "@/lib/usePianoSamples";
 
 // One run of Up or Down: the 3D road (ForkEngine), the listening card, the
 // HUD and the controls. Ear only: no staff and no note names.
@@ -87,6 +88,8 @@ export default function UpOrDownGame({
   // Shown on the game-over panel (e.g. "Saved! Your best: 240").
   endNote?: React.ReactNode;
 }) {
+  // Real piano samples for the notes (synth tone until they load).
+  usePianoSamples();
   const containerRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<ForkEngine | null>(null);

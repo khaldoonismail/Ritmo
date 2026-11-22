@@ -8,6 +8,7 @@ import TeamLeaderboard, { LeaderboardTeam } from "@/components/TeamLeaderboard";
 import NoteStaff from "@/components/NoteStaff";
 import { isNoteSpec } from "@/lib/noteReading";
 import { playNote, unlockNoteAudio } from "@/lib/playNote";
+import { usePianoSamples } from "@/lib/usePianoSamples";
 import {
   DEFAULT_REVEAL_SECONDS,
   displaySecondsLeft,
@@ -99,6 +100,9 @@ export default function TeamBattlePlayer({ sessionId }: { sessionId: string }) {
   const revealLeft = revealTiming
     ? Math.min(revealTiming.revealSeconds, Math.max(0, Math.ceil(revealSecondsLeft(revealTiming, nowMs + clockOffsetMs))))
     : 0;
+
+  // Note Reading: load the piano samples once a note question shows up.
+  usePianoSamples(isNoteSpec(question?.note));
 
   // Note Reading: the answer reveal plays the note. Tapping an answer has
   // already let this page make sound; a student who didn't answer just

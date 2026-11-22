@@ -11,6 +11,7 @@ import { ROUND_LENGTH, answerLabel, buildRound, starsFor, type Labels } from "@/
 import { VillageEngine } from "./VillageEngine";
 import { PiecePlayer } from "./player";
 import { signImage } from "./icons";
+import { usePianoSamples } from "@/lib/usePianoSamples";
 
 // Happy or Sad ("Weather Village"): a short piece plays; the child taps
 // ☀️ Sun (happy / major) or 🌧️ Cloud (sad / minor). Right: the village's
@@ -44,6 +45,8 @@ export default function HappyOrSadGame({
   autoStart?: boolean;
   onChangeSettings: () => void;
 }) {
+  // Real piano samples for the notes (synth tone until they load).
+  usePianoSamples();
   const containerRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const buttonsRef = useRef<HTMLDivElement>(null);

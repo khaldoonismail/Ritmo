@@ -6,6 +6,7 @@ import { colors, radius, solidShadow } from "@/lib/theme";
 import NoteStaff from "@/components/NoteStaff";
 import { isNoteSpec } from "@/lib/noteReading";
 import { playNote } from "@/lib/playNote";
+import { usePianoSamples } from "@/lib/usePianoSamples";
 
 type MediaType = "text" | "image" | "video" | "audio" | "note";
 
@@ -58,6 +59,7 @@ export default function GamePlayer({
   );
 
   const q = questions[currentIndex];
+  usePianoSamples(questions.some((x) => isNoteSpec(x.note)));
 
   async function submitAnswers(finalAnswers: { questionId: string; selectedIndex: number | null }[]) {
     setSubmitting(true);

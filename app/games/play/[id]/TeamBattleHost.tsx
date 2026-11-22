@@ -12,6 +12,7 @@ import TeamSetup, { TeamSetupConfig } from "./TeamSetup";
 import NoteStaff from "@/components/NoteStaff";
 import { NOTE_READING_GENERATOR, generateFromConfig, isNoteSpec, noteReadingVariant } from "@/lib/noteReading";
 import { playNote, unlockNoteAudio } from "@/lib/playNote";
+import { usePianoSamples } from "@/lib/usePianoSamples";
 import {
   DEFAULT_REVEAL_SECONDS,
   LATE_ANSWER_GRACE_SECONDS,
@@ -152,6 +153,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
   // game's own saved questions.
   const [sessionQuestions, setSessionQuestions] = useState<Question[] | null>(null);
   const questions = sessionQuestions ?? game.questions;
+  usePianoSamples(questions.some((q) => isNoteSpec(q.note)));
   const totalQuestions = questions.length;
   const extensionSeconds = timing?.extensionSeconds ?? 0;
   const timeLeft = timing ? displaySecondsLeft(timing, nowMs + clockOffsetMs) : 0;

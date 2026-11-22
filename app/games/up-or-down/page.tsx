@@ -7,6 +7,7 @@ import { colors, radius, solidShadow } from "@/lib/theme";
 import { unlockNoteAudio } from "@/lib/playNote";
 import { RunnerCard, RunnerPickerScreen, useRunnerChoice } from "@/components/characters/RunnerChoice";
 import { LEVELS, type UpOrDownLevel } from "@/lib/upOrDown";
+import { usePianoSamples } from "@/lib/usePianoSamples";
 
 // Up or Down, stage 1: an ear-training runner on its own unlisted page
 // (not in the library yet, no database). Three.js is only in the game's
@@ -25,6 +26,8 @@ const UpOrDownGame = dynamic(loadGame, {
 const LEVEL_KEYS: UpOrDownLevel[] = ["easy", "medium", "hard"];
 
 export default function UpOrDownPage() {
+  // Start loading the piano samples while the child picks a level.
+  usePianoSamples();
   const [level, setLevel] = useState<UpOrDownLevel>("easy");
   const [runKey, setRunKey] = useState<number | null>(null);
   const { runner, chosen, picking, setPicking, save } = useRunnerChoice();

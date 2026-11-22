@@ -8,6 +8,7 @@ import { unlockNoteAudio } from "@/lib/playNote";
 import { RunnerCard, RunnerPickerScreen, useRunnerChoice } from "@/components/characters/RunnerChoice";
 import { NAMING_LABELS, type NamingSystem } from "@/lib/noteReading";
 import { PIANO_LEVELS, type PianoLevel } from "@/lib/pianoHop";
+import { usePianoSamples } from "@/lib/usePianoSamples";
 
 // Piano Hop, stage 1: learn where the notes are on a piano keyboard. An
 // unlisted page (not in the library, no database). Three.js is only in the
@@ -27,6 +28,8 @@ const LEVEL_KEYS: PianoLevel[] = ["easy", "medium", "hard"];
 const NAMINGS: NamingSystem[] = ["solfege", "letters"];
 
 export default function PianoHopPage() {
+  // Start loading the piano samples while the child picks a level.
+  usePianoSamples();
   const [level, setLevel] = useState<PianoLevel>("easy");
   const [naming, setNaming] = useState<NamingSystem>("solfege");
   const [runKey, setRunKey] = useState<number | null>(null);
