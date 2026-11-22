@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { RUNNER_PAGE, isRunnerGenerator } from "@/lib/runnerGames";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
@@ -151,6 +152,13 @@ export default function PlayGamePage() {
         .select("id, title, questions, generator")
         .eq("id", id)
         .maybeSingle();
+
+      // Note Runner / Up or Down are played on their own pages (no Team
+      // Battle, no saved questions).
+      if (data && isRunnerGenerator(data.generator)) {
+        router.replace(RUNNER_PAGE[data.generator]);
+        return;
+      }
 
       setGame(data);
       if (data) {

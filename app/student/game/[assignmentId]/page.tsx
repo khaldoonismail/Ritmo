@@ -8,7 +8,9 @@ import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { colors } from "@/lib/theme";
 import GamePlayer from "./GamePlayer";
 import { assignmentQuestions } from "@/lib/gameQuestions";
-import { NOTE_READING_GENERATOR, configLabel, normalizeNoteReadingConfig } from "@/lib/noteReading";
+import { assignmentTitle } from "@/lib/noteReading";
+import { isRunnerGenerator, normalizeRunnerSettings } from "@/lib/runnerGames";
+import RunnerPlayer from "./RunnerPlayer";
 
 function NotFound({ message }: { message: string }) {
   return (
@@ -73,6 +75,25 @@ export default async function StudentGamePage({
     return <NotFound message="This game isn't available yet" />;
   }
 
+  // Note Runner / Up or Down: endless runs, replay as often as you like;
+  // the best run counts (app/api/student/runs/*).
+  if (isRunnerGenerator(game.generator)) {
+    const { data: result } = await supabase
+      .from("game_results")
+      .select("points")
+      .eq("assignment_id", assignment.id)
+      .eq("student_id", session.studentId)
+      .maybeSingle();
+    return (
+      <RunnerPlayer
+        assignmentId={assignment.id}
+        title={assignmentTitle(game.title, assignment.game_settings)}
+        settings={normalizeRunnerSettings(game.generator, assignment.game_settings)}
+        initialBest={result?.points ?? null}
+      />
+    );
+  }
+
   // Already completed? Show the saved result instead of letting the
   // student re-take it and silently overwrite their score.
   const { data: progress } = await supabase
@@ -95,10 +116,7 @@ export default async function StudentGamePage({
   if (questions.length === 0 && !alreadyCompleted) {
     return <NotFound message="This game isn't available yet" />;
   }
-  const title =
-    game.generator === NOTE_READING_GENERATOR
-      ? `${game.title} – ${configLabel(normalizeNoteReadingConfig(assignment.game_settings))}`
-      : game.title;
+  const title = assignmentTitle(game.title, assignment.game_settings);
 
   return (
     <GamePlayer

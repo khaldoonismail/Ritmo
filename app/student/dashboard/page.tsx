@@ -14,7 +14,8 @@ import LogoutButton from "./LogoutButton";
 import Leaderboard from "./Leaderboard";
 import GameLeaderboard from "@/components/GameLeaderboard";
 import { buildLeaderboards, studentDisplayNames } from "@/lib/gameLeaderboard";
-import { configLabel, normalizeNoteReadingConfig } from "@/lib/noteReading";
+import { assignmentTitle as titleWithSettings } from "@/lib/noteReading";
+import { isRunnerGenerator } from "@/lib/runnerGames";
 import CertificateButton from "./CertificateButton";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -103,16 +104,17 @@ export default async function StudentDashboardPage() {
     ...new Set((assignments || []).map((a) => a.game_id).filter((id): id is string => !!id)),
   ];
   let gameTitleMap = new Map<string, string>();
+  // Note Runner / Up or Down: endless runs, shown with the best run's points.
+  const runnerGameIds = new Set<string>();
   if (gameIds.length > 0) {
-    const { data: gameRows } = await supabase.from("games").select("id, title").in("id", gameIds);
+    const { data: gameRows } = await supabase.from("games").select("id, title, generator").in("id", gameIds);
     gameTitleMap = new Map((gameRows || []).map((g) => [g.id, g.title]));
+    for (const g of gameRows || []) if (isRunnerGenerator(g.generator)) runnerGameIds.add(g.id);
   }
 
   function assignmentTitle(a: { lesson_id: string | null; game_id: string | null; game_settings?: unknown }): string {
-    // The shared Note Reading game shows its settings: "Note Reading – Treble Easy".
-    if (a.game_id && a.game_settings)
-      return `${gameTitleMap.get(a.game_id) ?? "Unknown game"} – ${configLabel(normalizeNoteReadingConfig(a.game_settings))}`;
-    if (a.game_id) return gameTitleMap.get(a.game_id) ?? "Unknown game";
+    // Shared games show their settings: "Note Reading – Treble Easy", "Up or Down – Hard".
+    if (a.game_id) return titleWithSettings(gameTitleMap.get(a.game_id) ?? "Unknown game", a.game_settings);
     if (a.lesson_id) return lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id);
     return "Unknown assignment";
   }
@@ -133,6 +135,20 @@ export default async function StudentDashboardPage() {
         { status: p.status as ProgressStatus, score: p.score },
       ])
     );
+  }
+
+  // Best run per Note Runner / Up or Down assignment (its game_results row).
+  const bestRunPoints = new Map<string, number>();
+  const runnerAssignmentIds = (assignments || [])
+    .filter((a) => a.game_id && runnerGameIds.has(a.game_id))
+    .map((a) => a.id);
+  if (runnerAssignmentIds.length > 0) {
+    const { data: bestRows } = await supabase
+      .from("game_results")
+      .select("assignment_id, points")
+      .eq("student_id", session.studentId)
+      .in("assignment_id", runnerAssignmentIds);
+    for (const r of bestRows || []) if (r.assignment_id) bestRunPoints.set(r.assignment_id, r.points);
   }
 
   // Total points = sum of every graded score this student has, and drives
@@ -213,13 +229,15 @@ export default async function StudentDashboardPage() {
   const resultGameIds = [...new Set((gameResultRows || []).map((r) => r.game_id))];
   let resultGameTitles = new Map<string, string>();
   if (resultGameIds.length > 0) {
-    const { data: resultGames } = await supabase.from("games").select("id, title").in("id", resultGameIds);
+    const { data: resultGames } = await supabase.from("games").select("id, title, generator").in("id", resultGameIds);
     resultGameTitles = new Map((resultGames || []).map((g) => [g.id, g.title]));
+    for (const g of resultGames || []) if (isRunnerGenerator(g.generator)) runnerGameIds.add(g.id);
   }
   const gameBoards = buildLeaderboards(
     gameResultRows || [],
     studentDisplayNames(classmates || []),
-    resultGameTitles
+    resultGameTitles,
+    runnerGameIds
   );
 
   const { data: classRow } = await supabase
@@ -526,11 +544,17 @@ export default async function StudentDashboardPage() {
                 >
                   {label}
                 </span>
-                {score !== null && (
+                {bestRunPoints.has(a.id) ? (
                   <span style={{ fontSize: "0.75rem", fontWeight: 700, opacity: 0.7, whiteSpace: "nowrap" }}>
-                    {badge ? `${badge.icon} ` : ""}
-                    {score} pts
+                    🏆 Best {bestRunPoints.get(a.id)!.toLocaleString("en-US")} pts
                   </span>
+                ) : (
+                  score !== null && (
+                    <span style={{ fontSize: "0.75rem", fontWeight: 700, opacity: 0.7, whiteSpace: "nowrap" }}>
+                      {badge ? `${badge.icon} ` : ""}
+                      {score} pts
+                    </span>
+                  )
                 )}
               </span>
             </Link>

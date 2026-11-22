@@ -1,6 +1,6 @@
 // Which runner a child plays as, shared by Note Runner and Up or Down.
-// Stage 1 keeps the choice on the device (localStorage); stage 2 will
-// save it to the student's profile.
+// Kept on the device (localStorage), and also on the student's profile
+// when they're signed in (app/api/student/character), which wins.
 
 export type CharacterKind = "boy" | "girl" | "cat" | "fox" | "note";
 
@@ -35,17 +35,24 @@ export const DEFAULT_CHARACTER: CharacterChoice = { kind: "boy", skin: 1, outfit
 
 const STORAGE_KEY = "ritmo.runner.character";
 
+// A valid choice from untrusted data (localStorage, the student's
+// profile, a request body), or null.
+export function normalizeCharacter(value: unknown): CharacterChoice | null {
+  if (!value || typeof value !== "object") return null;
+  const c = value as Partial<CharacterChoice>;
+  const kind = CHARACTER_KINDS.find((k) => k.kind === c.kind)?.kind;
+  if (!kind) return null;
+  const skin = Number.isInteger(c.skin) && c.skin! >= 0 && c.skin! < SKIN_TONES.length ? c.skin! : DEFAULT_CHARACTER.skin;
+  const outfit =
+    Number.isInteger(c.outfit) && c.outfit! >= 0 && c.outfit! < OUTFITS.length ? c.outfit! : DEFAULT_CHARACTER.outfit;
+  return { kind, skin, outfit };
+}
+
 export function loadCharacter(): CharacterChoice {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_CHARACTER;
-    const c = JSON.parse(raw) as Partial<CharacterChoice>;
-    const kind = CHARACTER_KINDS.find((k) => k.kind === c.kind)?.kind;
-    if (!kind) return DEFAULT_CHARACTER;
-    const skin = Number.isInteger(c.skin) && c.skin! >= 0 && c.skin! < SKIN_TONES.length ? c.skin! : DEFAULT_CHARACTER.skin;
-    const outfit =
-      Number.isInteger(c.outfit) && c.outfit! >= 0 && c.outfit! < OUTFITS.length ? c.outfit! : DEFAULT_CHARACTER.outfit;
-    return { kind, skin, outfit };
+    return normalizeCharacter(JSON.parse(raw)) ?? DEFAULT_CHARACTER;
   } catch {
     return DEFAULT_CHARACTER;
   }

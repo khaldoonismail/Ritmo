@@ -5,6 +5,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { colors } from "@/lib/theme";
 import GameLeaderboard from "@/components/GameLeaderboard";
 import { buildLeaderboards, type Leaderboards } from "@/lib/gameLeaderboard";
+import { isRunnerGenerator } from "@/lib/runnerGames";
 
 interface StudentLite {
   id: string;
@@ -34,14 +35,17 @@ export default function ClassGameLeaderboard({ classId, students }: { classId: s
 
       const gameIds = [...new Set((rows || []).map((r) => r.game_id))];
       let titleByGame = new Map<string, string>();
+      // Endless runs (Note Runner, Up or Down) rank by points.
+      const pointsRanked = new Set<string>();
       if (gameIds.length > 0) {
-        const { data: games } = await supabase.from("games").select("id, title").in("id", gameIds);
+        const { data: games } = await supabase.from("games").select("id, title, generator").in("id", gameIds);
         titleByGame = new Map((games || []).map((g) => [g.id, g.title]));
+        for (const g of games || []) if (isRunnerGenerator(g.generator)) pointsRanked.add(g.id);
       }
       if (cancelled) return;
 
       const nameByStudent = new Map(students.map((s) => [s.id, s.name]));
-      setBoards(buildLeaderboards(rows || [], nameByStudent, titleByGame));
+      setBoards(buildLeaderboards(rows || [], nameByStudent, titleByGame, pointsRanked));
     })();
     return () => {
       cancelled = true;

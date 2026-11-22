@@ -40,6 +40,22 @@ import { ForkEngine } from "./ForkEngine";
 
 type Phase = "ready" | "playing" | "paused" | "over";
 
+// One answered fork, as the server checks it (lib/runCheck.ts).
+export interface UpOrDownAnswer {
+  first: number;
+  second: number;
+  // The path taken, or null for "Too late!".
+  picked: Direction | null;
+}
+
+export interface UpOrDownRunSummary {
+  score: number;
+  correct: number;
+  total: number;
+  bestStreak: number;
+  answers: UpOrDownAnswer[];
+}
+
 // Seconds of quiet after a replay before the next question's notes.
 const SILENCE_BEFORE_NEXT = 1.2;
 
@@ -51,12 +67,25 @@ export default function UpOrDownGame({
   character = DEFAULT_CHARACTER,
   autoStart = false,
   onChangeSettings,
+  onRunStart,
+  onRunEnd,
+  exitLabel = "Change level",
+  endNote,
 }: {
   level: UpOrDownLevel;
   // The runner the child picked.
   character?: CharacterChoice;
   autoStart?: boolean;
   onChangeSettings: () => void;
+  // Called as each run starts (an assigned game asks the server for a run
+  // id here) and when it ends: the last heart lost, or Quit with answers.
+  onRunStart?: () => void;
+  onRunEnd?: (summary: UpOrDownRunSummary) => void;
+  // The button that leaves the game ("Change level"; "Back" when the
+  // teacher chose the level).
+  exitLabel?: string;
+  // Shown on the game-over panel (e.g. "Saved! Your best: 240").
+  endNote?: React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -65,6 +94,13 @@ export default function UpOrDownGame({
   const questionRef = useRef<UpOrDownQuestion | null>(null);
   const answeredRef = useRef(false);
   const statsRef = useRef({ score: 0, lives: UP_OR_DOWN_LIVES, streak: 0, bestStreak: 0, correct: 0, total: 0 });
+  const answersRef = useRef<UpOrDownAnswer[]>([]);
+  const onRunEndRef = useRef(onRunEnd);
+  onRunEndRef.current = onRunEnd;
+  const summary = (): UpOrDownRunSummary => {
+    const st = statsRef.current;
+    return { score: st.score, correct: st.correct, total: st.total, bestStreak: st.bestStreak, answers: answersRef.current };
+  };
   const phaseRef = useRef<Phase>("ready");
   const timersRef = useRef<number[]>([]);
   const listeningRef = useRef(false);
@@ -166,6 +202,7 @@ export default function UpOrDownGame({
       }
       statsRef.current = s;
       setStats(s);
+      answersRef.current.push({ first: q.first, second: q.second, picked: choice });
       setResult({ correct, answer: q.answer, picked: choice, points });
       engine.showResult(q.answer, choice);
       if (correct) playFeedback("correct");
@@ -176,6 +213,7 @@ export default function UpOrDownGame({
           if (statsRef.current.lives <= 0) {
             setPhase("over");
             engineRef.current?.pause();
+            onRunEndRef.current?.(summary());
           } else if (choice === null) {
             // Too late: after the replay, a quick flash hides the kid
             // moving on to the next straight stretch.
@@ -205,6 +243,8 @@ export default function UpOrDownGame({
     busyUntilRef.current = 0;
     statsRef.current = { score: 0, lives: UP_OR_DOWN_LIVES, streak: 0, bestStreak: 0, correct: 0, total: 0 };
     setStats(statsRef.current);
+    answersRef.current = [];
+    onRunStart?.();
     supplyRef.current = new QuestionSupply(level);
     questionRef.current = null;
     setQuestion(null);
@@ -303,6 +343,16 @@ export default function UpOrDownGame({
       resumeRef.current();
     }
   }, [phonePortrait, pause]);
+
+  // Quit from the pause menu: a run with answers still counts.
+  const quit = () => {
+    if (phaseRef.current === "paused" && statsRef.current.total > 0 && statsRef.current.lives > 0) {
+      clearTimers();
+      setPhase("over");
+      onRunEndRef.current?.(summary());
+    }
+    onChangeSettings();
+  };
 
   const hearAgain = () => {
     unlockNoteAudio();
@@ -630,7 +680,7 @@ export default function UpOrDownGame({
                   Start
                 </button>
                 <button type="button" onClick={onChangeSettings} style={secondaryButton}>
-                  Change level
+                  {exitLabel}
                 </button>
               </>
             )}
@@ -640,7 +690,7 @@ export default function UpOrDownGame({
                 <button type="button" onClick={resume} style={primaryButton}>
                   Resume
                 </button>
-                <button type="button" onClick={onChangeSettings} style={secondaryButton}>
+                <button type="button" onClick={quit} style={secondaryButton}>
                   Quit
                 </button>
               </>
@@ -656,11 +706,12 @@ export default function UpOrDownGame({
                   </span>
                   <span>🔥 best streak {stats.bestStreak}</span>
                 </div>
+                {endNote}
                 <button type="button" onClick={start} style={primaryButton}>
                   Play again
                 </button>
                 <button type="button" onClick={onChangeSettings} style={secondaryButton}>
-                  Change level
+                  {exitLabel}
                 </button>
               </>
             )}

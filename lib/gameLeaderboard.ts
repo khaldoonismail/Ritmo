@@ -8,6 +8,9 @@ import { variantLabel } from "@/lib/noteReading";
 //     Results with a difficulty label (game_results.variant — the shared
 //     Note Reading game's settings, e.g. "Treble Easy") get a board of their
 //     own, so an Easy score is never ranked against a Hard one.
+//     Endless runs (Note Runner, Up or Down: games in `pointsRanked`) have
+//     no fixed number of questions, so their boards rank by points instead,
+//     then accuracy.
 //   * Overall: the sum of each student's best accuracy across every game
 //     they've played (so playing more games counts), then total best points.
 
@@ -34,6 +37,8 @@ export interface GameBoard {
   // Unique per board: the game id, plus "|variant" for labelled results.
   gameId: string;
   title: string;
+  // Ranked by points (endless runs) rather than accuracy.
+  byPoints?: boolean;
   entries: LeaderboardEntry[];
 }
 
@@ -44,6 +49,10 @@ export interface Leaderboards {
 
 function byRank(a: LeaderboardEntry, b: LeaderboardEntry) {
   return b.score - a.score || b.points - a.points || a.name.localeCompare(b.name);
+}
+
+function byPointsRank(a: LeaderboardEntry, b: LeaderboardEntry) {
+  return b.points - a.points || b.score - a.score || a.name.localeCompare(b.name);
 }
 
 export function firstName(fullName: string): string {
@@ -71,7 +80,8 @@ export function studentDisplayNames(students: { id: string; name: string }[]): M
 export function buildLeaderboards(
   rows: GameResultRow[],
   nameByStudent: Map<string, string>,
-  titleByGame: Map<string, string>
+  titleByGame: Map<string, string>,
+  pointsRanked: Set<string> = new Set()
 ): Leaderboards {
   // Best play per (board, student); a board is a game, or a game plus a
   // difficulty label.
@@ -92,7 +102,10 @@ export function buildLeaderboards(
       best.set(boardKey, perStudent);
     }
     const current = perStudent.get(row.student_id);
-    if (!current || accuracy > current.accuracy || (accuracy === current.accuracy && row.points > current.points)) {
+    const better = pointsRanked.has(row.game_id)
+      ? !current || row.points > current.points || (row.points === current.points && accuracy > current.accuracy)
+      : !current || accuracy > current.accuracy || (accuracy === current.accuracy && row.points > current.points);
+    if (better) {
       perStudent.set(row.student_id, { accuracy, points: row.points });
     }
   }
@@ -100,6 +113,7 @@ export function buildLeaderboards(
   const overallTotals = new Map<string, LeaderboardEntry>();
   const games: GameBoard[] = [];
   for (const [gameId, perStudent] of best) {
+    const byPoints = pointsRanked.has(gameId.split("|")[0]);
     const entries: LeaderboardEntry[] = [];
     for (const [studentId, { accuracy, points }] of perStudent) {
       const name = nameByStudent.get(studentId)!;
@@ -110,7 +124,12 @@ export function buildLeaderboards(
       total.gamesPlayed += 1;
       overallTotals.set(studentId, total);
     }
-    games.push({ gameId, title: boardTitle.get(gameId) ?? "Untitled game", entries: entries.sort(byRank) });
+    games.push({
+      gameId,
+      title: boardTitle.get(gameId) ?? "Untitled game",
+      byPoints,
+      entries: entries.sort(byPoints ? byPointsRank : byRank),
+    });
   }
 
   return {

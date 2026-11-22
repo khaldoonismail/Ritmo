@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { forkGame } from "@/lib/forkGame";
+import { RUNNER_PAGE, isRunnerGenerator } from "@/lib/runnerGames";
 import { resolveCoverDisplay } from "@/lib/gameCover";
 import { gameTagGallery, tagLabel } from "@/lib/gameTags";
 import { colors, radius, solidShadow } from "@/lib/theme";
@@ -140,6 +141,12 @@ function GameCoverThumb({ title, coverImage }: { title: string; coverImage: stri
       )}
     </div>
   );
+}
+
+// Where a game's Play button goes: Note Runner and Up or Down have their
+// own pages (no Team Battle); every other game opens the play page.
+function playHref(g: { id: string; generator?: string | null }): string {
+  return isRunnerGenerator(g.generator) ? RUNNER_PAGE[g.generator] : `/games/play/${g.id}`;
 }
 
 const LOAD_TIMEOUT_MS = 15000;
@@ -423,6 +430,11 @@ export default function GamesLibraryPage() {
     boxShadow: "none",
   };
 
+  function gameSizeLabel(g: { generator?: string | null; questions: unknown[] }) {
+    if (isRunnerGenerator(g.generator)) return "endless run";
+    return g.generator ? "fresh questions every play" : questionCountLabel(g.questions.length);
+  }
+
   function questionCountLabel(count: number) {
     return `${count} question${count === 1 ? "" : "s"}`;
   }
@@ -539,7 +551,7 @@ export default function GamesLibraryPage() {
                 <div>
                   <div style={{ fontWeight: 800 }}>{g.title}</div>
                   <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
-                    {g.is_public ? "Public" : "Private"} · {g.generator ? "fresh questions every play" : questionCountLabel(g.questions.length)} · used{" "}
+                    {g.is_public ? "Public" : "Private"} · {gameSizeLabel(g)} · used{" "}
                     {g.usage_count} time
                     {g.usage_count === 1 ? "" : "s"}
                     {forkCounts[g.id] > 0 &&
@@ -550,8 +562,8 @@ export default function GamesLibraryPage() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: "0.5rem" }}>
-                <Link href={`/games/play/${g.id}`} style={primaryButtonStyle}>
-                  Play Demo
+                <Link href={playHref(g)} style={primaryButtonStyle}>
+                  {isRunnerGenerator(g.generator) ? "Play" : "Play Demo"}
                 </Link>
                 <button
                   onClick={() => togglePublic(g)}
@@ -566,9 +578,14 @@ export default function GamesLibraryPage() {
                 >
                   {publishBusyId === g.id ? "..." : g.is_public ? "Unpublish" : "Publish"}
                 </button>
-                <button onClick={() => deleteGame(g.id)} style={dangerButtonStyle}>
-                  Delete
-                </button>
+                {/* A shared generated game (Note Reading, Note Runner, Up or
+                    Down) carries every class's assignments and results:
+                    deleting it would delete those too. */}
+                {!g.generator && (
+                  <button onClick={() => deleteGame(g.id)} style={dangerButtonStyle}>
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -650,7 +667,7 @@ export default function GamesLibraryPage() {
                   <div>
                     <div style={{ fontWeight: 800 }}>{g.title}</div>
                     <div style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.6 }}>
-                      by {ownerNameOf(g) || "another teacher"} · {g.generator ? "fresh questions every play" : questionCountLabel(g.questions.length)} · used{" "}
+                      by {ownerNameOf(g) || "another teacher"} · {gameSizeLabel(g)} · used{" "}
                       {g.usage_count} time
                       {g.usage_count === 1 ? "" : "s"}
                       {forkCounts[g.id] > 0 &&
@@ -665,11 +682,12 @@ export default function GamesLibraryPage() {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
-                  <Link href={`/games/play/${g.id}`} style={primaryButtonStyle}>
-                    Play Demo
+                  <Link href={playHref(g)} style={primaryButtonStyle}>
+                    {isRunnerGenerator(g.generator) ? "Play" : "Play Demo"}
                   </Link>
-                  {/* A generated game (shared Note Reading) has no questions
-                      to copy — every teacher plays the shared one directly. */}
+                  {/* A generated game (Note Reading, Note Runner, Up or Down)
+                      has no questions to copy — every teacher plays the
+                      shared one directly. */}
                   {!g.generator && (
                     <button
                       onClick={() => handleCopy(g)}

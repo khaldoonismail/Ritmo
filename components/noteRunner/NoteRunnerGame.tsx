@@ -47,7 +47,10 @@ export default function NoteRunnerGame({
   character = DEFAULT_CHARACTER,
   autoStart = false,
   onChangeSettings,
+  onRunStart,
   onRunEnd,
+  exitLabel = "Change settings",
+  endNote,
 }: {
   config: NoteRunnerConfig;
   // The runner the child picked.
@@ -56,7 +59,15 @@ export default function NoteRunnerGame({
   // this component already unlocked audio).
   autoStart?: boolean;
   onChangeSettings: () => void;
+  // Called as each run starts (an assigned game asks the server for a run
+  // id here) and when it ends: the last heart lost, or Quit with answers.
+  onRunStart?: () => void;
   onRunEnd?: (summary: RunSummary) => void;
+  // The button that leaves the game ("Change settings"; "Back" when the
+  // settings were chosen by the teacher).
+  exitLabel?: string;
+  // Shown on the game-over panel (e.g. "Saved! Your best: 1,240").
+  endNote?: React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -135,17 +146,21 @@ export default function NoteRunnerGame({
         setPhase("over");
         musicRef.current?.stop();
         window.setTimeout(() => engineRef.current?.pause(), 700);
-        onRunEnd?.({
-          score: s.score,
-          correct: s.correct,
-          total: s.total,
-          bestStreak: s.bestStreak,
-          answers: answersRef.current,
-        });
+        onRunEnd?.(summary());
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [onRunEnd]
   );
+
+  // Quit from the pause menu: a run with answers still counts.
+  const quit = () => {
+    if (phaseRef.current === "paused" && statsRef.current.total > 0) {
+      setPhase("over");
+      onRunEnd?.(summary());
+    }
+    onChangeSettings();
+  };
 
   // Create the 3D scene once per mount.
   useEffect(() => {
@@ -211,10 +226,16 @@ export default function NoteRunnerGame({
   const nextGateRef = useRef(nextGate);
   nextGateRef.current = nextGate;
 
+  const summary = (): RunSummary => {
+    const s = statsRef.current;
+    return { score: s.score, correct: s.correct, total: s.total, bestStreak: s.bestStreak, answers: answersRef.current };
+  };
+
   const start = () => {
     unlockNoteAudio();
     const engine = engineRef.current;
     if (!engine) return;
+    onRunStart?.();
     statsRef.current = { score: 0, lives: NOTE_RUNNER_LIVES, streak: 0, bestStreak: 0, correct: 0, total: 0 };
     setStats(statsRef.current);
     answersRef.current = [];
@@ -523,7 +544,7 @@ export default function NoteRunnerGame({
                   Start
                 </button>
                 <button type="button" onClick={onChangeSettings} style={secondaryButton}>
-                  Change settings
+                  {exitLabel}
                 </button>
               </>
             )}
@@ -533,7 +554,7 @@ export default function NoteRunnerGame({
                 <button type="button" onClick={resume} style={primaryButton}>
                   Resume
                 </button>
-                <button type="button" onClick={onChangeSettings} style={secondaryButton}>
+                <button type="button" onClick={quit} style={secondaryButton}>
                   Quit
                 </button>
               </>
@@ -551,11 +572,12 @@ export default function NoteRunnerGame({
                   </span>
                   <span>🔥 best streak {stats.bestStreak}</span>
                 </div>
+                {endNote}
                 <button type="button" onClick={start} style={primaryButton}>
                   Play again
                 </button>
                 <button type="button" onClick={onChangeSettings} style={secondaryButton}>
-                  Change settings
+                  {exitLabel}
                 </button>
               </>
             )}

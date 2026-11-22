@@ -9,13 +9,14 @@ import {
   DEFAULT_CHARACTER,
   hasSavedCharacter,
   loadCharacter,
+  normalizeCharacter,
   saveCharacter,
   type CharacterChoice,
 } from "./choice";
 
 // The runner choice on a game's start page, shared by Note Runner and Up
 // or Down: the saved choice (or the default boy), whether one was ever
-// made on this device, and the picker screen.
+// made, and the picker screen.
 
 export function useRunnerChoice() {
   const [runner, setRunner] = useState<CharacterChoice>(DEFAULT_CHARACTER);
@@ -26,11 +27,33 @@ export function useRunnerChoice() {
   useEffect(() => {
     setRunner(loadCharacter());
     setChosen(hasSavedCharacter());
+    // Signed-in student: their profile's runner wins (and is kept on the
+    // device too). Not signed in (401) or offline: the device choice stays.
+    let cancelled = false;
+    fetch("/api/student/character")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const c = normalizeCharacter(data?.character);
+        if (cancelled || !c) return;
+        setRunner(c);
+        saveCharacter(c);
+        setChosen(true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
   const save = (c: CharacterChoice) => {
     setRunner(c);
     saveCharacter(c);
     setChosen(true);
+    // Best effort; ignored when no student is signed in.
+    fetch("/api/student/character", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ character: c }),
+    }).catch(() => {});
   };
   return { runner, chosen, picking, setPicking, save };
 }

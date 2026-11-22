@@ -76,7 +76,11 @@ export default function GameLeaderboard({
       </div>
 
       <span style={{ fontSize: "0.72rem", fontWeight: 600, opacity: 0.6 }}>
-        {isOverall ? "Best score in each game, added up" : "Best score in this game"}
+        {isOverall
+          ? "Best score in each game, added up"
+          : game?.byPoints
+            ? "Best run's points"
+            : "Best score in this game"}
       </span>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
@@ -107,7 +111,9 @@ export default function GameLeaderboard({
               <span style={{ opacity: 0.7, whiteSpace: "nowrap" }}>
                 {isOverall
                   ? `${Math.round(entry.score)} · ${entry.gamesPlayed} ${entry.gamesPlayed === 1 ? "game" : "games"}`
-                  : `${Math.round(entry.score)}%`}
+                  : game?.byPoints
+                    ? `${entry.points.toLocaleString("en-US")} pts`
+                    : `${Math.round(entry.score)}%`}
               </span>
             </div>
           );

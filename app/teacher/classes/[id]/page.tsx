@@ -18,12 +18,34 @@ import ClassGameLeaderboard from "./ClassGameLeaderboard";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import NoteReadingSettings from "@/components/NoteReadingSettings";
 import {
+  NOTE_RUNNER_GENERATOR,
+  UP_OR_DOWN_GENERATOR,
+  isRunnerGenerator,
+  normalizeNoteRunnerSettings,
+  normalizeRunnerSettings,
+  normalizeUpOrDownSettings,
+} from "@/lib/runnerGames";
+import { LEVELS as UP_OR_DOWN_LEVELS, type UpOrDownLevel } from "@/lib/upOrDown";
+import {
   DEFAULT_NOTE_READING_CONFIG,
   NOTE_READING_GENERATOR,
   configLabel,
   normalizeNoteReadingConfig,
+  settingsLabel,
   type NoteReadingConfig,
 } from "@/lib/noteReading";
+
+const UP_OR_DOWN_LEVEL_KEYS: UpOrDownLevel[] = ["easy", "medium", "hard"];
+
+const settingsPanelStyle: React.CSSProperties = {
+  flexBasis: "100%",
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.75rem",
+  padding: "0.75rem",
+  borderRadius: "12px",
+  background: "#FFFFFF",
+};
 
 interface ClassInfo {
   id: string;
@@ -127,8 +149,12 @@ export default function ManageClassPage() {
   const [assignError, setAssignError] = useState("");
   const [removeError, setRemoveError] = useState("");
   const [assignBusy, setAssignBusy] = useState(false);
-  const [noteAssignOpen, setNoteAssignOpen] = useState(false);
+  // The shared game whose settings panel is open (Note Reading, Note
+  // Runner, Up or Down), and each one's choice.
+  const [settingsOpenFor, setSettingsOpenFor] = useState<string | null>(null);
   const [noteAssignConfig, setNoteAssignConfig] = useState<NoteReadingConfig>(DEFAULT_NOTE_READING_CONFIG);
+  const [runnerAssignConfig, setRunnerAssignConfig] = useState<NoteReadingConfig>(DEFAULT_NOTE_READING_CONFIG);
+  const [upOrDownLevel, setUpOrDownLevel] = useState<UpOrDownLevel>("easy");
   const [assignTarget, setAssignTarget] = useState<"class" | "students">("class");
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
 
@@ -434,8 +460,16 @@ export default function ManageClassPage() {
     setAssignBusy(false);
   }
 
-  // gameSettings: only for the shared Note Reading game.
-  async function assignGameToClass(gameId: string, gameSettings?: NoteReadingConfig) {
+  // An existing assignment's settings in the same shape the panels make,
+  // so "same settings" compares like with like.
+  function normalizeSettings(gameId: string, value: unknown): object {
+    const generator = games?.find((g) => g.id === gameId)?.generator;
+    return isRunnerGenerator(generator) ? normalizeRunnerSettings(generator, value) : normalizeNoteReadingConfig(value);
+  }
+
+  // gameSettings: only for the shared games (Note Reading, Note Runner,
+  // Up or Down), already normalized.
+  async function assignGameToClass(gameId: string, gameSettings?: object) {
     setAssignError("");
 
     const targets: (string | null)[] =
@@ -450,12 +484,9 @@ export default function ManageClassPage() {
     const duplicateTarget = targets.find((studentId) =>
       (assignments || []).some((a) => {
         if (a.game_id !== gameId) return false;
-        // Note Reading can be assigned again with different settings
-        // (e.g. Easy this week, Hard next week).
-        if (
-          gameSettings &&
-          JSON.stringify(normalizeNoteReadingConfig(a.game_settings)) !== JSON.stringify(gameSettings)
-        )
+        // A shared game can be assigned again with different settings
+        // (e.g. Easy this week, Hard next week), never twice the same.
+        if (gameSettings && JSON.stringify(normalizeSettings(gameId, a.game_settings)) !== JSON.stringify(gameSettings))
           return false;
         const existingDueDate = a.due_at ? a.due_at.slice(0, 10) : null;
         if (existingDueDate !== newDueDate) return false;
@@ -1488,13 +1519,13 @@ export default function ManageClassPage() {
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
-                      {g.generator === NOTE_READING_GENERATOR ? (
+                      {g.generator === NOTE_READING_GENERATOR || isRunnerGenerator(g.generator) ? (
                         <button
-                          onClick={() => setNoteAssignOpen((v) => !v)}
+                          onClick={() => setSettingsOpenFor((v) => (v === g.id ? null : g.id))}
                           disabled={assignBusy}
-                          style={noteAssignOpen ? secondaryButtonStyle : primaryButtonStyle}
+                          style={settingsOpenFor === g.id ? secondaryButtonStyle : primaryButtonStyle}
                         >
-                          {noteAssignOpen ? "Close" : "Choose settings…"}
+                          {settingsOpenFor === g.id ? "Close" : "Choose settings…"}
                         </button>
                       ) : (
                         <button
@@ -1506,7 +1537,69 @@ export default function ManageClassPage() {
                         </button>
                       )}
                     </div>
-                    {g.generator === NOTE_READING_GENERATOR && noteAssignOpen && (
+                    {g.generator === NOTE_RUNNER_GENERATOR && settingsOpenFor === g.id && (
+                      <div style={settingsPanelStyle}>
+                        <span style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.7 }}>
+                          An endless run with these notes. Students can play as often as they like; their best
+                          run counts.
+                        </span>
+                        <NoteReadingSettings value={runnerAssignConfig} onChange={setRunnerAssignConfig} showCount={false} />
+                        <div>
+                          <button
+                            onClick={() => assignGameToClass(g.id, normalizeNoteRunnerSettings(runnerAssignConfig))}
+                            disabled={assignBusy}
+                            style={primaryButtonStyle}
+                          >
+                            Assign {settingsLabel(normalizeNoteRunnerSettings(runnerAssignConfig))}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {g.generator === UP_OR_DOWN_GENERATOR && settingsOpenFor === g.id && (
+                      <div style={settingsPanelStyle}>
+                        <span style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.7 }}>
+                          An endless ear-training run at this level. Students can play as often as they like;
+                          their best run counts.
+                        </span>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                          {UP_OR_DOWN_LEVEL_KEYS.map((key) => {
+                            const on = key === upOrDownLevel;
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                aria-pressed={on}
+                                onClick={() => setUpOrDownLevel(key)}
+                                style={{
+                                  textAlign: "left",
+                                  padding: "0.5rem 0.75rem",
+                                  borderRadius: radius.iconSquare,
+                                  border: `2px solid ${on ? colors.blueText : colors.inputBorder}`,
+                                  background: on ? colors.blueBackground : colors.white,
+                                  color: colors.textPrimary,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <div style={{ fontWeight: 800, fontSize: "0.88rem" }}>{UP_OR_DOWN_LEVELS[key].label}</div>
+                                <div style={{ fontWeight: 600, fontSize: "0.75rem", opacity: 0.7 }}>
+                                  {UP_OR_DOWN_LEVELS[key].detail}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div>
+                          <button
+                            onClick={() => assignGameToClass(g.id, normalizeUpOrDownSettings({ level: upOrDownLevel }))}
+                            disabled={assignBusy}
+                            style={primaryButtonStyle}
+                          >
+                            Assign {UP_OR_DOWN_LEVELS[upOrDownLevel].label}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {g.generator === NOTE_READING_GENERATOR && settingsOpenFor === g.id && (
                       <div
                         style={{
                           flexBasis: "100%",
@@ -1578,7 +1671,7 @@ export default function ManageClassPage() {
                 <div style={{ fontWeight: 800 }}>
                   {a.game_id
                     ? `🎮 ${gameTitleMap.get(a.game_id) ?? "Unknown game"}${
-                        a.game_settings ? ` – ${configLabel(normalizeNoteReadingConfig(a.game_settings))}` : ""
+                        settingsLabel(a.game_settings) ? ` – ${settingsLabel(a.game_settings)}` : ""
                       }`
                     : a.lesson_id
                       ? (lessonTitleMap.get(a.lesson_id) ?? legacyLessonTitle(a.lesson_id))

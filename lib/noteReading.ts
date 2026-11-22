@@ -358,6 +358,8 @@ const LEVEL_SHORT: Record<NoteLevel, string> = { easy: "Easy", medium: "Medium",
 // Null for anything that isn't a Note Reading variant.
 export function variantLabel(variant: string | null | undefined): string | null {
   if (!variant) return null;
+  // Up or Down's variant is its level alone: "hard" → "Hard".
+  if (variant === "easy" || variant === "medium" || variant === "hard") return LEVEL_SHORT[variant];
   const [clef, level, extra] = variant.split("-");
   if (!(clef in CLEF_SHORT) || !(level in LEVEL_SHORT)) return null;
   return `${CLEF_SHORT[clef as ClefChoice]} ${LEVEL_SHORT[level as NoteLevel]}${extra === "accidentals" ? " ♯♭" : ""}`;
@@ -367,25 +369,40 @@ export function configLabel(config: NoteReadingConfig): string {
   return variantLabel(noteReadingVariant(config)) ?? "";
 }
 
-// An assignment's display title: "Note Reading – Treble Easy" when it carries
-// Note Reading settings (assignments.game_settings), else the game's title.
-// Used everywhere an assignment is listed (reports, analytics, parent page).
-export function assignmentTitle(gameTitle: string, gameSettings: unknown): string {
-  if (!gameSettings || typeof gameSettings !== "object") return gameTitle;
-  return `${gameTitle} – ${configLabel(normalizeNoteReadingConfig(gameSettings))}`;
+// The difficulty label of an assignment's saved settings
+// (assignments.game_settings): Note Reading and Note Runner use clef +
+// level ("treble-easy"); Up or Down ({ game: "up_or_down" }, see
+// lib/runnerGames.ts) uses its level alone ("hard"). Null without settings.
+export function settingsVariant(gameSettings: unknown): string | null {
+  if (!gameSettings || typeof gameSettings !== "object") return null;
+  const v = gameSettings as Record<string, unknown>;
+  if (v.game === "up_or_down") {
+    return v.level === "medium" || v.level === "hard" ? v.level : "easy";
+  }
+  return noteReadingVariant(normalizeNoteReadingConfig(gameSettings));
 }
 
-// A grouping key for "the same content": a game plus its Note Reading
-// settings, so Treble Easy and Mixed Hard assignments aren't merged.
+// "Treble Easy", "Hard"… for an assignment's settings ("" without any).
+export function settingsLabel(gameSettings: unknown): string {
+  return variantLabel(settingsVariant(gameSettings)) ?? "";
+}
+
+// An assignment's display title: "Note Reading – Treble Easy",
+// "Up or Down – Hard"… when it carries settings, else the game's title.
+// Used everywhere an assignment is listed (reports, analytics, parent page).
+export function assignmentTitle(gameTitle: string, gameSettings: unknown): string {
+  const label = settingsLabel(gameSettings);
+  return label ? `${gameTitle} – ${label}` : gameTitle;
+}
+
+// A grouping key for "the same content": a game plus its settings' level,
+// so Treble Easy and Mixed Hard assignments aren't merged.
 export function assignmentContentKey(a: {
   lesson_id: string | null;
   game_id: string | null;
   game_settings?: unknown;
 }): string {
   if (!a.game_id) return `lesson:${a.lesson_id}`;
-  const label =
-    a.game_settings && typeof a.game_settings === "object"
-      ? noteReadingVariant(normalizeNoteReadingConfig(a.game_settings))
-      : "";
+  const label = settingsVariant(a.game_settings);
   return label ? `game:${a.game_id}|${label}` : `game:${a.game_id}`;
 }
