@@ -8,7 +8,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import TeamBattleHost from "./TeamBattleHost";
-import { ExitButton, LeaveConfirm, TEACHER_HOME, useGameExit } from "@/components/GameExit";
+import { ExitButton, LeaveConfirm, PauseButton, TEACHER_HOME, useGameExit } from "@/components/GameExit";
 import NoteStaff from "@/components/NoteStaff";
 import NoteReadingSettings from "@/components/NoteReadingSettings";
 import {
@@ -826,21 +826,7 @@ export default function PlayGamePage() {
                   +15s
                 </button>
               )}
-              <button
-                onClick={() => setPaused((p) => !p)}
-                style={{
-                  fontSize: "0.85rem",
-                  fontWeight: 700,
-                  padding: "0.4rem 0.9rem",
-                  borderRadius: radius.pill,
-                  border: "none",
-                  background: "rgba(255,255,255,0.15)",
-                  color: colors.white,
-                  cursor: "pointer",
-                }}
-              >
-                {paused ? "▶ Resume" : "⏸ Pause"}
-              </button>
+              <PauseButton onClick={() => setPaused((p) => !p)} paused={paused} dark />
               {/* Danger-styled to match TeamBattleHost's Skip button (and
                   the "Delete" convention it's copied from) — the one
                   control here that discards the current question. */}

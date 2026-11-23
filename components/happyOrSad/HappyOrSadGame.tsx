@@ -12,7 +12,7 @@ import { VillageEngine } from "./VillageEngine";
 import { PiecePlayer } from "./player";
 import { signImage } from "./icons";
 import { usePianoSamples } from "@/lib/usePianoSamples";
-import { ExitButton, LeaveConfirm, useGameExit } from "@/components/GameExit";
+import { ExitButton, LeaveConfirm, PauseButton, useGameExit } from "@/components/GameExit";
 
 // Happy or Sad ("Weather Village"): a short piece plays; the child taps
 // ☀️ Sun (happy / major) or 🌧️ Cloud (sad / minor). Right: the village's
@@ -443,14 +443,7 @@ export default function HappyOrSadGame({
             </div>
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
               {phase === "playing" && (
-                <button
-                  type="button"
-                  onClick={pause}
-                  aria-label="Pause"
-                  style={{ ...hudPill, pointerEvents: "auto", cursor: "pointer", border: "none", fontSize: "1rem" }}
-                >
-                  ❚❚
-                </button>
+                <PauseButton onClick={pause} compact={compact} />
               )}
               <ExitButton onClick={exit.ask} compact={compact} />
             </div>

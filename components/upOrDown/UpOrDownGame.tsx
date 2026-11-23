@@ -24,7 +24,7 @@ import {
 import { detectQuality } from "@/components/noteRunner/quality";
 import { ForkEngine } from "./ForkEngine";
 import { usePianoSamples } from "@/lib/usePianoSamples";
-import { ExitButton, LeaveConfirm, useGameExit } from "@/components/GameExit";
+import { ExitButton, LeaveConfirm, PauseButton, useGameExit } from "@/components/GameExit";
 
 // One run of Up or Down: the 3D road (ForkEngine), the listening card, the
 // HUD and the controls. Ear only: no staff and no note names.
@@ -501,14 +501,7 @@ export default function UpOrDownGame({
             )}
           </div>
           {phase === "playing" && (
-            <button
-              type="button"
-              onClick={pause}
-              aria-label="Pause"
-              style={{ ...hudPill, pointerEvents: "auto", cursor: "pointer", border: "none", fontSize: "1rem" }}
-            >
-              ❚❚
-            </button>
+            <PauseButton onClick={pause} compact={compact} />
           )}
           <ExitButton onClick={exit.ask} compact={compact} />
         </div>

@@ -21,7 +21,7 @@ import { RunnerEngine } from "./RunnerEngine";
 import { detectQuality } from "./quality";
 import { RunnerMusic, loadMusicOn, saveMusicOn } from "./music";
 import { usePianoSamples } from "@/lib/usePianoSamples";
-import { ExitButton, LeaveConfirm, useGameExit } from "@/components/GameExit";
+import { ExitButton, LeaveConfirm, PauseButton, useGameExit } from "@/components/GameExit";
 
 // One Note Runner run: the 3D road (RunnerEngine), the note card, the HUD
 // and the controls. The whole run happens in the browser; `onRunEnd` gets
@@ -452,14 +452,7 @@ export default function NoteRunnerGame({
             {!compact && <span style={{ fontSize: "0.8rem" }}>{musicOn ? "Music on" : "Music off"}</span>}
           </button>
           {phase === "playing" && (
-            <button
-              type="button"
-              onClick={pause}
-              aria-label="Pause"
-              style={{ ...hudPill, pointerEvents: "auto", cursor: "pointer", border: "none", fontSize: "1rem" }}
-            >
-              ❚❚
-            </button>
+            <PauseButton onClick={pause} compact={compact} />
           )}
           <ExitButton onClick={exit.ask} compact={compact} />
         </div>

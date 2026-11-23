@@ -22,7 +22,7 @@ import { RotateDeviceOverlay, usePhonePortrait, useShortLandscape } from "@/comp
 import { PianoEngine } from "./PianoEngine";
 import { playKey } from "./sound";
 import { usePianoSamples } from "@/lib/usePianoSamples";
-import { ExitButton, LeaveConfirm, useGameExit } from "@/components/GameExit";
+import { ExitButton, LeaveConfirm, PauseButton, useGameExit } from "@/components/GameExit";
 
 // One Piano Hop game: the 3D keyboard (PianoEngine), the name card with
 // its countdown, the HUD and the controls. The card shows a note name;
@@ -489,14 +489,7 @@ export default function PianoHopGame({
             {!compact && <span style={{ fontSize: "0.8rem" }}>{musicOn ? "Music on" : "Music off"}</span>}
           </button>
           {phase === "playing" && (
-            <button
-              type="button"
-              onClick={pause}
-              aria-label="Pause"
-              style={{ ...hudPill, pointerEvents: "auto", cursor: "pointer", border: "none", fontSize: "1rem" }}
-            >
-              ❚❚
-            </button>
+            <PauseButton onClick={pause} compact={compact} />
           )}
           <ExitButton onClick={exit.ask} compact={compact} />
         </div>

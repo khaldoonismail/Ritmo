@@ -6,8 +6,9 @@ import { colors, radius, solidShadow } from "@/lib/theme";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 // The Exit button every game shows in its top bar while playing, the same
-// round ✕ in the same place (top right, after the pause button), and the
-// friendly "Leave the game?" confirm it opens.
+// round ✕ in the same place (top right, after the round pause button,
+// which is here too so the two always match), and the friendly "Leave the
+// game?" confirm it opens.
 //
 //   const exit = useGameExit({ pause, resume, inRun: () => phase is playing/paused });
 //   <ExitButton onClick={exit.ask} compact={compact} />
@@ -111,21 +112,41 @@ export function useGameExit(options: GameExitOptions = {}) {
   return { asking, askingRef, ask, stay, leave };
 }
 
-// The round ✕: 48 px (44 px in the compact phone layout), as big as a
-// child's fingertip, in the same white pill style as the pause button.
-export function ExitButton({
-  onClick,
-  compact = false,
-  dark = false,
-  style,
-}: {
+// The round top-bar buttons (✕ and pause): 48 px (44 px in the compact
+// phone layout), as big as a child's fingertip, white on the 3D games and
+// see-through on the dark/green quiz screens. Same look in every game.
+function roundStyle(compact: boolean, dark: boolean, style?: CSSProperties): CSSProperties {
+  const size = compact ? 44 : 48;
+  return {
+    width: size,
+    height: size,
+    flex: "0 0 auto",
+    borderRadius: "50%",
+    border: "none",
+    display: "grid",
+    placeItems: "center",
+    padding: 0,
+    cursor: "pointer",
+    pointerEvents: "auto",
+    fontSize: compact ? "1.15rem" : "1.3rem",
+    fontWeight: 900,
+    lineHeight: 1,
+    background: dark ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.92)",
+    color: dark ? colors.white : colors.textPrimary,
+    boxShadow: dark ? "none" : "0 3px 0 rgba(0,0,0,0.12)",
+    ...style,
+  };
+}
+
+type RoundProps = {
   onClick: () => void;
   compact?: boolean;
   // On a dark/green background (the quiz screens): a see-through button.
   dark?: boolean;
   style?: CSSProperties;
-}) {
-  const size = compact ? 44 : 48;
+};
+
+export function ExitButton({ onClick, compact = false, dark = false, style }: RoundProps) {
   return (
     <button
       type="button"
@@ -133,27 +154,29 @@ export function ExitButton({
       aria-label="Exit the game"
       title="Exit"
       data-game-exit=""
-      style={{
-        width: size,
-        height: size,
-        flex: "0 0 auto",
-        borderRadius: "50%",
-        border: "none",
-        display: "grid",
-        placeItems: "center",
-        padding: 0,
-        cursor: "pointer",
-        pointerEvents: "auto",
-        fontSize: compact ? "1.15rem" : "1.3rem",
-        fontWeight: 900,
-        lineHeight: 1,
-        background: dark ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.92)",
-        color: dark ? colors.white : colors.textPrimary,
-        boxShadow: dark ? "none" : "0 3px 0 rgba(0,0,0,0.12)",
-        ...style,
-      }}
+      style={roundStyle(compact, dark, style)}
     >
       <span aria-hidden="true">✕</span>
+    </button>
+  );
+}
+
+// Pause (two bars), or Resume (a triangle) when `paused` (the Note Reading quiz toggles
+// its pause with the same button).
+export function PauseButton({ onClick, compact = false, dark = false, style, paused = false }: RoundProps & { paused?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={paused ? "Resume" : "Pause"}
+      title={paused ? "Resume" : "Pause"}
+      style={roundStyle(compact, dark, style)}
+    >
+      {/* Drawn, not typed: a font's ❚❚ can merge into one block, and iOS
+          shows ▶ as a colour emoji. */}
+      <svg aria-hidden="true" width="0.95em" height="0.95em" viewBox="0 0 16 16" fill="currentColor" style={{ display: "block" }}>
+        {paused ? <path d="M4.5 2.5v11l9-5.5z" /> : <><rect x="3" y="2.5" width="3.6" height="11" rx="1" /><rect x="9.4" y="2.5" width="3.6" height="11" rx="1" /></>}
+      </svg>
     </button>
   );
 }
