@@ -23,6 +23,15 @@
 //     Perfect for that note, a bit late = Good; a tap on a rest, a note
 //     tapped twice, or a tap outside every window = a splash;
 //   * lily pads come in advance only in Practice, only on Easy;
+//   * custom rhythms: 3000 random choices of note values, rests and time
+//     signatures. Whether each can be played is worked out here by brute
+//     force (every way to fill a bar with the chosen figures, placed
+//     properly: long notes and beamed groups on a beat, a half rest on
+//     beat 1 or 3, never two eighth rests in one beat); the playable ones
+//     must give 8 patterns whose bars add up, beam right and split into
+//     only the chosen figures; the others must be blocked with a message
+//     (and suggested fixes must really fix it);
+//   * the presets' hand-made bars use only their preset's checkboxes;
 //   * stars and calibration maths.
 // Exits with code 1 and lists failures if anything is wrong.
 
@@ -42,6 +51,13 @@ import {
   windowsFor,
   judgeTap,
   padsAhead,
+  PRESET_CHOICES,
+  choiceProblem,
+  levelOfChoice,
+  makeCustomRound,
+  presetOf,
+  type RhythmChoice,
+  type ValueKey,
   type Pattern,
   type Rating,
   type RhythmLevel,
@@ -54,7 +70,76 @@ const fail = (msg: string) => {
 };
 
 // --- independent reference ------------------------------------------------------
-const BEATS: Record<string, number> = { q: 1, h: 2, e: 0.5, s: 0.25, dq: 1.5, qr: 1 };
+const BEATS: Record<string, number> = { w: 4, dh: 3, h: 2, dq: 1.5, q: 1, e: 0.5, s: 0.25, wr: 4, hr: 2, qr: 1, er: 0.5 };
+const RESTS = ["wr", "hr", "qr", "er"];
+const isRestT = (t: string) => RESTS.includes(t);
+
+// The custom figures, written out again here: tokens, rest or note, and
+// where each may start ("beat", "half" = any eighth, "even" = beat 1 or 3).
+const FIGURES: Record<ValueKey, { tokens: string[]; rest: boolean; start: "beat" | "half" | "even" }> = {
+  w: { tokens: ["w"], rest: false, start: "beat" },
+  dh: { tokens: ["dh"], rest: false, start: "beat" },
+  h: { tokens: ["h"], rest: false, start: "beat" },
+  dqe: { tokens: ["dq", "e"], rest: false, start: "beat" },
+  q: { tokens: ["q"], rest: false, start: "half" },
+  ee: { tokens: ["e", "e"], rest: false, start: "beat" },
+  e: { tokens: ["e"], rest: false, start: "half" },
+  ssss: { tokens: ["s", "s", "s", "s"], rest: false, start: "beat" },
+  ess: { tokens: ["e", "s", "s"], rest: false, start: "beat" },
+  sse: { tokens: ["s", "s", "e"], rest: false, start: "beat" },
+  wr: { tokens: ["wr"], rest: true, start: "beat" },
+  hr: { tokens: ["hr"], rest: true, start: "even" },
+  qr: { tokens: ["qr"], rest: true, start: "beat" },
+  er: { tokens: ["er"], rest: true, start: "half" },
+};
+const KEYS = Object.keys(FIGURES) as ValueKey[];
+// The words the game's messages use for each value (to check suggestions).
+const PLURAL_HERE: Record<string, string> = {
+  w: "whole notes", dh: "dotted halves", h: "half notes", dqe: "dotted quarter + eighth", q: "quarter notes",
+  ee: "eighth-note pairs", e: "single eighths", ssss: "four sixteenths", ess: "eighth + two sixteenths",
+  sse: "two sixteenths + eighth", wr: "whole rests", hr: "half rests", qr: "quarter rests", er: "eighth rests",
+};
+const figBeats = (k: ValueKey) => FIGURES[k].tokens.reduce((a, t) => a + BEATS[t], 0);
+const placeOk = (k: ValueKey, pos: number, prev: { key: ValueKey; pos: number } | null) => {
+  const f = FIGURES[k];
+  const onBeat = near(pos % 1, 0);
+  if (f.start === "beat" && !onBeat) return false;
+  if (f.start === "even" && !(near(pos, 0) || near(pos, 2))) return false;
+  // Two eighth rests in the same beat.
+  if (k === "er" && prev?.key === "er" && Math.floor(prev.pos + 1e-9) === Math.floor(pos + 1e-9)) return false;
+  return true;
+};
+
+// Can these tokens be split into the chosen figures, placed properly?
+// `must`: a value that has to be used at least once.
+function splitsInto(bar: string[], keys: ValueKey[], must?: ValueKey): boolean {
+  const go = (i: number, pos: number, prev: { key: ValueKey; pos: number } | null, used = false): boolean => {
+    if (i === bar.length) return !must || used;
+    return keys.some((k) => {
+      const t = FIGURES[k].tokens;
+      if (bar.slice(i, i + t.length).join() !== t.join()) return false;
+      if (!placeOk(k, pos, prev)) return false;
+      return go(i + t.length, pos + figBeats(k), { key: k, pos }, used || k === must);
+    });
+  };
+  return go(0, 0, null);
+}
+
+// Brute force: is there any bar of `meter` from these figures that starts
+// with a note? (Search every sequence; small enough at ≤ 16 eighths.)
+function playableBar(keys: ValueKey[], meter: number): boolean {
+  const go = (pos: number, prev: { key: ValueKey; pos: number } | null, first: boolean): boolean => {
+    if (near(pos, meter)) return true;
+    if (pos > meter + 1e-9) return false;
+    return keys.some((k) => {
+      if (first && FIGURES[k].rest) return false;
+      if (!placeOk(k, pos, prev)) return false;
+      if (pos + figBeats(k) > meter + 1e-9) return false;
+      return go(pos + figBeats(k), { key: k, pos }, false);
+    });
+  };
+  return go(0, null, true);
+}
 const ALLOWED: Record<RhythmLevel, string[]> = {
   easy: ["q", "qr"],
   medium: ["q", "qr", "e", "h"],
@@ -94,15 +179,20 @@ function expectedGroups(bar: string[]): { groups: number[][]; flags: Map<number,
   return { groups, flags };
 }
 
-function checkPattern(label: string, p: Pattern, level: RhythmLevel) {
-  if (!METERS[level].includes(p.meter)) fail(`${label}: ${p.meter}/4 not allowed on ${level}`);
+function checkPattern(label: string, p: Pattern, level: RhythmLevel, custom?: RhythmChoice) {
+  if (custom) {
+    if (!custom.meters.includes(p.meter)) fail(`${label}: ${p.meter}/4 not chosen`);
+    p.bars.forEach((bar, b) => {
+      if (!splitsInto(bar, custom.values)) fail(`${label}: bar ${b + 1} "${bar.join(" ")}" is not made of only the chosen values ${custom.values.join(",")}`);
+    });
+  } else if (!METERS[level].includes(p.meter)) fail(`${label}: ${p.meter}/4 not allowed on ${level}`);
   const layout = layoutPattern(p);
 
   // Bars add up; tokens allowed.
   p.bars.forEach((bar, b) => {
     const sum = bar.reduce((a, t) => a + BEATS[t], 0);
     if (!near(sum, p.meter)) fail(`${label} bar ${b + 1} "${bar.join(" ")}" adds up to ${sum}, not ${p.meter}`);
-    for (const t of bar) if (!ALLOWED[level].includes(t)) fail(`${label}: "${t}" not allowed on ${level}`);
+    if (!custom) for (const t of bar) if (!ALLOWED[level].includes(t)) fail(`${label}: "${t}" not allowed on ${level}`);
   });
   if (!near(layout.totalBeats, p.meter * p.bars.length)) fail(`${label}: total ${layout.totalBeats} beats`);
 
@@ -118,8 +208,9 @@ function checkPattern(label: string, p: Pattern, level: RhythmLevel) {
       if (el.token !== t) fail(`${label}: element ${offset + i} is ${el.token}, expected ${t}`);
       const wantFlags = flags.get(i) ?? 0;
       if (el.flags !== wantFlags) fail(`${label}: ${t} at bar position ${el.startInBar} has ${el.flags} flags, expected ${wantFlags}`);
-      if (el.hollow !== (t === "h")) fail(`${label}: ${t} hollow=${el.hollow}`);
-      if (el.dotted !== (t === "dq")) fail(`${label}: ${t} dotted=${el.dotted}`);
+      if (el.hollow !== ["h", "dh", "w"].includes(t)) fail(`${label}: ${t} hollow=${el.hollow}`);
+      if (el.dotted !== ["dq", "dh"].includes(t)) fail(`${label}: ${t} dotted=${el.dotted}`);
+      if (el.rest !== isRestT(t)) fail(`${label}: ${t} rest=${el.rest}`);
       if ((el.beam !== null) === (wantFlags > 0)) {
         if (el.beam !== null) fail(`${label}: ${t} is both beamed and flagged`);
       }
@@ -145,7 +236,7 @@ function checkPattern(label: string, p: Pattern, level: RhythmLevel) {
   for (const e of layout.elements) {
     const frac = Math.round((e.startInBar % 1) * 4);
     const want =
-      e.token === "qr" ? "Sh" : e.token === "h" ? "Ta-a" : e.token === "dq" ? "Ta-i" : e.token === "q" ? "Ta" : frac === 0 ? "Ti" : frac === 2 ? "ti" : "ka";
+      isRestT(e.token) ? "Sh" : e.token === "w" ? "Ta-a-a-a" : e.token === "dh" ? "Ta-a-a" : e.token === "h" ? "Ta-a" : e.token === "dq" ? "Ta-i" : e.token === "q" ? "Ta" : frac === 0 ? "Ti" : frac === 2 ? "ti" : "ka";
     if (e.syllable !== want) fail(`${label}: ${e.token} at ${e.startInBar} says "${e.syllable}", expected "${want}"`);
   }
 
@@ -155,12 +246,12 @@ function checkPattern(label: string, p: Pattern, level: RhythmLevel) {
     const spb = 60 / bpm;
     const pads = padsFor(layout, bpm);
     const flat = p.bars.flat();
-    const notes = flat.filter((t) => t !== "qr").length;
+    const notes = flat.filter((t) => !isRestT(t)).length;
     if (pads.length !== notes) fail(`${label} @${bpm}: ${pads.length} pads for ${notes} notes`);
     let t = 0;
     let k = 0;
     flat.forEach((tok, i) => {
-      if (tok !== "qr") {
+      if (!isRestT(tok)) {
         const pad = pads[k++];
         if (!pad || pad.element !== i) fail(`${label} @${bpm}: pad ${k - 1} belongs to element ${pad?.element}, expected ${i}`);
         else {
@@ -193,12 +284,12 @@ function checkPattern(label: string, p: Pattern, level: RhythmLevel) {
     let at = 0;
     flat.forEach((tok, i) => {
       const len = BEATS[tok] * spb;
-      if (tok === "qr") {
+      if (isRestT(tok)) {
         // Middle of a rest: a splash on that rest.
         const r = tap(at + len / 2);
         if (r.kind !== "splash" || r.rest !== i) fail(`${label} @${bpm}: tap on the rest ${i} gave ${JSON.stringify(r)}`);
       } else {
-        const k = flat.slice(0, i).filter((x) => x !== "qr").length;
+        const k = flat.slice(0, i).filter((x) => !isRestT(x)).length;
         const onTime = tap(at);
         if (onTime.kind !== "note" || onTime.pad !== k || onTime.rating !== "perfect") fail(`${label} @${bpm}: on-time tap on note ${i} gave ${JSON.stringify(onTime)}`);
         // The same note tapped again: a wrong tap, so a splash.
@@ -250,6 +341,83 @@ for (const level of ["easy", "medium", "hard"] as RhythmLevel[]) {
   }
 }
 
+// --- presets as checkboxes ----------------------------------------------------------
+for (const level of ["easy", "medium", "hard"] as RhythmLevel[]) {
+  const c = PRESET_CHOICES[level];
+  if (presetOf(c) !== level) fail(`${level}: its checkboxes aren't recognised as ${level}`);
+  if (JSON.stringify([...c.meters].sort()) !== JSON.stringify(METERS[level])) fail(`${level}: preset time signatures ${c.meters}`);
+  for (const m of LEVELS[level].meters)
+    for (const bar of LEVELS[level].bars[m]) if (!splitsInto(parseBar(bar), c.values)) fail(`${level}: hand-made bar "${bar}" uses a value not ticked in the preset`);
+  // Every ticked value is really used somewhere in the preset's bars.
+  for (const k of c.values) {
+    const used = LEVELS[level].meters.some((m) => LEVELS[level].bars[m].some((bar) => splitsInto(parseBar(bar), c.values, k)));
+    if (!used) fail(`${level}: "${k}" is ticked but no hand-made bar uses it`);
+  }
+}
+
+// --- custom choices ---------------------------------------------------------------
+{
+  let seed = 11;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  let playable = 0;
+  let blocked = 0;
+  const named: [RhythmChoice, boolean][] = [
+    [{ values: ["h"], meters: [3] }, false], // the example: only half notes in 3/4
+    [{ values: ["h"], meters: [2, 4] }, true],
+    [{ values: ["w"], meters: [4] }, true],
+    [{ values: ["w"], meters: [2] }, false],
+    [{ values: ["dh"], meters: [3] }, true],
+    [{ values: ["qr", "hr"], meters: [4] }, false], // rests only
+    [{ values: ["q"], meters: [] }, false],
+    [{ values: ["dqe"], meters: [3] }, false],
+    [{ values: ["dqe", "q"], meters: [3] }, true],
+    [{ values: ["e", "er"], meters: [2, 3, 4] }, true],
+    [{ values: ["ssss", "ess", "sse"], meters: [3] }, true],
+    [{ values: ["h", "hr"], meters: [3] }, false], // a half rest can't start on beat 2
+  ];
+  const checkChoice = (c: RhythmChoice, label: string, expect?: boolean) => {
+    const can = c.values.some((k) => !FIGURES[k].rest) && c.meters.length > 0 && c.meters.every((m) => playableBar(c.values, m));
+    if (expect !== undefined && can !== expect) fail(`${label}: the brute force says ${can}, expected ${expect}`);
+    const problem = choiceProblem(c);
+    const round = makeCustomRound(c, rnd);
+    if (!can) {
+      blocked++;
+      if (!problem) fail(`${label}: can't be played but isn't blocked`);
+      if (round.length) fail(`${label}: can't be played but made a round`);
+      // Suggested fixes must really fix the bar they're about.
+      const m = problem?.match(/bar of (\d)\/4/);
+      if (m) {
+        const meter = Number(m[1]);
+        if (playableBar(c.values, meter)) fail(`${label}: the message blames ${meter}/4, which works`);
+        for (const [k, word] of Object.entries(PLURAL_HERE)) {
+          if (problem!.includes(`Add`) && problem!.split("Add")[1].includes(word) && !playableBar([...c.values, k as ValueKey], meter))
+            fail(`${label}: suggests adding ${word}, which doesn't fix ${meter}/4`);
+        }
+      }
+      return;
+    }
+    playable++;
+    if (problem) fail(`${label}: can be played but is blocked: ${problem}`);
+    if (round.length !== PATTERNS_PER_ROUND) return fail(`${label}: round of ${round.length}`);
+    const lvl = levelOfChoice(c);
+    round.forEach((p, i) => {
+      const pl = `${label} #${i + 1} ${p.meter}/4 [${p.bars.map((b) => b.join(" ")).join(" | ")}]`;
+      if (p.bars.length !== 2) fail(`${pl}: ${p.bars.length} bars`);
+      if (isRestT(p.bars[0][0])) fail(`${pl}: starts with a rest`);
+      checkPattern(pl, p, lvl, c);
+    });
+  };
+  named.forEach(([c, ok]) => checkChoice(c, `custom ${c.values.join(",")} in ${c.meters.join(",") || "no"} meter`, ok));
+  for (let n = 0; n < 3000; n++) {
+    const values = KEYS.filter(() => rnd() < (n % 3 === 0 ? 0.15 : 0.35));
+    const meters = [2, 3, 4].filter(() => rnd() < 0.5);
+    if (!meters.length && n % 10) meters.push(2 + Math.floor(rnd() * 3));
+    checkChoice({ values, meters }, `custom ${values.join(",") || "(none)"} in ${meters.join(",") || "no"}/4`);
+  }
+  console.log(`  custom: ${playable} playable choices (8 patterns each checked), ${blocked} impossible ones blocked`);
+  if (playable < 500 || blocked < 300) fail(`too few of one kind: ${playable} playable, ${blocked} blocked`);
+}
+
 // Pads in advance: only in Practice, and Practice only on Easy.
 if (padsAhead("easy", false) || !padsAhead("easy", true) || padsAhead("medium", true) || padsAhead("hard", true)) fail("pads shown in advance outside Easy Practice");
 
@@ -266,4 +434,4 @@ if (failures) {
   console.error(`\n${failures} problem(s) found.`);
   process.exit(1);
 }
-console.log(`✓ ${patternsChecked} two-bar patterns × 3 tempos and 900 generated rounds: bars add up, beaming is right, pads match the note lengths exactly, taps and splashes are judged right.`);
+console.log(`✓ ${patternsChecked} two-bar patterns × 3 tempos and 900 generated rounds: bars add up, beaming is right, pads match the note lengths exactly, taps and splashes are judged right; custom choices fill bars with only the chosen values, impossible ones are blocked.`);

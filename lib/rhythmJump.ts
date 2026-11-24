@@ -9,11 +9,15 @@ export type RhythmLevel = "easy" | "medium" | "hard";
 export type RhythmMode = "read" | "echo";
 export type Tempo = "slow" | "normal" | "fast";
 
-// q quarter · h half · e eighth · s sixteenth · dq dotted quarter · qr quarter rest
-export type Token = "q" | "h" | "e" | "s" | "dq" | "qr";
+// w whole · dh dotted half · h half · dq dotted quarter · q quarter ·
+// e eighth · s sixteenth; rests: wr whole · hr half · qr quarter · er eighth
+export type Token = "w" | "dh" | "h" | "dq" | "q" | "e" | "s" | "wr" | "hr" | "qr" | "er";
 
-export const TOKEN_BEATS: Record<Token, number> = { q: 1, h: 2, e: 0.5, s: 0.25, dq: 1.5, qr: 1 };
-export const isRest = (t: Token) => t === "qr";
+export const TOKEN_BEATS: Record<Token, number> = { w: 4, dh: 3, h: 2, dq: 1.5, q: 1, e: 0.5, s: 0.25, wr: 4, hr: 2, qr: 1, er: 0.5 };
+export const isRest = (t: Token) => t === "qr" || t === "hr" || t === "wr" || t === "er";
+// Hollow note heads, dots, and notes with no stem.
+export const isHollow = (t: Token) => t === "h" || t === "dh" || t === "w";
+export const isDotted = (t: Token) => t === "dq" || t === "dh";
 
 export const LEVELS: Record<
   RhythmLevel,
@@ -142,8 +146,8 @@ export function layoutPattern(p: Pattern): Layout {
         beats,
         start,
         startInBar: inBar,
-        dotted: token === "dq",
-        hollow: token === "h",
+        dotted: isDotted(token),
+        hollow: isHollow(token),
         beam: null,
         flags: 0,
         syllable: syllableFor(token, inBar),
@@ -167,11 +171,14 @@ export function layoutPattern(p: Pattern): Layout {
   return { meter: p.meter, elements, beams, totalBeats: start };
 }
 
-// Rhythm syllables (Kodály style): Ta, Ti-ti, Ta-a, Ta-i, Ti-ka-ti-ka, Sh.
+// Rhythm syllables (Kodály style): Ta, Ti-ti, Ta-a, Ta-a-a, Ta-a-a-a,
+// Ta-i, Ti-ka-ti-ka, Sh (every rest).
 // A note on the beat starts with a capital ("Ti", "Ta"); off the beat it is
 // "ti" (on the "and") or "ka" (on a sixteenth in between).
 export function syllableFor(token: Token, startInBar: number): string {
-  if (token === "qr") return "Sh";
+  if (isRest(token)) return "Sh";
+  if (token === "w") return "Ta-a-a-a";
+  if (token === "dh") return "Ta-a-a";
   if (token === "h") return "Ta-a";
   if (token === "dq") return "Ta-i";
   const frac = Math.round((startInBar % 1) * 4); // sixteenth slot 0..3
@@ -322,6 +329,259 @@ export function makeRound(level: RhythmLevel, rnd: () => number = Math.random): 
     out.push(p);
   }
   return out;
+}
+
+// --- custom rhythms ---------------------------------------------------------------
+//
+// The teacher picks exactly which note values, rests and time signatures
+// appear. Each value is a figure of one or more tokens. Where a figure may
+// start in the bar keeps the notation proper:
+//   * "beat": only on a beat (halves, beamed groups, quarter rests, …);
+//   * "half": anywhere on an eighth (a single eighth, an eighth rest, and
+//     a quarter, which off the beat is a simple syncopation: e q e);
+//   * "even": a half rest only on beat 1 or 3.
+// Two eighth rests never share a beat (that is a quarter rest).
+
+export type NoteValueKey = "w" | "dh" | "h" | "dqe" | "q" | "ee" | "e" | "ssss" | "ess" | "sse";
+export type RestValueKey = "wr" | "hr" | "qr" | "er";
+export type ValueKey = NoteValueKey | RestValueKey;
+
+export interface RhythmValue {
+  key: ValueKey;
+  label: string;
+  rest: boolean;
+  tokens: Token[];
+  start: "beat" | "half" | "even";
+}
+
+export const NOTE_VALUES: RhythmValue[] = [
+  { key: "w", label: "Whole note", rest: false, tokens: ["w"], start: "beat" },
+  { key: "dh", label: "Dotted half", rest: false, tokens: ["dh"], start: "beat" },
+  { key: "h", label: "Half note", rest: false, tokens: ["h"], start: "beat" },
+  { key: "dqe", label: "Dotted quarter + eighth", rest: false, tokens: ["dq", "e"], start: "beat" },
+  { key: "q", label: "Quarter note", rest: false, tokens: ["q"], start: "half" },
+  { key: "ee", label: "Eighth-note pair", rest: false, tokens: ["e", "e"], start: "beat" },
+  { key: "e", label: "Single eighths", rest: false, tokens: ["e"], start: "half" },
+  { key: "ssss", label: "Four sixteenths", rest: false, tokens: ["s", "s", "s", "s"], start: "beat" },
+  { key: "ess", label: "Eighth + two sixteenths", rest: false, tokens: ["e", "s", "s"], start: "beat" },
+  { key: "sse", label: "Two sixteenths + eighth", rest: false, tokens: ["s", "s", "e"], start: "beat" },
+];
+export const REST_VALUES: RhythmValue[] = [
+  { key: "wr", label: "Whole rest", rest: true, tokens: ["wr"], start: "beat" },
+  { key: "hr", label: "Half rest", rest: true, tokens: ["hr"], start: "even" },
+  { key: "qr", label: "Quarter rest", rest: true, tokens: ["qr"], start: "beat" },
+  { key: "er", label: "Eighth rest", rest: true, tokens: ["er"], start: "half" },
+];
+export const ALL_VALUES: RhythmValue[] = [...NOTE_VALUES, ...REST_VALUES];
+export const VALUE_BY_KEY = Object.fromEntries(ALL_VALUES.map((v) => [v.key, v])) as Record<ValueKey, RhythmValue>;
+export const ALL_METERS = [2, 3, 4];
+export const valueBeats = (v: RhythmValue) => v.tokens.reduce((a, t) => a + TOKEN_BEATS[t], 0);
+
+// What the teacher chose (also what Stage 2 will save with homework).
+export interface RhythmChoice {
+  values: ValueKey[];
+  meters: number[];
+}
+
+// The presets as choices (their games use the hand-made bar lists above).
+export const PRESET_CHOICES: Record<RhythmLevel, RhythmChoice> = {
+  easy: { values: ["q", "qr"], meters: [4] },
+  medium: { values: ["h", "q", "ee", "qr"], meters: [2, 3, 4] },
+  hard: { values: ["h", "dqe", "q", "ee", "e", "ssss", "ess", "sse", "qr"], meters: [2, 3, 4] },
+};
+
+// Clean up a choice: known values and meters only, in a fixed order.
+export function normalizeChoice(c: { values?: unknown; meters?: unknown }): RhythmChoice {
+  const vs = Array.isArray(c.values) ? c.values : [];
+  const ms = Array.isArray(c.meters) ? c.meters : [];
+  return {
+    values: ALL_VALUES.map((v) => v.key).filter((k) => vs.includes(k)),
+    meters: ALL_METERS.filter((m) => ms.includes(m)),
+  };
+}
+
+const sameChoice = (a: RhythmChoice, b: RhythmChoice) => {
+  const x = normalizeChoice(a);
+  const y = normalizeChoice(b);
+  return x.values.join() === y.values.join() && x.meters.join() === y.meters.join();
+};
+
+// The preset a choice is exactly, or null (custom).
+export function presetOf(c: RhythmChoice): RhythmLevel | null {
+  return (["easy", "medium", "hard"] as RhythmLevel[]).find((l) => sameChoice(c, PRESET_CHOICES[l])) ?? null;
+}
+
+// How fast and how forgiving a custom choice plays: like Hard with any
+// sixteenths, dotted rhythms, single eighths or eighth rests; like Medium
+// with eighth pairs, long notes or long rests, or not only 4/4; else Easy.
+export function levelOfChoice(c: RhythmChoice): RhythmLevel {
+  const p = presetOf(c);
+  if (p) return p;
+  const has = (...k: ValueKey[]) => k.some((x) => c.values.includes(x));
+  if (has("dqe", "ssss", "ess", "sse", "e", "er")) return "hard";
+  if (has("ee", "h", "dh", "w", "hr", "wr") || c.meters.some((m) => m !== 4)) return "medium";
+  return "easy";
+}
+
+// Filling bars. Positions are in eighths (half beats) from the bar start.
+function canStartAt(v: RhythmValue, pos: number, lastErOnBeat: boolean): boolean {
+  if (v.start === "beat" && pos % 2 !== 0) return false;
+  if (v.start === "even" && pos % 4 !== 0) return false;
+  if (v.key === "er" && lastErOnBeat) return false;
+  return true;
+}
+
+// Can the rest of a bar (from `pos`, in eighths, of `meter` beats) be
+// filled with these values? Memoised per call.
+function filler(values: RhythmValue[], meter: number) {
+  const end = meter * 2;
+  const memo = new Map<string, boolean>();
+  const fits = (v: RhythmValue, pos: number, lastEr: boolean) => canStartAt(v, pos, lastEr) && pos + valueBeats(v) * 2 <= end + 1e-9;
+  const after = (v: RhythmValue, pos: number) => ({ pos: pos + Math.round(valueBeats(v) * 2), lastEr: v.key === "er" && pos % 2 === 0 });
+  const can = (pos: number, lastEr: boolean): boolean => {
+    if (pos === end) return true;
+    const k = `${pos}|${lastEr}`;
+    const got = memo.get(k);
+    if (got !== undefined) return got;
+    let ok = false;
+    for (const v of values) {
+      if (!fits(v, pos, lastEr)) continue;
+      const n = after(v, pos);
+      if (can(n.pos, n.lastEr)) {
+        ok = true;
+        break;
+      }
+    }
+    memo.set(k, ok);
+    return ok;
+  };
+  return { can, fits, after, end };
+}
+
+// Can a bar of `meter` be filled starting with a note? (A pattern starts
+// on a note, so this is what a meter needs to be playable.)
+export function canFillBar(values: ValueKey[], meter: number): boolean {
+  const vs = values.map((k) => VALUE_BY_KEY[k]);
+  const f = filler(vs, meter);
+  return vs.some((v) => !v.rest && f.fits(v, 0, false) && f.can(f.after(v, 0).pos, false));
+}
+
+const PLURAL: Record<ValueKey, string> = {
+  w: "whole notes",
+  dh: "dotted halves",
+  h: "half notes",
+  dqe: "dotted quarter + eighth",
+  q: "quarter notes",
+  ee: "eighth-note pairs",
+  e: "single eighths",
+  ssss: "four sixteenths",
+  ess: "eighth + two sixteenths",
+  sse: "two sixteenths + eighth",
+  wr: "whole rests",
+  hr: "half rests",
+  qr: "quarter rests",
+  er: "eighth rests",
+};
+// Which value to suggest first when a bar can't be filled (simplest first).
+const SUGGEST_ORDER: ValueKey[] = ["q", "qr", "ee", "h", "e", "er", "dh", "hr", "dqe", "ssss", "ess", "sse", "w", "wr"];
+const joinWith = (xs: string[], word: string) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} ${word} ${xs[xs.length - 1]}`);
+
+// A friendly reason a choice can't be played, or null if it can. E.g.
+// "Only half notes can't fill a bar of 3/4. Add quarter notes, quarter
+// rests or dotted halves, or untick 3/4."
+export function choiceProblem(c: RhythmChoice): string | null {
+  const notes = c.values.filter((k) => !VALUE_BY_KEY[k].rest);
+  if (notes.length === 0) return "Choose at least one note value: rests alone have nothing to tap.";
+  if (c.meters.length === 0) return "Choose at least one time signature.";
+  for (const m of c.meters) {
+    if (canFillBar(c.values, m)) continue;
+    const fixes = SUGGEST_ORDER.filter((k) => !c.values.includes(k) && canFillBar([...c.values, k], m)).slice(0, 3);
+    const only = `Only ${joinWith(c.values.map((k) => PLURAL[k]), "and")} can't fill a bar of ${m}/4.`;
+    const others = c.meters.length > 1 ? `, or untick ${m}/4` : "";
+    if (fixes.length === 0) return `${only} Untick ${m}/4.`;
+    return `${only} Add ${joinWith(fixes.map((k) => PLURAL[k]), "or")}${others}.`;
+  }
+  return null;
+}
+
+// One bar: random values that fit, never into a dead end. `firstNote`:
+// the bar must start with a note. Rests are chosen a little less often.
+export function fillBar(values: ValueKey[], meter: number, rnd: () => number, firstNote: boolean): Token[] | null {
+  const vs = values.map((k) => VALUE_BY_KEY[k]);
+  const f = filler(vs, meter);
+  const out: Token[] = [];
+  let pos = 0;
+  let lastEr = false;
+  while (pos < f.end) {
+    const options = vs.filter((v) => {
+      if (pos === 0 && firstNote && v.rest) return false;
+      if (!f.fits(v, pos, lastEr)) return false;
+      const n = f.after(v, pos);
+      return f.can(n.pos, n.lastEr);
+    });
+    if (options.length === 0) return null;
+    const weights = options.map((v) => (v.rest ? 0.6 : 1));
+    let r = rnd() * weights.reduce((a, b) => a + b, 0);
+    let pickV = options[options.length - 1];
+    for (let i = 0; i < options.length; i++) {
+      r -= weights[i];
+      if (r < 0) {
+        pickV = options[i];
+        break;
+      }
+    }
+    out.push(...pickV.tokens);
+    const n = f.after(pickV, pos);
+    pos = n.pos;
+    lastEr = n.lastEr;
+  }
+  return out;
+}
+
+// 8 two-bar patterns from a custom choice: each starts with a note and has
+// a note in its second bar; no two in a row the same (unless the choice
+// allows only one pattern, e.g. only whole notes). [] if it can't be played.
+export function makeCustomRound(c: RhythmChoice, rnd: () => number = Math.random): Pattern[] {
+  if (choiceProblem(c)) return [];
+  const out: Pattern[] = [];
+  let tries = 0;
+  while (out.length < PATTERNS_PER_ROUND) {
+    tries++;
+    const meter = pick(c.meters, rnd);
+    const a = fillBar(c.values, meter, rnd, true);
+    const b = fillBar(c.values, meter, rnd, false);
+    if (!a || !b) continue;
+    if (!hasNote(b) && tries < 400) continue;
+    const p: Pattern = { meter, bars: [a, b] };
+    const prev = out[out.length - 1];
+    if (prev && JSON.stringify(prev) === JSON.stringify(p) && tries < 400) continue;
+    out.push(p);
+  }
+  return out;
+}
+
+// The choice, remembered on this device.
+const CHOICE_KEY = "ritmo.rhythmJump.rhythms";
+
+export function loadChoice(): { selected: RhythmLevel | "custom"; choice: RhythmChoice } | null {
+  try {
+    const raw = localStorage.getItem(CHOICE_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as { selected?: unknown; values?: unknown; meters?: unknown };
+    const choice = normalizeChoice(v);
+    const selected = v.selected === "easy" || v.selected === "medium" || v.selected === "hard" || v.selected === "custom" ? v.selected : presetOf(choice) ?? "custom";
+    return { selected, choice };
+  } catch {
+    return null;
+  }
+}
+
+export function saveChoice(selected: RhythmLevel | "custom", choice: RhythmChoice): void {
+  try {
+    localStorage.setItem(CHOICE_KEY, JSON.stringify({ selected, ...normalizeChoice(choice) }));
+  } catch {
+    // blocked storage: it lasts for this visit only
+  }
 }
 
 // --- device delay (calibration) --------------------------------------------------

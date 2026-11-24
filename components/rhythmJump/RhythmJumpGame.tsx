@@ -15,6 +15,7 @@ import {
   accuracy,
   bpmFor,
   layoutPattern,
+  makeCustomRound,
   makeRound,
   judgeTap,
   padsAhead,
@@ -25,6 +26,7 @@ import {
   type Pad,
   type Pattern,
   type Rating,
+  type RhythmChoice,
   type RhythmLevel,
   type RhythmMode,
   type Tempo,
@@ -84,6 +86,7 @@ const RATING_TEXT: Record<Rating, { text: string; color: string }> = {
 
 export default function RhythmJumpGame({
   level,
+  custom = null,
   mode,
   tempo,
   syllables,
@@ -93,7 +96,10 @@ export default function RhythmJumpGame({
   autoStart = false,
   onChangeSettings,
 }: {
+  // How fast and forgiving it plays (a custom choice's nearest level).
   level: RhythmLevel;
+  // The teacher's own rhythm choice; null = the level's own patterns.
+  custom?: RhythmChoice | null;
   mode: RhythmMode;
   tempo: Tempo;
   syllables: boolean;
@@ -110,6 +116,8 @@ export default function RhythmJumpGame({
   const bpm = bpmFor(level, tempo);
   const echo = mode === "echo";
   const ahead = padsAhead(level, practice);
+  const levelLabel = custom ? "Custom" : LEVELS[level].label;
+  const newRound = () => (custom ? makeCustomRound(custom) : makeRound(level));
 
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -122,7 +130,7 @@ export default function RhythmJumpGame({
     setPhaseState(p);
   };
 
-  const [round, setRound] = useState<Pattern[]>(() => makeRound(level));
+  const [round, setRound] = useState<Pattern[]>(newRound);
   const roundRef = useRef(round);
   roundRef.current = round;
   const [index, setIndex] = useState(0);
@@ -337,14 +345,15 @@ export default function RhythmJumpGame({
   // --- start / pause / resume ------------------------------------------------
   const startRound = useCallback(() => {
     unlockNoteAudio();
-    const fresh = makeRound(level);
+    const fresh = newRound();
     roundRef.current = fresh;
     setRound(fresh);
     totalsRef.current = { ratings: [], splashes: 0 };
     setTotals(totalsRef.current);
     setPhase("playing");
     startPattern(0);
-  }, [level, startPattern]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [level, custom, startPattern]);
 
   const pause = useCallback(() => {
     if (phaseRef.current !== "playing") return;
@@ -605,7 +614,7 @@ export default function RhythmJumpGame({
           </span>
           {!compact && (
             <span style={{ fontSize: "0.72rem", fontWeight: 800, opacity: 0.6 }}>
-              {MODE_LABELS[mode]} · {LEVELS[level].label}
+              {MODE_LABELS[mode]} · {levelLabel}
               {ahead ? " · Practice" : ""}
             </span>
           )}
@@ -699,7 +708,7 @@ export default function RhythmJumpGame({
               <>
                 <h1 style={{ margin: 0, fontSize: "1.7rem", fontWeight: 900 }}>🐸 Rhythm Jump</h1>
                 <p style={{ margin: 0, fontWeight: 700, opacity: 0.7 }}>
-                  {MODE_LABELS[mode]} · {LEVELS[level].label}{ahead ? " · Practice" : ""} · {bpm} BPM
+                  {MODE_LABELS[mode]} · {levelLabel}{ahead ? " · Practice" : ""} · {bpm} BPM
                 </p>
                 <button type="button" onClick={startRound} style={primaryButton}>
                   Start
