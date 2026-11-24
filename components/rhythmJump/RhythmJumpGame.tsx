@@ -16,8 +16,9 @@ import {
   bpmFor,
   layoutPattern,
   makeRound,
+  judgeTap,
+  padsAhead,
   padsFor,
-  rate,
   starsFor,
   windowsFor,
   type Layout,
@@ -33,11 +34,15 @@ import { Notation } from "./Notation";
 import { LilyPad, PondScenery, Ripple, Splash } from "./Pond";
 
 // One round of Rhythm Jump: 8 rhythm patterns. Each pattern gets a bar of
-// count-in on the metronome, then the child taps each note (screen or
-// Space) as its lily pad reaches the dashed ring. In Listen & Echo the
-// rhythm is played once first with no notation, then tapped back; its pads
-// only appear as each note is tapped (or missed), and the notation is
-// shown afterwards.
+// count-in on the metronome (Read & Tap shows the notation then, to read it
+// before starting), then the child taps each note (screen or Space). The
+// pond doesn't give the rhythm away: a lily pad only pops up under the
+// character when a note is tapped on time (a missed note's pad floats by
+// grey); a tap on a rest or a wrong tap is a splash. In Read & Tap the
+// playing note is orange in the notation. In Listen & Echo the rhythm is
+// played once first with no notation, then tapped back, and the notation
+// is shown afterwards. Practice (Easy only) shows the pads coming in
+// advance, reaching a dashed ring, for absolute beginners.
 //
 // Timing: every sound is scheduled on the audio clock when the pattern
 // starts (./beat.ts), and taps are judged against that same clock using
@@ -82,6 +87,7 @@ export default function RhythmJumpGame({
   mode,
   tempo,
   syllables,
+  practice = false,
   delayMs,
   character = DEFAULT_CHARACTER,
   autoStart = false,
@@ -91,6 +97,8 @@ export default function RhythmJumpGame({
   mode: RhythmMode;
   tempo: Tempo;
   syllables: boolean;
+  // Practice: lily pads shown in advance (Easy only).
+  practice?: boolean;
   // This device's measured delay (calibration), in ms.
   delayMs: number;
   character?: CharacterChoice;
@@ -101,6 +109,7 @@ export default function RhythmJumpGame({
   const phonePortrait = usePhonePortrait();
   const bpm = bpmFor(level, tempo);
   const echo = mode === "echo";
+  const ahead = padsAhead(level, practice);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -302,39 +311,25 @@ export default function RhythmJumpGame({
       const c = getAudioContext();
       if (!r || !c || r.finished) return;
       const t = tapTime(c, timeStamp, delayMs);
-      if (t < r.countStart - 0.05) return; // still listening (Echo)
-      const rel = t - r.t0;
-      let best = -1;
-      let bestD = Infinity;
-      r.pads.forEach((p, i) => {
-        if (r.results[i] !== null) return;
-        const d = rel - p.time;
-        if (Math.abs(d) <= r.wins[i].good && Math.abs(d) < Math.abs(bestD)) {
-          best = i;
-          bestD = d;
-        }
-      });
-      if (best >= 0) {
-        const rating = rate(bestD, r.wins[best]);
-        r.results[best] = rating;
-        const i = best;
+      const res = judgeTap(t - r.t0, r.layout, r.pads, r.wins, r.results, r.spb);
+      if (res.kind === "ignore") return; // count-in, listening, or after the end
+      if (res.kind === "note") {
+        const { pad: i, rating, offset } = res;
+        r.results[i] = rating;
         setPadStates((ps) => ps.map((x, j) => (j === i ? "hit" : x)));
         setPinned(i);
         setReaction({ state: "hop", key: nextKey() });
-        const label = rating === "good" ? `Good · a bit ${bestD < 0 ? "early" : "late"}` : RATING_TEXT[rating].text;
+        const label = rating === "good" ? `Good · a bit ${offset < 0 ? "early" : "late"}` : RATING_TEXT[rating].text;
         setBubble({ text: label, color: RATING_TEXT[rating].color, key: nextKey() });
         playTapSound(rating === "perfect" ? "perfect" : "good");
         return;
       }
-      // A tap where a rest is: splash!
-      const rest = r.layout.elements.find((e) => e.rest && rel >= e.start * r.spb - 0.06 && rel < (e.start + e.beats) * r.spb - 0.06);
-      if (rest) {
-        r.splashes++;
-        setSplashAt({ element: rest.index, key: nextKey() });
-        setReaction({ state: "shrug", key: nextKey() });
-        setBubble({ text: "Splash! That's a rest", color: "#3E95C6", key: nextKey() });
-        playTapSound("splash");
-      }
+      // A tap on a rest, or where no note is: splash!
+      r.splashes++;
+      setSplashAt({ element: res.rest ?? -1, key: nextKey() });
+      setReaction({ state: "shrug", key: nextKey() });
+      setBubble({ text: res.rest !== null ? "Splash! That's a rest" : "Splash! No note there", color: "#3E95C6", key: nextKey() });
+      playTapSound("splash");
     },
     [delayMs]
   );
@@ -440,7 +435,8 @@ export default function RhythmJumpGame({
   const pads = run && run.index === index ? run.pads : padsFor(layout, bpm);
   const padW = (beats: number) => beatPx * Math.min(beats <= 0.25 ? 0.2 : beats <= 0.5 ? 0.44 : beats < 1.5 ? 0.72 : beats < 2 ? 0.86 : 1.0, 0.9 * beats + 0.1);
   const charW = Math.min(size.h * (compact ? 0.24 : 0.21), size.w * 0.28);
-  const showPads = !echo || step === "between";
+  // Pads in advance only in Practice; otherwise once the pattern is over.
+  const showPads = ahead || step === "between";
   const notationVisible = !echo || step === "between";
   const counted = step === "countin" ? beatInBar + 1 : 0;
 
@@ -468,8 +464,8 @@ export default function RhythmJumpGame({
       `}</style>
       <PondScenery waterTop={waterTop} />
 
-      {/* The dashed ring: tap when a pad reaches it. */}
-      <div
+      {/* Practice: the dashed ring (tap when a pad reaches it). */}
+      {ahead && <div
         aria-hidden="true"
         style={{
           position: "absolute",
@@ -481,7 +477,7 @@ export default function RhythmJumpGame({
           borderRadius: "50%",
           border: "3px dashed rgba(255,255,255,0.8)",
         }}
-      />
+      />}
 
       {/* Pads and rests, moving with the beat. */}
       <div ref={scrollRef} style={{ position: "absolute", left: 0, top: `${padLine}%`, width: 0, height: 0, willChange: "transform" }}>
@@ -527,7 +523,7 @@ export default function RhythmJumpGame({
           top: `${padLine}%`,
           width: pinned >= 0 ? padW(pads[pinned]?.beats ?? 1) : beatPx * 0.72,
           transform: "translate(-50%, -50%)",
-          animation: pinned >= 0 && echo ? "rj-pop 0.25s ease-out" : undefined,
+          animation: pinned >= 0 && !ahead ? "rj-pop 0.25s ease-out" : undefined,
         }}
       >
         <LilyPad glow={pinned >= 0} flower={pinned >= 0 && (pads[pinned]?.beats ?? 0) >= 2} />
@@ -610,6 +606,7 @@ export default function RhythmJumpGame({
           {!compact && (
             <span style={{ fontSize: "0.72rem", fontWeight: 800, opacity: 0.6 }}>
               {MODE_LABELS[mode]} · {LEVELS[level].label}
+              {ahead ? " · Practice" : ""}
             </span>
           )}
         </div>
@@ -666,6 +663,7 @@ export default function RhythmJumpGame({
             </div>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {counted > 0 && !echo && !compact && <span style={{ fontWeight: 800, fontSize: "0.9rem", opacity: 0.65 }}>Read it… get ready</span>}
             {counted > 0 && <span style={{ fontWeight: 900, color: "#F28C28", fontSize: compact ? "0.95rem" : "1.05rem", minWidth: "1.2em" }}>{counted}</span>}
             {/* Phones: no dots beside the notation (it needs the width). */}
             {!(compact && notationVisible) && <BeatDots beat={step === "between" ? -1 : beatInBar} total={layout.meter} size={compact ? 9 : 12} />}
@@ -689,7 +687,7 @@ export default function RhythmJumpGame({
             whiteSpace: "nowrap",
           }}
         >
-          👆 {step === "listen" ? "Listen first, then tap it back" : "Tap anywhere on each note · Space on a keyboard"}
+          👆 {step === "listen" ? "Listen first, then tap it back" : echo ? "Tap anywhere on each note · Space on a keyboard" : "Read the notes and tap each one · Space on a keyboard"}
         </div>
       )}
 
@@ -701,7 +699,7 @@ export default function RhythmJumpGame({
               <>
                 <h1 style={{ margin: 0, fontSize: "1.7rem", fontWeight: 900 }}>🐸 Rhythm Jump</h1>
                 <p style={{ margin: 0, fontWeight: 700, opacity: 0.7 }}>
-                  {MODE_LABELS[mode]} · {LEVELS[level].label} · {bpm} BPM
+                  {MODE_LABELS[mode]} · {LEVELS[level].label}{ahead ? " · Practice" : ""} · {bpm} BPM
                 </p>
                 <button type="button" onClick={startRound} style={primaryButton}>
                   Start

@@ -49,6 +49,8 @@ export default function RhythmJumpPage() {
   const [mode, setMode] = useState<RhythmMode>("read");
   const [tempo, setTempo] = useState<Tempo>("normal");
   const [syllables, setSyllables] = useState(true);
+  // Practice (Easy only, off by default): lily pads shown in advance.
+  const [practice, setPractice] = useState(false);
   const [screen, setScreen] = useState<Screen>("settings");
   // After calibrating: play, or back to the settings (Re-calibrate).
   const [afterCalibrate, setAfterCalibrate] = useState<"game" | "settings">("game");
@@ -88,6 +90,7 @@ export default function RhythmJumpPage() {
         mode={mode}
         tempo={tempo}
         syllables={syllables}
+        practice={practice && level === "easy"}
         delayMs={delayMs ?? 0}
         character={runner}
         autoStart
@@ -156,8 +159,8 @@ export default function RhythmJumpPage() {
           <div style={{ fontSize: "3rem", lineHeight: 1 }}>🐸🥁</div>
           <h1 style={{ margin: "0.4rem 0 0.2rem", fontSize: "2rem", fontWeight: 900 }}>Rhythm Jump</h1>
           <p style={{ margin: 0, fontWeight: 600, opacity: 0.75, lineHeight: 1.45 }}>
-            Hop across the pond in time! Tap on every note as its lily pad reaches you. Rests are water, so
-            don&apos;t tap there. 8 rhythms a round, up to 3 stars.
+            Hop across the pond in time! Read the rhythm and tap on every note: a lily pad pops up under you
+            when you&apos;re on time. Rests are water, so don&apos;t tap there. 8 rhythms a round, up to 3 stars.
           </p>
         </div>
 
@@ -226,6 +229,20 @@ export default function RhythmJumpPage() {
             </span>
           </label>
         </section>
+
+        {level === "easy" && (
+          <section style={card}>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.75rem", cursor: "pointer" }}>
+              <input type="checkbox" checked={practice} onChange={(e) => setPractice(e.target.checked)} style={{ width: 24, height: 24, accentColor: colors.blueText }} />
+              <span>
+                <span style={{ fontWeight: 900 }}>Practice</span>
+                <span style={{ display: "block", fontWeight: 600, fontSize: "0.85rem", opacity: 0.7 }}>
+                  Show the lily pads coming, so you can see when to tap (for absolute beginners)
+                </span>
+              </span>
+            </label>
+          </section>
+        )}
 
         <RunnerCard runner={runner} onChange={() => setPicking("change")} />
 

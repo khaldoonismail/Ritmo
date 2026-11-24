@@ -19,6 +19,10 @@
 //     windows never let one tap count for two notes;
 //   * 300 generated rounds per level: 8 patterns, 2 bars, start on a note,
 //     use the level's new figures;
+//   * taps: nothing in the count-in or after the end; on time on a note =
+//     Perfect for that note, a bit late = Good; a tap on a rest, a note
+//     tapped twice, or a tap outside every window = a splash;
+//   * lily pads come in advance only in Practice, only on Easy;
 //   * stars and calibration maths.
 // Exits with code 1 and lists failures if anything is wrong.
 
@@ -36,7 +40,10 @@ import {
   starsFor,
   accuracy,
   windowsFor,
+  judgeTap,
+  padsAhead,
   type Pattern,
+  type Rating,
   type RhythmLevel,
 } from "../lib/rhythmJump";
 
@@ -176,6 +183,35 @@ function checkPattern(label: string, p: Pattern, level: RhythmLevel) {
       if (!(w.perfect > 0 && w.perfect < w.good)) fail(`${label} @${bpm}: window ${i} perfect ${w.perfect} / good ${w.good}`);
       if (rate(0, w) !== "perfect" || rate(w.good * 0.99, w) !== "good" || rate(w.good * 1.01, w) !== "miss") fail(`${label}: ratings wrong at window ${i}`);
     });
+
+    // Taps (times worked out from the tokens here, not from the pads).
+    const total = flat.reduce((a, x) => a + BEATS[x], 0) * spb;
+    const none = pads.map(() => null);
+    const tap = (rel: number, results: (Rating | null)[] = none) => judgeTap(rel, layout, pads, wins, results, spb);
+    if (tap(-p.meter * spb * 0.5).kind !== "ignore") fail(`${label} @${bpm}: a tap in the count-in should do nothing`);
+    if (tap(total + 0.5).kind !== "ignore") fail(`${label} @${bpm}: a tap after the end should do nothing`);
+    let at = 0;
+    flat.forEach((tok, i) => {
+      const len = BEATS[tok] * spb;
+      if (tok === "qr") {
+        // Middle of a rest: a splash on that rest.
+        const r = tap(at + len / 2);
+        if (r.kind !== "splash" || r.rest !== i) fail(`${label} @${bpm}: tap on the rest ${i} gave ${JSON.stringify(r)}`);
+      } else {
+        const k = flat.slice(0, i).filter((x) => x !== "qr").length;
+        const onTime = tap(at);
+        if (onTime.kind !== "note" || onTime.pad !== k || onTime.rating !== "perfect") fail(`${label} @${bpm}: on-time tap on note ${i} gave ${JSON.stringify(onTime)}`);
+        // The same note tapped again: a wrong tap, so a splash.
+        const done = none.map((_, j) => (j === k ? "perfect" : null)) as (Rating | null)[];
+        if (tap(at, done).kind !== "splash") fail(`${label} @${bpm}: tapping note ${i} twice should splash`);
+        // Just outside its window (and every other note's): a splash.
+        if (tap(at + wins[k].good * 1.05).kind !== "splash") fail(`${label} @${bpm}: a late tap after note ${i}'s window should splash`);
+        // A little late but in the window: "good", for that note.
+        const late = tap(at + (wins[k].perfect + wins[k].good) / 2);
+        if (late.kind !== "note" || late.pad !== k || late.rating !== "good") fail(`${label} @${bpm}: a slightly late tap on note ${i} gave ${JSON.stringify(late)}`);
+      }
+      at += len;
+    });
   }
 }
 
@@ -214,6 +250,9 @@ for (const level of ["easy", "medium", "hard"] as RhythmLevel[]) {
   }
 }
 
+// Pads in advance: only in Practice, and Practice only on Easy.
+if (padsAhead("easy", false) || !padsAhead("easy", true) || padsAhead("medium", true) || padsAhead("hard", true)) fail("pads shown in advance outside Easy Practice");
+
 // Stars and calibration.
 if (starsFor(1) !== 3 || starsFor(0.85) !== 3 || starsFor(0.84) !== 2 || starsFor(0.6) !== 2 || starsFor(0.59) !== 1 || starsFor(0) !== 1) fail("star thresholds");
 if (!near(accuracy(["perfect", "good", "miss"], 0), 1.6 / 3)) fail("accuracy maths");
@@ -227,4 +266,4 @@ if (failures) {
   console.error(`\n${failures} problem(s) found.`);
   process.exit(1);
 }
-console.log(`✓ ${patternsChecked} two-bar patterns × 3 tempos and 900 generated rounds: bars add up, beaming is right, pads match the note lengths exactly.`);
+console.log(`✓ ${patternsChecked} two-bar patterns × 3 tempos and 900 generated rounds: bars add up, beaming is right, pads match the note lengths exactly, taps and splashes are judged right.`);

@@ -224,8 +224,53 @@ export function rate(offsetSeconds: number, win: { perfect: number; good: number
   return "miss";
 }
 
+// What a tap does. `rel` = the tap's time from the pattern's first beat
+// (seconds, device delay already taken off); `results` = each note's
+// rating so far (null = not judged yet).
+//   * before the pattern (the count-in) or after it: nothing;
+//   * within an unjudged note's window: that note (the nearest one);
+//   * anywhere else — a rest, too early or late for any note, or a note
+//     already tapped: a splash. `rest` = the rest's element when the tap
+//     fell on one.
+export type TapResult =
+  | { kind: "ignore" }
+  | { kind: "note"; pad: number; offset: number; rating: Rating }
+  | { kind: "splash"; rest: number | null };
+
+export function judgeTap(
+  rel: number,
+  layout: Layout,
+  pads: Pad[],
+  wins: { perfect: number; good: number }[],
+  results: (Rating | null)[],
+  spb: number
+): TapResult {
+  // The pattern starts at its first note's window, or at 0 (a little
+  // before, as for rests below) if it starts with a rest.
+  const firstEdge = Math.min(-0.06, pads.length ? pads[0].time - wins[0].good : 0);
+  if (rel < firstEdge || rel > layout.totalBeats * spb + 0.15) return { kind: "ignore" };
+  let best = -1;
+  let bestD = Infinity;
+  pads.forEach((p, i) => {
+    if (results[i] !== null) return;
+    const d = rel - p.time;
+    if (Math.abs(d) <= wins[i].good && Math.abs(d) < Math.abs(bestD)) {
+      best = i;
+      bestD = d;
+    }
+  });
+  if (best >= 0) return { kind: "note", pad: best, offset: bestD, rating: rate(bestD, wins[best]) };
+  const rest = layout.elements.find((e) => e.rest && rel >= e.start * spb - 0.06 && rel < (e.start + e.beats) * spb - 0.06);
+  return { kind: "splash", rest: rest ? rest.index : null };
+}
+
+// Lily pads coming in advance: only in Practice, which is only on Easy.
+// Otherwise the child has to read (or remember) the rhythm: a pad only
+// appears under the character when a note is tapped on time.
+export const padsAhead = (level: RhythmLevel, practice: boolean) => practice && level === "easy";
+
 export const RATING_POINTS: Record<Rating, number> = { perfect: 1, good: 0.6, miss: 0 };
-// A tap on a rest takes a little off.
+// A splash (a tap on a rest, or a wrong tap) takes a little off.
 export const SPLASH_PENALTY = 0.25;
 
 // Timing accuracy 0..1 over a round, and its 1–3 stars.
