@@ -312,17 +312,20 @@ export function usesLevelFeature(level: RhythmLevel, p: Pattern): boolean {
 
 // 8 patterns of 2 bars each, no two in a row the same, each starting with
 // a note (a rest first is hard to feel), with at least 3 notes.
-export function makeRound(level: RhythmLevel, rnd: () => number = Math.random): Pattern[] {
+//
+// `barCount`: 2 for Read & Tap; 1 for Listen & Echo (two bars are too much
+// to remember), then with at least 2 notes.
+export function makeRound(level: RhythmLevel, rnd: () => number = Math.random, barCount: 1 | 2 = 2): Pattern[] {
   const cfg = LEVELS[level];
   const out: Pattern[] = [];
   let guard = 0;
   while (out.length < PATTERNS_PER_ROUND && guard++ < 5000) {
     const meter = pick(cfg.meters, rnd);
     const pool = cfg.bars[meter].map(parseBar);
-    const bars = [pick(pool, rnd), pick(pool, rnd)];
+    const bars = barCount === 1 ? [pick(pool, rnd)] : [pick(pool, rnd), pick(pool, rnd)];
     const p: Pattern = { meter, bars };
-    if (isRest(bars[0][0]) || !hasNote(bars[1])) continue;
-    if (bars.flat().filter((t) => !isRest(t)).length < 3) continue;
+    if (isRest(bars[0][0]) || !hasNote(bars[bars.length - 1])) continue;
+    if (bars.flat().filter((t) => !isRest(t)).length < (barCount === 1 ? 2 : 3)) continue;
     if (!usesLevelFeature(level, p)) continue;
     const prev = out[out.length - 1];
     if (prev && JSON.stringify(prev) === JSON.stringify(p)) continue;
@@ -538,10 +541,11 @@ export function fillBar(values: ValueKey[], meter: number, rnd: () => number, fi
   return out;
 }
 
-// 8 two-bar patterns from a custom choice: each starts with a note and has
-// a note in its second bar; no two in a row the same (unless the choice
-// allows only one pattern, e.g. only whole notes). [] if it can't be played.
-export function makeCustomRound(c: RhythmChoice, rnd: () => number = Math.random): Pattern[] {
+// 8 patterns from a custom choice (two bars, or one for Listen & Echo):
+// each starts with a note and has a note in its second bar; no two in a
+// row the same (unless the choice allows only one pattern, e.g. only whole
+// notes). [] if it can't be played.
+export function makeCustomRound(c: RhythmChoice, rnd: () => number = Math.random, barCount: 1 | 2 = 2): Pattern[] {
   if (choiceProblem(c)) return [];
   const out: Pattern[] = [];
   let tries = 0;
@@ -549,10 +553,15 @@ export function makeCustomRound(c: RhythmChoice, rnd: () => number = Math.random
     tries++;
     const meter = pick(c.meters, rnd);
     const a = fillBar(c.values, meter, rnd, true);
-    const b = fillBar(c.values, meter, rnd, false);
-    if (!a || !b) continue;
-    if (!hasNote(b) && tries < 400) continue;
-    const p: Pattern = { meter, bars: [a, b] };
+    if (!a) continue;
+    let bars = [a];
+    if (barCount === 2) {
+      const b = fillBar(c.values, meter, rnd, false);
+      if (!b) continue;
+      if (!hasNote(b) && tries < 400) continue;
+      bars = [a, b];
+    }
+    const p: Pattern = { meter, bars };
     const prev = out[out.length - 1];
     if (prev && JSON.stringify(prev) === JSON.stringify(p) && tries < 400) continue;
     out.push(p);

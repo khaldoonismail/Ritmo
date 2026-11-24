@@ -23,6 +23,9 @@
 //     Perfect for that note, a bit late = Good; a tap on a rest, a note
 //     tapped twice, or a tap outside every window = a splash;
 //   * lily pads come in advance only in Practice, only on Easy;
+//   * Listen & Echo: 900 more rounds, and one per custom choice, of
+//     one-bar patterns (8 a round, from the level's bars or the custom
+//     values, starting on a note);
 //   * custom rhythms: 3000 random choices of note values, rests and time
 //     signatures. Whether each can be played is worked out here by brute
 //     force (every way to fill a bar with the chosen figures, placed
@@ -307,6 +310,7 @@ function checkPattern(label: string, p: Pattern, level: RhythmLevel, custom?: Rh
 }
 
 let patternsChecked = 0;
+let echoRounds = 0;
 for (const level of ["easy", "medium", "hard"] as RhythmLevel[]) {
   const cfg = LEVELS[level];
   if (JSON.stringify(cfg.meters) !== JSON.stringify(METERS[level])) fail(`${level}: meters ${cfg.meters}`);
@@ -338,6 +342,19 @@ for (const level of ["easy", "medium", "hard"] as RhythmLevel[]) {
       }
       if (i > 0 && JSON.stringify(round[i - 1]) === JSON.stringify(p)) fail(`${level}: same pattern twice in a row`);
     });
+    // Listen & Echo: one bar per pattern, still 8 a round.
+    const echo = makeRound(level, rnd, 1);
+    if (echo.length !== PATTERNS_PER_ROUND) fail(`${level} echo: round of ${echo.length}`);
+    echo.forEach((p, i) => {
+      const pl = `${level} echo ${p.meter}/4 [${p.bars.map((b) => b.join(" ")).join(" | ")}]`;
+      if (p.bars.length !== 1) fail(`${pl}: ${p.bars.length} bars, expected 1`);
+      if (isRestT(p.bars[0][0])) fail(`${pl}: starts with a rest`);
+      if (p.bars[0].filter((t) => !isRestT(t)).length < 2) fail(`${pl}: fewer than 2 notes`);
+      if (!LEVELS[level].bars[p.meter].includes(p.bars[0].join(" "))) fail(`${pl}: not one of the level's bars`);
+      checkPattern(pl, p, level);
+      if (i > 0 && JSON.stringify(echo[i - 1]) === JSON.stringify(p)) fail(`${pl}: same pattern twice in a row`);
+    });
+    echoRounds++;
   }
 }
 
@@ -406,6 +423,15 @@ for (const level of ["easy", "medium", "hard"] as RhythmLevel[]) {
       if (isRestT(p.bars[0][0])) fail(`${pl}: starts with a rest`);
       checkPattern(pl, p, lvl, c);
     });
+    // Listen & Echo: one bar of the chosen values and time signatures.
+    const echo = makeCustomRound(c, rnd, 1);
+    if (echo.length !== PATTERNS_PER_ROUND) return fail(`${label} echo: round of ${echo.length}`);
+    echo.forEach((p, i) => {
+      const pl = `${label} echo #${i + 1} ${p.meter}/4 [${p.bars[0].join(" ")}]`;
+      if (p.bars.length !== 1) fail(`${pl}: ${p.bars.length} bars, expected 1`);
+      if (isRestT(p.bars[0][0])) fail(`${pl}: starts with a rest`);
+      checkPattern(pl, p, lvl, c);
+    });
   };
   named.forEach(([c, ok]) => checkChoice(c, `custom ${c.values.join(",")} in ${c.meters.join(",") || "no"} meter`, ok));
   for (let n = 0; n < 3000; n++) {
@@ -434,4 +460,4 @@ if (failures) {
   console.error(`\n${failures} problem(s) found.`);
   process.exit(1);
 }
-console.log(`✓ ${patternsChecked} two-bar patterns × 3 tempos and 900 generated rounds: bars add up, beaming is right, pads match the note lengths exactly, taps and splashes are judged right; custom choices fill bars with only the chosen values, impossible ones are blocked.`);
+console.log(`✓ ${patternsChecked} two-bar patterns × 3 tempos and 900 generated rounds: bars add up, beaming is right, pads match the note lengths exactly, taps and splashes are judged right; custom choices fill bars with only the chosen values, impossible ones are blocked; ${echoRounds} one-bar Listen & Echo rounds are right.`);

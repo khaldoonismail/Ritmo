@@ -42,8 +42,10 @@ import { LilyPad, PondScenery, Ripple, Splash } from "./Pond";
 // character when a note is tapped on time (a missed note's pad floats by
 // grey); a tap on a rest or a wrong tap is a splash. In Read & Tap the
 // playing note is orange in the notation. In Listen & Echo the rhythm is
-// played once first with no notation, then tapped back, and the notation
-// is shown afterwards. Practice (Easy only) shows the pads coming in
+// played first with no notation, then tapped back, and the notation is
+// shown afterwards. Listen & Echo patterns are one bar (two are too much to
+// remember), and "🔊 Hear again" (once per pattern, before the child's
+// turn) plays it a second time: the pattern restarts from its count-in. Practice (Easy only) shows the pads coming in
 // advance, reaching a dashed ring, for absolute beginners.
 //
 // Timing: every sound is scheduled on the audio clock when the pattern
@@ -117,7 +119,12 @@ export default function RhythmJumpGame({
   const echo = mode === "echo";
   const ahead = padsAhead(level, practice);
   const levelLabel = custom ? "Custom" : LEVELS[level].label;
-  const newRound = () => (custom ? makeCustomRound(custom) : makeRound(level));
+  const barCount = echo ? 1 : 2;
+  const newRound = () => (custom ? makeCustomRound(custom, Math.random, barCount) : makeRound(level, Math.random, barCount));
+  // The pattern whose "Hear again" has been used (it stays used if the
+  // pattern restarts after a pause).
+  const heardAgainRef = useRef(-1);
+  const [heardAgain, setHeardAgain] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -224,6 +231,7 @@ export default function RhythmJumpGame({
       };
       indexRef.current = i;
       setIndex(i);
+      setHeardAgain(heardAgainRef.current === i);
       setPadStates(pads.map(() => "upcoming"));
       setPinned(-1);
       setSplashAt(null);
@@ -350,6 +358,7 @@ export default function RhythmJumpGame({
     setRound(fresh);
     totalsRef.current = { ratings: [], splashes: 0 };
     setTotals(totalsRef.current);
+    heardAgainRef.current = -1;
     setPhase("playing");
     startPattern(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -371,6 +380,18 @@ export default function RhythmJumpGame({
     const r = runRef.current;
     if (r && r.finished && r.index >= PATTERNS_PER_ROUND - 1) setPhase("over");
     else startPattern(r ? (r.finished ? r.index + 1 : r.index) : indexRef.current);
+  }, [startPattern]);
+
+  // "🔊 Hear again": once per pattern, any time before the child's turn
+  // starts. Replays it from a fresh count-in, so the beat stays steady.
+  const hearAgain = useCallback(() => {
+    const r = runRef.current;
+    const c = getAudioContext();
+    if (phaseRef.current !== "playing" || !r || !c || !r.echo || r.finished) return;
+    if (heardAgainRef.current === r.index || c.currentTime >= r.t0 - 0.05) return;
+    unlockNoteAudio();
+    heardAgainRef.current = r.index;
+    startPattern(r.index);
   }, [startPattern]);
 
   const exit = useGameExit({
@@ -430,6 +451,8 @@ export default function RhythmJumpGame({
         if (e.repeat) return;
         if (phaseRef.current === "playing") onTap(e.timeStamp);
         else if (phaseRef.current === "paused") resume();
+      } else if (e.key === "h" || e.key === "H") {
+        hearAgain();
       } else if (e.key === "p" || e.key === "P" || e.key === "Escape") {
         if (phaseRef.current === "playing") pause();
         else if (phaseRef.current === "paused") resume();
@@ -437,7 +460,7 @@ export default function RhythmJumpGame({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onTap, pause, resume, exit.askingRef]);
+  }, [onTap, pause, resume, hearAgain, exit.askingRef]);
 
   // --- drawing ------------------------------------------------------------------
   const run = runRef.current;
@@ -661,14 +684,35 @@ export default function RhythmJumpGame({
               </span>
               <div style={{ textAlign: "left" }}>
                 <div style={{ fontWeight: 900, fontSize: compact ? "1rem" : "1.35rem", color: colors.blueText }}>
-                  {step === "listen" ? "Listen…" : "Your turn: tap it back!"}
+                  {step === "listen" ? (heardAgain ? "Listen again…" : "Listen…") : "Your turn: tap it back!"}
                 </div>
                 {!compact && (
                   <div style={{ fontWeight: 700, fontSize: "0.85rem", opacity: 0.6 }}>
-                    {step === "listen" ? "Hear the rhythm once. Don't tap yet!" : "No notes to read this time."}
+                    {step === "listen" ? "Hear the rhythm. Don't tap yet!" : "No notes to read this time."}
                   </div>
                 )}
               </div>
+              {phase === "playing" && !heardAgain && (step === "listen" || step === "countin") && (
+                <button
+                  type="button"
+                  onClick={hearAgain}
+                  style={{
+                    pointerEvents: "auto",
+                    fontWeight: 900,
+                    fontSize: compact ? "0.9rem" : "1.05rem",
+                    padding: compact ? "0.35rem 0.75rem" : "0.55rem 1rem",
+                    borderRadius: 999,
+                    border: `2px solid ${colors.blueText}`,
+                    background: colors.blueBackground,
+                    color: colors.blueText,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    minHeight: 44,
+                  }}
+                >
+                  🔊 Hear again
+                </button>
+              )}
             </div>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
