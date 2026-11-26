@@ -9,6 +9,8 @@
 // (Team Battle answer route, submit-game, Individual mode) and the class
 // leaderboard unchanged, and gives every student the same questions.
 
+import { sharedGameVariant, sharedSettingsOf, sharedVariantLabel } from "@/lib/sharedGames";
+
 export type Clef = "treble" | "bass";
 export type ClefChoice = Clef | "mixed";
 export type NoteLevel = "easy" | "medium" | "hard";
@@ -358,6 +360,8 @@ const LEVEL_SHORT: Record<NoteLevel, string> = { easy: "Easy", medium: "Medium",
 // Null for anything that isn't a Note Reading variant.
 export function variantLabel(variant: string | null | undefined): string | null {
   if (!variant) return null;
+  // Piano Hop, Happy or Sad, Rhythm Jump, Music Train ("rhythm-jump:…").
+  if (variant.includes(":")) return sharedVariantLabel(variant);
   // Up or Down's variant is its level alone: "hard" → "Hard".
   if (variant === "easy" || variant === "medium" || variant === "hard") return LEVEL_SHORT[variant];
   const [clef, level, extra] = variant.split("-");
@@ -376,6 +380,8 @@ export function configLabel(config: NoteReadingConfig): string {
 export function settingsVariant(gameSettings: unknown): string | null {
   if (!gameSettings || typeof gameSettings !== "object") return null;
   const v = gameSettings as Record<string, unknown>;
+  const shared = sharedSettingsOf(gameSettings);
+  if (shared) return sharedGameVariant(shared);
   if (v.game === "up_or_down") {
     return v.level === "medium" || v.level === "hard" ? v.level : "easy";
   }

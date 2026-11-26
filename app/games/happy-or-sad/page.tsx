@@ -7,7 +7,7 @@ import { colors, radius, solidShadow } from "@/lib/theme";
 import { unlockNoteAudio } from "@/lib/playNote";
 import { RunnerCard, RunnerPickerScreen, useRunnerChoice } from "@/components/characters/RunnerChoice";
 import type { HappyOrSadLevel } from "@/lib/happyOrSad/pieces";
-import type { Labels } from "@/lib/happyOrSad/round";
+import { HAPPY_OR_SAD_LABELS, HAPPY_OR_SAD_LEVELS, type Labels } from "@/lib/happyOrSad/round";
 import { usePianoSamples } from "@/lib/usePianoSamples";
 
 // Happy or Sad ("Weather Village"), stage 1: hear whether music is happy
@@ -24,15 +24,8 @@ const HappyOrSadGame = dynamic(loadGame, {
   ),
 });
 
-const LEVELS: { key: HappyOrSadLevel; label: string; detail: string }[] = [
-  { key: "easy", label: "Easy", detail: "Bright, quick happy music, or slow, soft sad music" },
-  { key: "medium", label: "Medium", detail: "Same speed and loudness: only major or minor tells them apart" },
-  { key: "hard", label: "Hard", detail: "The same tune, sometimes major and sometimes minor, in different keys" },
-];
-const LABELS: { key: Labels; label: string }[] = [
-  { key: "mood", label: "Happy / Sad" },
-  { key: "mode", label: "Major / Minor" },
-];
+const LEVELS = HAPPY_OR_SAD_LEVELS;
+const LABELS = HAPPY_OR_SAD_LABELS;
 
 export default function HappyOrSadPage() {
   // Start loading the piano samples while the child picks a level.

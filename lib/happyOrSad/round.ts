@@ -15,7 +15,27 @@ import {
 
 export const ROUND_LENGTH = 10;
 
+// After an answer: how long the weather stays before the next piece (at
+// least; the piece always plays to its end first), the quiet between
+// pieces, before the first piece and before the round's end.
+export const HOLD_RIGHT_MS = 1400;
+export const HOLD_WRONG_MS = 2200;
+export const GAP_MS = 900;
+export const FIRST_PIECE_DELAY_MS = 600;
+export const FINISH_DELAY_MS = 500;
+
 export type Labels = "mood" | "mode"; // Happy/Sad or Major/Minor
+
+// The choices on the settings screens (stage-1 page and Assign).
+export const HAPPY_OR_SAD_LEVELS: { key: HappyOrSadLevel; label: string; detail: string }[] = [
+  { key: "easy", label: "Easy", detail: "Bright, quick happy music, or slow, soft sad music" },
+  { key: "medium", label: "Medium", detail: "Same speed and loudness: only major or minor tells them apart" },
+  { key: "hard", label: "Hard", detail: "The same tune, sometimes major and sometimes minor, in different keys" },
+];
+export const HAPPY_OR_SAD_LABELS: { key: Labels; label: string }[] = [
+  { key: "mood", label: "Happy / Sad" },
+  { key: "mode", label: "Major / Minor" },
+];
 
 export function answerLabel(mode: Mode, labels: Labels): string {
   if (labels === "mode") return mode === "major" ? "Major" : "Minor";

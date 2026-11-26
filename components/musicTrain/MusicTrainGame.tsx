@@ -8,11 +8,14 @@ import { RotateDeviceOverlay, usePhonePortrait, useShortLandscape } from "@/comp
 import { getAudioContext, unlockNoteAudio } from "@/lib/playNote";
 import { colors } from "@/lib/theme";
 import {
+  ARRIVE_SECONDS,
   CHANGE_ITALIAN,
   DRIVER_FOR,
   DRIVER_NAME,
   ITALIAN,
   LEVELS,
+  RIDE_LEAD_SECONDS,
+  RIDE_TAIL_SECONDS,
   ROUND_LENGTH,
   SPEED_WORD,
   WHEEL_DEGREES_PER_BEAT,
@@ -48,6 +51,18 @@ import { CAR_W, Carriage, LOCO_W, Locomotive, turnWheels } from "./Train";
 // takes over. After the ride the train pulls into the next station.
 
 type Phase = "ready" | "playing" | "paused" | "over";
+
+// One answered piece, as the server checks it (lib/sharedGameCheck.ts):
+// the piece as it was played, and the child's answer. (The right answer
+// isn't sent: the server works it out from the tempo.)
+export interface MusicTrainAnswer {
+  melody: string;
+  bpm: number;
+  bpmTo: number | null;
+  transpose: number;
+  repeats: number;
+  picked: Answer;
+}
 type Step = "listen" | "ask" | "ride" | "arrive";
 
 interface Car {
@@ -66,7 +81,6 @@ const PASSENGERS: CharacterChoice[] = [
   { kind: "girl", skin: 0, outfit: 1 },
 ];
 
-const ARRIVE_SECONDS = 1.8;
 
 export default function MusicTrainGame({
   level,
@@ -74,12 +88,25 @@ export default function MusicTrainGame({
   character = DEFAULT_CHARACTER,
   autoStart = false,
   onChangeSettings,
+  onRunStart,
+  onRunEnd,
+  exitLabel = "Change settings",
+  endNote,
 }: {
   level: TrainLevel;
   italian: boolean;
   character?: CharacterChoice;
   autoStart?: boolean;
   onChangeSettings: () => void;
+  // Called as each round starts (an assigned game asks the server for a
+  // run id here) and when all 10 pieces are done (only whole rounds count).
+  onRunStart?: () => void;
+  onRunEnd?: (answers: MusicTrainAnswer[]) => void;
+  // The button that leaves the game ("Change settings"; "Back" when the
+  // teacher chose the settings).
+  exitLabel?: string;
+  // Shown on the round-complete panel (e.g. "Saved! Your best: 90%").
+  endNote?: React.ReactNode;
 }) {
   const compact = useShortLandscape();
   const phonePortrait = usePhonePortrait();
@@ -106,6 +133,11 @@ export default function MusicTrainGame({
   const indexRef = useRef(0);
   const [results, setResults] = useState<boolean[]>([]);
   const resultsRef = useRef<boolean[]>([]);
+  const answersRef = useRef<MusicTrainAnswer[]>([]);
+  const onRunEndRef = useRef(onRunEnd);
+  onRunEndRef.current = onRunEnd;
+  const onRunStartRef = useRef(onRunStart);
+  onRunStartRef.current = onRunStart;
   const [cars, setCars] = useState<Car[]>([]);
   const carId = useRef(0);
   const [heard, setHeard] = useState(false); // the piece has played once
@@ -228,7 +260,7 @@ export default function MusicTrainGame({
     const rd = rideFor(r, right, wrongDriver);
     setDriver(right ? drivers[0] : wrongDriver);
     setWobble(!right);
-    const t0 = player.current!.play(r, undefined, 0.15);
+    const t0 = player.current!.play(r, undefined, RIDE_LEAD_SECONDS);
     if (t0 === null) {
       setNoAudio(true);
       return;
@@ -248,6 +280,10 @@ export default function MusicTrainGame({
     choiceRef.current = a;
     setChoice(a);
     resultsRef.current = [...resultsRef.current, right];
+    answersRef.current = [
+      ...answersRef.current,
+      { melody: q.melody.id, bpm: q.bpm, bpmTo: q.bpmTo ?? null, transpose: q.transpose, repeats: q.repeats, picked: a },
+    ];
     setResults(resultsRef.current);
     if (right && carAdded.current !== indexRef.current) {
       carAdded.current = indexRef.current;
@@ -287,7 +323,7 @@ export default function MusicTrainGame({
           const d = beatAtTime(rd.r.beats, t) >= rd.r.totalBeats / 2 ? rd.drivers[1] : rd.drivers[0];
           if (d !== driverRef.current) setDriver(d);
         }
-        if (t > rd.r.seconds + 0.3) {
+        if (t > rd.r.seconds + RIDE_TAIL_SECONDS) {
           // Into the next station: it arrives from the right and the train
           // stops with the station in place (a whole number of beats on).
           ride.current = null;
@@ -310,6 +346,7 @@ export default function MusicTrainGame({
           if (next >= ROUND_LENGTH) {
             setPhase("over");
             setReaction({ state: "happy", key: ++keyRef.current });
+            onRunEndRef.current?.([...answersRef.current]);
           } else listen(next);
         }
       }
@@ -327,6 +364,8 @@ export default function MusicTrainGame({
     setRound(fresh);
     resultsRef.current = [];
     setResults([]);
+    answersRef.current = [];
+    onRunStartRef.current?.();
     setCars([]);
     carAdded.current = -1;
     offset.current = 0;
@@ -629,7 +668,7 @@ export default function MusicTrainGame({
                   Start
                 </button>
                 <button type="button" onClick={onChangeSettings} style={secondaryButton}>
-                  Change settings
+                  {exitLabel}
                 </button>
               </>
             )}
@@ -657,12 +696,13 @@ export default function MusicTrainGame({
                 <div style={{ fontWeight: 800 }}>
                   {cars.length} {cars.length === 1 ? "carriage" : "carriages"} · {correct} of {ROUND_LENGTH} right
                 </div>
+                {endNote}
                 <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                   <button type="button" onClick={startRound} style={{ ...primaryButton, flex: 1 }}>
                     Play again
                   </button>
                   <button type="button" onClick={onChangeSettings} style={{ ...secondaryButton, flex: 1 }}>
-                    Change settings
+                    {exitLabel}
                   </button>
                 </div>
               </>

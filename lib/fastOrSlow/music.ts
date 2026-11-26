@@ -295,6 +295,13 @@ export function render(q: Question): Rendered {
 
 export const ROUND_LENGTH = 10;
 
+// After the ride, the train pulls into the next station for this long; the
+// ride's piece starts this long after the answer and ends a little after
+// its last beat.
+export const ARRIVE_SECONDS = 1.8;
+export const RIDE_LEAD_SECONDS = 0.15;
+export const RIDE_TAIL_SECONDS = 0.3;
+
 function shuffle<T>(xs: T[], rand: () => number): T[] {
   const a = [...xs];
   for (let i = a.length - 1; i > 0; i--) {

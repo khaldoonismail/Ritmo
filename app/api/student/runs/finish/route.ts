@@ -3,14 +3,16 @@ import { cookies } from "next/headers";
 import { verifyStudentSessionToken, STUDENT_SESSION_COOKIE } from "@/lib/studentSession";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { loadRunnerAssignment } from "@/lib/runnerAssignment";
-import { runnerVariant } from "@/lib/runnerGames";
+import { rankByOf, runnerVariant } from "@/lib/runnerGames";
 import { checkRun } from "@/lib/runCheck";
 
 // Ends a run started by ../start: checks the answers against the chosen
 // level and the time since the server started the run, recalculates the
 // points (lib/runCheck.ts), and keeps the student's best run:
 //   * game_results — one row per student per assignment (the leaderboard),
-//     replaced only by a run with more points;
+//     replaced only by a better run: more points for endless runs (Note
+//     Runner, Up or Down, Piano Hop); higher accuracy, then more points,
+//     for rounds (Happy or Sad, Rhythm Jump, Music Train — rankByOf);
 //   * student_progress — completed, with the best run's accuracy (0–100) as
 //     the score the reports show.
 // Each run can be submitted once.
@@ -74,18 +76,30 @@ export async function POST(request: NextRequest) {
   const score = check.score;
   const { data: existing } = await supabase
     .from("game_results")
-    .select("points")
+    .select("points, accuracy")
     .eq("assignment_id", assignment.assignmentId)
     .eq("student_id", session.studentId)
     .maybeSingle();
   const previousBest = existing?.points ?? null;
+  const previousAccuracy = existing ? Number(existing.accuracy) : null;
 
   // A run with no answers (quit straight away) counts for nothing.
   if (score.total === 0) {
-    return NextResponse.json({ ...score, best: previousBest ?? 0, newBest: false, saved: false });
+    return NextResponse.json({
+      ...score,
+      best: previousBest ?? 0,
+      bestAccuracy: previousAccuracy ?? 0,
+      newBest: false,
+      saved: false,
+    });
   }
 
-  const newBest = previousBest === null || score.points > previousBest;
+  const byAccuracy = rankByOf(assignment.generator) === "accuracy";
+  const newBest =
+    !existing ||
+    (byAccuracy
+      ? score.accuracy > previousAccuracy! || (score.accuracy === previousAccuracy && score.points > previousBest!)
+      : score.points > previousBest!);
   if (newBest) {
     const { error: resultError } = await supabase.from("game_results").upsert(
       {
@@ -120,6 +134,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     ...score,
     best: newBest ? score.points : previousBest,
+    bestAccuracy: newBest ? score.accuracy : previousAccuracy,
     newBest,
     saved: true,
   });

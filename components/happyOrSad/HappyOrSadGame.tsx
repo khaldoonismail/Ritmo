@@ -7,7 +7,18 @@ import { unlockNoteAudio } from "@/lib/playNote";
 import { RotateDeviceOverlay, usePhonePortrait, useShortLandscape } from "@/components/RotateDevice";
 import { detectQuality } from "@/components/noteRunner/quality";
 import type { HappyOrSadLevel, Mode, Piece } from "@/lib/happyOrSad/pieces";
-import { ROUND_LENGTH, answerLabel, buildRound, starsFor, type Labels } from "@/lib/happyOrSad/round";
+import {
+  FINISH_DELAY_MS,
+  FIRST_PIECE_DELAY_MS,
+  GAP_MS,
+  HOLD_RIGHT_MS,
+  HOLD_WRONG_MS,
+  ROUND_LENGTH,
+  answerLabel,
+  buildRound,
+  starsFor,
+  type Labels,
+} from "@/lib/happyOrSad/round";
 import { VillageEngine } from "./VillageEngine";
 import { PiecePlayer } from "./player";
 import { signImage } from "./icons";
@@ -26,12 +37,12 @@ type Phase = "ready" | "playing" | "paused" | "done";
 type Step = "listening" | "waiting" | "answered";
 type Result = { right: boolean; mode: Mode } | null;
 
-// After an answer: how long the weather stays before the next piece (at
-// least; the piece always plays to its end first).
-const HOLD_RIGHT_MS = 1400;
-const HOLD_WRONG_MS = 2200;
-// Quiet between pieces.
-const GAP_MS = 900;
+// One answered piece, as the server checks it (lib/sharedGameCheck.ts).
+export interface HappyOrSadAnswer {
+  piece: string;
+  picked: Mode;
+}
+
 
 export default function HappyOrSadGame({
   level,
@@ -39,12 +50,25 @@ export default function HappyOrSadGame({
   character = DEFAULT_CHARACTER,
   autoStart = false,
   onChangeSettings,
+  onRunStart,
+  onRunEnd,
+  exitLabel = "Change settings",
+  endNote,
 }: {
   level: HappyOrSadLevel;
   labels: Labels;
   character?: CharacterChoice;
   autoStart?: boolean;
   onChangeSettings: () => void;
+  // Called as each round starts (an assigned game asks the server for a
+  // run id here) and when the whole round is done (only whole rounds count).
+  onRunStart?: () => void;
+  onRunEnd?: (answers: HappyOrSadAnswer[]) => void;
+  // The button that leaves the game ("Change settings"; "Back" when the
+  // teacher chose the settings).
+  exitLabel?: string;
+  // Shown at the end of a round (e.g. "Saved! Your best: 90%").
+  endNote?: React.ReactNode;
 }) {
   // Real piano samples for the notes (synth tone until they load).
   usePianoSamples();
@@ -59,6 +83,9 @@ export default function HappyOrSadGame({
   const playingRef = useRef(false); // the piece is still sounding
   const answeredAtRef = useRef(0);
   const correctRef = useRef(0);
+  const answersRef = useRef<HappyOrSadAnswer[]>([]);
+  const onRunEndRef = useRef(onRunEnd);
+  onRunEndRef.current = onRunEnd;
   const phaseRef = useRef<Phase>("ready");
   const timersRef = useRef<number[]>([]);
   const compact = useShortLandscape();
@@ -117,7 +144,7 @@ export default function HappyOrSadGame({
       engineRef.current?.setWeather("clear");
       const next = indexRef.current + 1;
       if (next >= ROUND_LENGTH) {
-        later(500, finish);
+        later(FINISH_DELAY_MS, finish);
         return;
       }
       later(GAP_MS, () => phaseRef.current === "playing" && playPiece(next));
@@ -130,6 +157,7 @@ export default function HappyOrSadGame({
 
   const finish = () => {
     setPhase("done");
+    onRunEndRef.current?.([...answersRef.current]);
     engineRef.current?.setWeather("sunny");
     engineRef.current?.cheer();
   };
@@ -140,6 +168,7 @@ export default function HappyOrSadGame({
     if (!engine || !piece || phaseRef.current !== "playing" || stepRef.current === "answered") return;
     unlockNoteAudio();
     const right = mode === piece.mode;
+    answersRef.current.push({ piece: piece.id, picked: mode });
     const r = { right, mode: piece.mode };
     resultRef.current = r;
     setResult(r);
@@ -181,13 +210,15 @@ export default function HappyOrSadGame({
     clearTimers();
     playerRef.current?.stop();
     roundRef.current = buildRound(level);
+    answersRef.current = [];
+    onRunStart?.();
     correctRef.current = 0;
     setCorrect(0);
     engine.setGrowth(0);
     engine.setWeather("clear", true);
     setPhase("playing");
     engine.start();
-    later(600, () => playPiece(0));
+    later(FIRST_PIECE_DELAY_MS, () => playPiece(0));
   };
   const startRef = useRef(start);
   startRef.current = start;
@@ -560,9 +591,10 @@ export default function HappyOrSadGame({
               Play again
             </button>
             <button type="button" onClick={onChangeSettings} style={secondaryButton}>
-              Change settings
+              {exitLabel}
             </button>
           </div>
+          {endNote}
         </div>
       )}
 
@@ -580,7 +612,7 @@ export default function HappyOrSadGame({
                   Start
                 </button>
                 <button type="button" onClick={onChangeSettings} style={secondaryButton}>
-                  Change settings
+                  {exitLabel}
                 </button>
               </>
             ) : (

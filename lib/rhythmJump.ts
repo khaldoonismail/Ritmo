@@ -67,6 +67,14 @@ export function bpmFor(level: RhythmLevel, tempo: Tempo): number {
 
 export const PATTERNS_PER_ROUND = 8;
 
+// A pattern's timeline: the first click comes this long after it starts;
+// it ends this long after its last beat (time for a late tap); then the
+// pond waits before the next one (Listen & Echo shows the notation it just
+// played, so a little longer).
+export const START_LEAD_SECONDS = 0.35;
+export const END_TAIL_SECONDS = 0.2;
+export const BETWEEN_SECONDS: Record<RhythmMode, number> = { read: 0.9, echo: 1.7 };
+
 export interface Pattern {
   meter: number; // beats per bar (x/4)
   bars: Token[][];
@@ -467,6 +475,34 @@ export function canFillBar(values: ValueKey[], meter: number): boolean {
   const vs = values.map((k) => VALUE_BY_KEY[k]);
   const f = filler(vs, meter);
   return vs.some((v) => !v.rest && f.fits(v, 0, false) && f.can(f.after(v, 0).pos, false));
+}
+
+// Could fillBar have made this bar from these values? The tokens must split
+// into the chosen values, each where it may start (the server's check of a
+// custom round, lib/roundCheck.ts).
+export function barMatchesChoice(tokens: Token[], values: ValueKey[], meter: number): boolean {
+  const vs = values.map((k) => VALUE_BY_KEY[k]);
+  const f = filler(vs, meter);
+  const memo = new Map<string, boolean>();
+  const match = (i: number, pos: number, lastEr: boolean): boolean => {
+    if (i === tokens.length) return pos === f.end;
+    const k = `${i}|${pos}|${lastEr}`;
+    const got = memo.get(k);
+    if (got !== undefined) return got;
+    let ok = false;
+    for (const v of vs) {
+      if (!f.fits(v, pos, lastEr)) continue;
+      if (!v.tokens.every((t, j) => tokens[i + j] === t)) continue;
+      const n = f.after(v, pos);
+      if (match(i + v.tokens.length, n.pos, n.lastEr)) {
+        ok = true;
+        break;
+      }
+    }
+    memo.set(k, ok);
+    return ok;
+  };
+  return match(0, 0, false);
 }
 
 const PLURAL: Record<ValueKey, string> = {

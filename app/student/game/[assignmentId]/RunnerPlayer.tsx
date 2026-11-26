@@ -1,22 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import { unlockNoteAudio } from "@/lib/playNote";
 import { RunnerCard, RunnerPickerScreen, useRunnerChoice } from "@/components/characters/RunnerChoice";
-import { noteRunnerConfig, type RunnerSettings } from "@/lib/runnerGames";
+import { noteRunnerConfig, type NoteRunnerSettings, type UpOrDownSettings } from "@/lib/runnerGames";
+import { SaveNote, useRunSave } from "./useRunSave";
 import type { RunSummary } from "@/components/noteRunner/NoteRunnerGame";
 import type { UpOrDownRunSummary } from "@/components/upOrDown/UpOrDownGame";
 import { usePianoSamples } from "@/lib/usePianoSamples";
 
 // An assigned Note Runner / Up or Down game. The teacher chose the
 // settings; the student can play as many runs as they like, and the best
-// one counts. Each run gets a run id from the server when it starts
-// (/api/student/runs/start) and is checked and scored by the server when
-// it ends (/api/student/runs/finish); the score shown in the game is only
-// the browser's own count.
+// one counts (runs are started, checked and saved by ./useRunSave).
 
 const loadNoteRunner = () => import("@/components/noteRunner/NoteRunnerGame");
 const loadUpOrDown = () => import("@/components/upOrDown/UpOrDownGame");
@@ -28,12 +26,6 @@ const loading = () => (
 const NoteRunnerGame = dynamic(loadNoteRunner, { ssr: false, loading });
 const UpOrDownGame = dynamic(loadUpOrDown, { ssr: false, loading });
 
-type Save =
-  | { state: "idle" }
-  | { state: "saving" }
-  | { state: "saved"; points: number; best: number; newBest: boolean }
-  | { state: "error"; message: string };
-
 export default function RunnerPlayer({
   assignmentId,
   title,
@@ -42,62 +34,22 @@ export default function RunnerPlayer({
 }: {
   assignmentId: string;
   title: string;
-  settings: RunnerSettings;
+  settings: NoteRunnerSettings | UpOrDownSettings;
   initialBest: number | null;
 }) {
   // Start loading the piano samples while the child picks a level.
   usePianoSamples();
   const [runKey, setRunKey] = useState<number | null>(null);
-  const [best, setBest] = useState(initialBest);
-  const [save, setSave] = useState<Save>({ state: "idle" });
+  const { best: bestRun, save, onRunStart, onRunEnd } = useRunSave(
+    assignmentId,
+    initialBest === null ? null : { points: initialBest, accuracy: 0 }
+  );
+  const best = bestRun?.points ?? null;
   const { runner, chosen, picking, setPicking, save: saveRunner } = useRunnerChoice();
-  const runIdRef = useRef<Promise<string | null> | null>(null);
 
   useEffect(() => {
     (settings.game === "note_runner" ? loadNoteRunner() : loadUpOrDown()).catch(() => {});
   }, [settings.game]);
-
-  const onRunStart = () => {
-    setSave({ state: "idle" });
-    runIdRef.current = fetch("/api/student/runs/start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assignmentId }),
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => (typeof d?.runId === "string" ? d.runId : null))
-      .catch(() => null);
-  };
-
-  const onRunEnd = async (answers: unknown[]) => {
-    const pending = runIdRef.current;
-    runIdRef.current = null;
-    if (!pending || answers.length === 0) return;
-    setSave({ state: "saving" });
-    const runId = await pending;
-    if (!runId) {
-      setSave({ state: "error", message: "Couldn't save this run (no connection when it started)." });
-      return;
-    }
-    try {
-      const r = await fetch("/api/student/runs/finish", {
-        method: "POST",
-        // Still sent if the student leaves the page right away (Exit).
-        keepalive: true,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ runId, answers }),
-      });
-      const d = await r.json().catch(() => null);
-      if (!r.ok) {
-        setSave({ state: "error", message: d?.error || "Couldn't save this run." });
-        return;
-      }
-      setBest(d.best);
-      setSave({ state: "saved", points: d.points, best: d.best, newBest: d.newBest });
-    } catch {
-      setSave({ state: "error", message: "Couldn't save this run (no connection)." });
-    }
-  };
 
   const endNote = <SaveNote save={save} />;
   const back = () => setRunKey(null);
@@ -215,18 +167,4 @@ export default function RunnerPlayer({
       </div>
     </main>
   );
-}
-
-function SaveNote({ save }: { save: Save }) {
-  const style: React.CSSProperties = { margin: 0, fontWeight: 800, fontSize: "0.95rem" };
-  if (save.state === "saving") return <p style={{ ...style, opacity: 0.6 }}>Saving…</p>;
-  if (save.state === "error") return <p style={{ ...style, color: colors.coralText }}>{save.message}</p>;
-  if (save.state === "saved") {
-    return (
-      <p style={{ ...style, color: colors.greenCardShadow }}>
-        {save.newBest ? `🏆 New best! ${save.best.toLocaleString()} pts` : `Saved · your best: ${save.best.toLocaleString()} pts`}
-      </p>
-    );
-  }
-  return null;
 }

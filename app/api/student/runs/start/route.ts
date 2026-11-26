@@ -4,7 +4,7 @@ import { verifyStudentSessionToken, STUDENT_SESSION_COOKIE } from "@/lib/student
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { loadRunnerAssignment } from "@/lib/runnerAssignment";
 
-// Starts one run of an assigned Note Runner / Up or Down game: the server
+// Starts one run of an assigned runner game (lib/runnerGames.ts): the server
 // stamps the start time (game_runs.started_at, 0029_runner_games.sql) so
 // the finish route can tell how long the run really took.
 

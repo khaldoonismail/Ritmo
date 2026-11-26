@@ -11,6 +11,7 @@ import { assignmentQuestions } from "@/lib/gameQuestions";
 import { assignmentTitle } from "@/lib/noteReading";
 import { isRunnerGenerator, normalizeRunnerSettings } from "@/lib/runnerGames";
 import RunnerPlayer from "./RunnerPlayer";
+import SharedGamePlayer from "./SharedGamePlayer";
 
 function NotFound({ message }: { message: string }) {
   return (
@@ -75,21 +76,29 @@ export default async function StudentGamePage({
     return <NotFound message="This game isn't available yet" />;
   }
 
-  // Note Runner / Up or Down: endless runs, replay as often as you like;
-  // the best run counts (app/api/student/runs/*).
+  // Runner games (Note Runner, Up or Down, Piano Hop, Happy or Sad, Rhythm
+  // Jump, Music Train): replay as often as you like; the best run counts
+  // (app/api/student/runs/*).
   if (isRunnerGenerator(game.generator)) {
     const { data: result } = await supabase
       .from("game_results")
-      .select("points")
+      .select("points, accuracy")
       .eq("assignment_id", assignment.id)
       .eq("student_id", session.studentId)
       .maybeSingle();
+    const title = assignmentTitle(game.title, assignment.game_settings);
+    const settings = normalizeRunnerSettings(game.generator, assignment.game_settings);
+    if (settings.game === "note_runner" || settings.game === "up_or_down") {
+      return (
+        <RunnerPlayer assignmentId={assignment.id} title={title} settings={settings} initialBest={result?.points ?? null} />
+      );
+    }
     return (
-      <RunnerPlayer
+      <SharedGamePlayer
         assignmentId={assignment.id}
-        title={assignmentTitle(game.title, assignment.game_settings)}
-        settings={normalizeRunnerSettings(game.generator, assignment.game_settings)}
-        initialBest={result?.points ?? null}
+        title={title}
+        settings={settings}
+        initialBest={result ? { points: result.points, accuracy: Number(result.accuracy) } : null}
       />
     );
   }

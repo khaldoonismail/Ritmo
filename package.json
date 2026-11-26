@@ -17,7 +17,8 @@
     "check:happy-or-sad": "tsx scripts/check-happy-or-sad.ts",
     "check:piano-sound": "tsx scripts/check-piano-sound.ts",
     "check:rhythm-jump": "tsx scripts/check-rhythm-jump.ts",
-    "check:fast-or-slow": "tsx scripts/check-fast-or-slow.ts"
+    "check:fast-or-slow": "tsx scripts/check-fast-or-slow.ts",
+    "check:shared-games": "tsx scripts/check-shared-games.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.1",

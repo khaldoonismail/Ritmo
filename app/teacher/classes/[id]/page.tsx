@@ -17,6 +17,7 @@ import Notes from "./Notes";
 import ClassGameLeaderboard from "./ClassGameLeaderboard";
 import { colors, radius, solidShadow } from "@/lib/theme";
 import NoteReadingSettings from "@/components/NoteReadingSettings";
+import SharedGameAssign from "@/components/teacher/SharedGameAssign";
 import {
   NOTE_RUNNER_GENERATOR,
   UP_OR_DOWN_GENERATOR,
@@ -467,8 +468,8 @@ export default function ManageClassPage() {
     return isRunnerGenerator(generator) ? normalizeRunnerSettings(generator, value) : normalizeNoteReadingConfig(value);
   }
 
-  // gameSettings: only for the shared games (Note Reading, Note Runner,
-  // Up or Down), already normalized.
+  // gameSettings: only for the shared games (Note Reading and the runner
+  // games), already normalized.
   async function assignGameToClass(gameId: string, gameSettings?: object) {
     setAssignError("");
 
@@ -1537,6 +1538,16 @@ export default function ManageClassPage() {
                         </button>
                       )}
                     </div>
+                    {isRunnerGenerator(g.generator) &&
+                      g.generator !== NOTE_RUNNER_GENERATOR &&
+                      g.generator !== UP_OR_DOWN_GENERATOR &&
+                      settingsOpenFor === g.id && (
+                        <SharedGameAssign
+                          generator={g.generator}
+                          busy={assignBusy}
+                          onAssign={(s) => assignGameToClass(g.id, s)}
+                        />
+                      )}
                     {g.generator === NOTE_RUNNER_GENERATOR && settingsOpenFor === g.id && (
                       <div style={settingsPanelStyle}>
                         <span style={{ fontSize: "0.8rem", fontWeight: 600, opacity: 0.7 }}>

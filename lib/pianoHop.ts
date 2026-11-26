@@ -135,6 +135,15 @@ export function answerSeconds(level: PianoLevel, correctSoFar: number): number {
   return Math.max(MIN_SECONDS[level], START_SECONDS[level] - correctSoFar * 0.15);
 }
 
+// Pause after an answer before the next name (longer after a mistake, so
+// the child can see and hear the right key), the first name's delay, and
+// the shortest a hop can take (the hop, then landing).
+export const RIGHT_GAP_MS = 900;
+export const WRONG_GAP_MS = 2100;
+export const FIRST_NAME_DELAY_MS = 500;
+export const HOP_SECONDS = 0.3;
+export const HOP_LAND_SECONDS = HOP_SECONDS + 0.15;
+
 export function midiFrequency(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }

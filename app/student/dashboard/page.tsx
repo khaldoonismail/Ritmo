@@ -15,7 +15,7 @@ import Leaderboard from "./Leaderboard";
 import GameLeaderboard from "@/components/GameLeaderboard";
 import { buildLeaderboards, studentDisplayNames } from "@/lib/gameLeaderboard";
 import { assignmentTitle as titleWithSettings } from "@/lib/noteReading";
-import { isRunnerGenerator } from "@/lib/runnerGames";
+import { isRunnerGenerator, rankByOf } from "@/lib/runnerGames";
 import CertificateButton from "./CertificateButton";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -104,12 +104,20 @@ export default async function StudentDashboardPage() {
     ...new Set((assignments || []).map((a) => a.game_id).filter((id): id is string => !!id)),
   ];
   let gameTitleMap = new Map<string, string>();
-  // Note Runner / Up or Down: endless runs, shown with the best run's points.
+  // Runner games: shown with the best run (points for endless runs, the
+  // accuracy for rounds); only the endless ones rank by points.
   const runnerGameIds = new Set<string>();
+  const accuracyGameIds = new Set<string>();
+  const pointsGameIds = new Set<string>();
+  const sortRunnerGame = (g: { id: string; generator: string | null }) => {
+    if (!isRunnerGenerator(g.generator)) return;
+    runnerGameIds.add(g.id);
+    (rankByOf(g.generator) === "accuracy" ? accuracyGameIds : pointsGameIds).add(g.id);
+  };
   if (gameIds.length > 0) {
     const { data: gameRows } = await supabase.from("games").select("id, title, generator").in("id", gameIds);
     gameTitleMap = new Map((gameRows || []).map((g) => [g.id, g.title]));
-    for (const g of gameRows || []) if (isRunnerGenerator(g.generator)) runnerGameIds.add(g.id);
+    for (const g of gameRows || []) sortRunnerGame(g);
   }
 
   function assignmentTitle(a: { lesson_id: string | null; game_id: string | null; game_settings?: unknown }): string {
@@ -137,18 +145,25 @@ export default async function StudentDashboardPage() {
     );
   }
 
-  // Best run per Note Runner / Up or Down assignment (its game_results row).
-  const bestRunPoints = new Map<string, number>();
+  // Best run per runner-game assignment (its game_results row), as shown:
+  // "Best 1,240 pts" (endless runs) or "Best 90%" (rounds).
+  const bestRunText = new Map<string, string>();
   const runnerAssignmentIds = (assignments || [])
     .filter((a) => a.game_id && runnerGameIds.has(a.game_id))
     .map((a) => a.id);
   if (runnerAssignmentIds.length > 0) {
     const { data: bestRows } = await supabase
       .from("game_results")
-      .select("assignment_id, points")
+      .select("assignment_id, game_id, points, accuracy")
       .eq("student_id", session.studentId)
       .in("assignment_id", runnerAssignmentIds);
-    for (const r of bestRows || []) if (r.assignment_id) bestRunPoints.set(r.assignment_id, r.points);
+    for (const r of bestRows || []) {
+      if (!r.assignment_id) continue;
+      bestRunText.set(
+        r.assignment_id,
+        accuracyGameIds.has(r.game_id) ? `${Math.round(Number(r.accuracy))}%` : `${r.points.toLocaleString("en-US")} pts`
+      );
+    }
   }
 
   // Total points = sum of every graded score this student has, and drives
@@ -231,13 +246,13 @@ export default async function StudentDashboardPage() {
   if (resultGameIds.length > 0) {
     const { data: resultGames } = await supabase.from("games").select("id, title, generator").in("id", resultGameIds);
     resultGameTitles = new Map((resultGames || []).map((g) => [g.id, g.title]));
-    for (const g of resultGames || []) if (isRunnerGenerator(g.generator)) runnerGameIds.add(g.id);
+    for (const g of resultGames || []) sortRunnerGame(g);
   }
   const gameBoards = buildLeaderboards(
     gameResultRows || [],
     studentDisplayNames(classmates || []),
     resultGameTitles,
-    runnerGameIds
+    pointsGameIds
   );
 
   const { data: classRow } = await supabase
@@ -544,9 +559,9 @@ export default async function StudentDashboardPage() {
                 >
                   {label}
                 </span>
-                {bestRunPoints.has(a.id) ? (
+                {bestRunText.has(a.id) ? (
                   <span style={{ fontSize: "0.75rem", fontWeight: 700, opacity: 0.7, whiteSpace: "nowrap" }}>
-                    🏆 Best {bestRunPoints.get(a.id)!.toLocaleString("en-US")} pts
+                    🏆 Best {bestRunText.get(a.id)}
                   </span>
                 ) : (
                   score !== null && (

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { forkGame } from "@/lib/forkGame";
-import { RUNNER_PAGE, isRunnerGenerator } from "@/lib/runnerGames";
+import { RUNNER_PAGE, isRunnerGenerator, runnerSizeLabel } from "@/lib/runnerGames";
 import { resolveCoverDisplay } from "@/lib/gameCover";
 import { gameTagGallery, tagLabel } from "@/lib/gameTags";
 import { colors, radius, solidShadow } from "@/lib/theme";
@@ -143,8 +143,9 @@ function GameCoverThumb({ title, coverImage }: { title: string; coverImage: stri
   );
 }
 
-// Where a game's Play button goes: Note Runner and Up or Down have their
-// own pages (no Team Battle); every other game opens the play page.
+// Where a game's Play button goes: runner games (Note Runner, Piano Hop,
+// Rhythm Jump…) have their own pages (no Team Battle); every other game
+// opens the play page.
 function playHref(g: { id: string; generator?: string | null }): string {
   return isRunnerGenerator(g.generator) ? RUNNER_PAGE[g.generator] : `/games/play/${g.id}`;
 }
@@ -431,7 +432,7 @@ export default function GamesLibraryPage() {
   };
 
   function gameSizeLabel(g: { generator?: string | null; questions: unknown[] }) {
-    if (isRunnerGenerator(g.generator)) return "endless run";
+    if (isRunnerGenerator(g.generator)) return runnerSizeLabel(g.generator);
     return g.generator ? "fresh questions every play" : questionCountLabel(g.questions.length);
   }
 

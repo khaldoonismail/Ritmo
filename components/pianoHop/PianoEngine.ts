@@ -4,7 +4,7 @@ import { buildScenery } from "@/components/noteRunner/scenery";
 import type { RunnerQuality } from "@/components/noteRunner/quality";
 import { SpriteCharacter } from "@/components/characters/SpriteCharacter";
 import { DEFAULT_CHARACTER, type CharacterChoice } from "@/components/characters/choice";
-import type { PianoKey } from "@/lib/pianoHop";
+import { HOP_LAND_SECONDS, HOP_SECONDS, type PianoKey } from "@/lib/pianoHop";
 import {
   BACK_Z,
   BLACK_H,
@@ -51,7 +51,6 @@ const MAX_ELEVATION = THREE.MathUtils.degToRad(62);
 // Pixels kept clear below the keyboard's front edge.
 const BOTTOM_MARGIN = 12;
 
-const HOP_SECONDS = 0.3;
 
 export class PianoEngine {
   private renderer: THREE.WebGLRenderer;
@@ -214,7 +213,7 @@ export class PianoEngine {
     }
     // Backup: if frames stall (a busy device, a hidden tab), the hop still
     // lands — so the answer is always judged and the key always plays.
-    this.landTimer = window.setTimeout(() => this.finishHop(), HOP_SECONDS * 1000 + 150);
+    this.landTimer = window.setTimeout(() => this.finishHop(), HOP_LAND_SECONDS * 1000);
   }
 
   // Ends the current hop: the character is on its key, the key sinks, and

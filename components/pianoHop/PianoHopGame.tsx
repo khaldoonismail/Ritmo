@@ -6,8 +6,11 @@ import { colors, radius } from "@/lib/theme";
 import { unlockNoteAudio } from "@/lib/playNote";
 import { NAMING_LABELS, type NamingSystem } from "@/lib/noteReading";
 import {
+  FIRST_NAME_DELAY_MS,
   PIANO_HOP_LIVES,
   PIANO_LEVELS,
+  RIGHT_GAP_MS,
+  WRONG_GAP_MS,
   PianoQuestionSupply,
   answerSeconds,
   isRight,
@@ -34,10 +37,14 @@ import { ExitButton, LeaveConfirm, PauseButton, useGameExit } from "@/components
 type Phase = "ready" | "playing" | "paused" | "over";
 
 const MUSIC_KEY = "ritmo.pianoHop.music";
-// Pause after an answer before the next name (longer after a mistake, so
-// the child can see and hear the right key).
-const RIGHT_GAP_MS = 900;
-const WRONG_GAP_MS = 2100;
+
+// One answered name, as the server checks it (lib/sharedGameCheck.ts):
+// the note asked (pitch class) and the key landed on (MIDI), or null for
+// "Too late!".
+export interface PianoHopAnswer {
+  pc: number;
+  picked: number | null;
+}
 
 type Result =
   | { kind: "right"; points: number }
@@ -50,12 +57,25 @@ export default function PianoHopGame({
   character = DEFAULT_CHARACTER,
   autoStart = false,
   onChangeSettings,
+  onRunStart,
+  onRunEnd,
+  exitLabel = "Change settings",
+  endNote,
 }: {
   level: PianoLevel;
   naming: NamingSystem;
   character?: CharacterChoice;
   autoStart?: boolean;
   onChangeSettings: () => void;
+  // Called as each run starts (an assigned game asks the server for a run
+  // id here) and when it ends: the last heart lost, or Quit with answers.
+  onRunStart?: () => void;
+  onRunEnd?: (answers: PianoHopAnswer[]) => void;
+  // The button that leaves the game ("Change settings"; "Back" when the
+  // teacher chose the settings).
+  exitLabel?: string;
+  // Shown on the game-over panel (e.g. "Saved! Your best: 1,240").
+  endNote?: React.ReactNode;
 }) {
   // Real piano samples for the notes (synth tone until they load).
   usePianoSamples();
@@ -67,6 +87,9 @@ export default function PianoHopGame({
   const questionRef = useRef<PianoQuestion | null>(null);
   const awaitingRef = useRef(false); // a name is up and not answered yet
   const statsRef = useRef({ score: 0, lives: PIANO_HOP_LIVES, streak: 0, bestStreak: 0, correct: 0, total: 0 });
+  const answersRef = useRef<PianoHopAnswer[]>([]);
+  const onRunEndRef = useRef(onRunEnd);
+  onRunEndRef.current = onRunEnd;
   const phaseRef = useRef<Phase>("ready");
   const timersRef = useRef<number[]>([]);
   // Countdown: when the current name runs out (ms since epoch), and how
@@ -151,6 +174,7 @@ export default function PianoHopGame({
         setPhase("over");
         musicRef.current?.stop();
         engineRef.current?.pause();
+        onRunEndRef.current?.([...answersRef.current]);
       });
     } else later(gap, nextQuestion);
   };
@@ -177,6 +201,7 @@ export default function PianoHopGame({
     }
     engine.hopTo(index, () => {
       const key = keys[index];
+      answersRef.current.push({ pc: q.pc, picked: key.midi });
       sound(key.midi);
       if (isRight(key, q)) {
         const s = { ...statsRef.current };
@@ -210,6 +235,7 @@ export default function PianoHopGame({
     const q = questionRef.current;
     if (!engine || !q || !awaitingRef.current) return;
     awaitingRef.current = false;
+    answersRef.current.push({ pc: q.pc, picked: null });
     loseHeart();
     engine.react("sad");
     setResult({ kind: "late" });
@@ -289,6 +315,8 @@ export default function PianoHopGame({
     clearTimers();
     statsRef.current = { score: 0, lives: PIANO_HOP_LIVES, streak: 0, bestStreak: 0, correct: 0, total: 0 };
     setStats(statsRef.current);
+    answersRef.current = [];
+    onRunStart?.();
     supplyRef.current = new PianoQuestionSupply(level, naming);
     nextPendingRef.current = false;
     leftWhenPausedRef.current = null;
@@ -301,10 +329,21 @@ export default function PianoHopGame({
     setPhase("playing");
     engine.start();
     syncMusic();
-    later(500, nextQuestion);
+    later(FIRST_NAME_DELAY_MS, nextQuestion);
   };
   const startRef = useRef(start);
   startRef.current = start;
+
+  // Quit from the pause menu: a run with answers still counts. (A hop in
+  // the air when paused lands later; it isn't counted.)
+  const quit = () => {
+    if (phaseRef.current === "paused" && answersRef.current.length > 0 && statsRef.current.lives > 0) {
+      clearTimers();
+      setPhase("over");
+      onRunEndRef.current?.([...answersRef.current]);
+    }
+    onChangeSettings();
+  };
 
   const pause = useCallback(() => {
     if (phaseRef.current !== "playing") return;
@@ -570,7 +609,7 @@ export default function PianoHopGame({
                   Start
                 </button>
                 <button type="button" onClick={onChangeSettings} style={secondaryButton}>
-                  Change settings
+                  {exitLabel}
                 </button>
               </>
             )}
@@ -580,7 +619,7 @@ export default function PianoHopGame({
                 <button type="button" onClick={resume} style={primaryButton}>
                   Resume
                 </button>
-                <button type="button" onClick={onChangeSettings} style={secondaryButton}>
+                <button type="button" onClick={quit} style={secondaryButton}>
                   Quit
                 </button>
               </>
@@ -596,11 +635,12 @@ export default function PianoHopGame({
                   </span>
                   <span>🔥 best streak {stats.bestStreak}</span>
                 </div>
+                {endNote}
                 <button type="button" onClick={start} style={primaryButton}>
                   Play again
                 </button>
                 <button type="button" onClick={onChangeSettings} style={secondaryButton}>
-                  Change settings
+                  {exitLabel}
                 </button>
               </>
             )}

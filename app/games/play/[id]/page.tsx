@@ -167,7 +167,8 @@ export default function PlayGamePage() {
         .eq("id", id)
         .maybeSingle();
 
-      // Note Runner / Up or Down are played on their own pages (no Team
+      // Runner games (Note Runner, Up or Down, Piano Hop, Happy or Sad,
+      // Rhythm Jump, Music Train) are played on their own pages (no Team
       // Battle, no saved questions).
       if (data && isRunnerGenerator(data.generator)) {
         router.replace(RUNNER_PAGE[data.generator]);

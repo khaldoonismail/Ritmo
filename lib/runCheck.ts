@@ -16,10 +16,22 @@ import {
   type Direction,
 } from "@/lib/upOrDown";
 import type { NoteRunnerSettings, RunnerSettings, UpOrDownSettings } from "@/lib/runnerGames";
+import {
+  checkHappyOrSad,
+  checkMusicTrain,
+  checkPianoHop,
+  checkRhythmJump,
+  fail,
+  timeCheck,
+  type RunCheck,
+  type RunScore,
+} from "@/lib/sharedGameCheck";
 
-// Checks a finished Note Runner / Up or Down run and scores it on the
-// server (app/api/student/runs/finish). The browser makes the notes and
-// sends back every answer; the client's own score is never trusted:
+// Checks a finished run of a runner game and scores it on the server
+// (app/api/student/runs/finish). Note Runner and Up or Down here; Piano
+// Hop, Happy or Sad, Rhythm Jump and Music Train in lib/sharedGameCheck.ts.
+// The browser makes the notes and sends back every answer; the client's
+// own score is never trusted:
 //   * every note / pair of notes must be one the chosen level can make
 //     (clef, range, sharps and flats; interval size, "Same" only on Hard);
 //   * the run ends at the last heart: no answers after it;
@@ -30,30 +42,25 @@ import type { NoteRunnerSettings, RunnerSettings, UpOrDownSettings } from "@/lib
 
 export const MAX_RUN_ANSWERS = 3000;
 
-// Slack for network delay and timer rounding: the run may be this much
-// faster than the game's fastest possible pace, and no more.
-const TIME_FACTOR = 0.9;
-const TIME_SLACK_SECONDS = 3;
-
-export interface RunScore {
-  points: number;
-  correct: number;
-  total: number;
-  bestStreak: number;
-  // 0–100, for student_progress.score and the reports.
-  accuracy: number;
-}
-
-export type RunCheck = { ok: true; score: RunScore } | { ok: false; reason: string };
-
-const fail = (reason: string): RunCheck => ({ ok: false, reason });
+export type { RunCheck, RunScore } from "@/lib/sharedGameCheck";
 
 export function checkRun(settings: RunnerSettings, answers: unknown, elapsedSeconds: number): RunCheck {
   if (!Array.isArray(answers)) return fail("answers missing");
   if (answers.length > MAX_RUN_ANSWERS) return fail("too many answers");
-  return settings.game === "note_runner"
-    ? checkNoteRunner(settings, answers, elapsedSeconds)
-    : checkUpOrDown(settings, answers, elapsedSeconds);
+  switch (settings.game) {
+    case "note_runner":
+      return checkNoteRunner(settings, answers, elapsedSeconds);
+    case "up_or_down":
+      return checkUpOrDown(settings, answers, elapsedSeconds);
+    case "piano_hop":
+      return checkPianoHop(settings, answers, elapsedSeconds);
+    case "happy_or_sad":
+      return checkHappyOrSad(settings, answers, elapsedSeconds);
+    case "rhythm_jump":
+      return checkRhythmJump(settings, answers, elapsedSeconds);
+    case "music_train":
+      return checkMusicTrain(settings, answers, elapsedSeconds);
+  }
 }
 
 function isInt(v: unknown): v is number {
@@ -65,13 +72,6 @@ function validSign(step: Step, accidental: Accidental): boolean {
   if (accidental === "sharp") return step !== "E" && step !== "B";
   if (accidental === "flat") return step !== "C" && step !== "F";
   return true;
-}
-
-function timeCheck(elapsedSeconds: number, minimumSeconds: number): string | null {
-  if (elapsedSeconds < minimumSeconds * TIME_FACTOR - TIME_SLACK_SECONDS) {
-    return `too fast: ${elapsedSeconds.toFixed(1)}s for a run that needs at least ${minimumSeconds.toFixed(1)}s`;
-  }
-  return null;
 }
 
 function finish(points: number, correct: number, total: number, bestStreak: number): RunScore {

@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { StudentSessionPayload } from "@/lib/studentSession";
 import { isRunnerGenerator, normalizeRunnerSettings, type RunnerGenerator, type RunnerSettings } from "@/lib/runnerGames";
 
-// An assigned Note Runner / Up or Down game, as seen by one signed-in
+// An assigned runner game (lib/runnerGames.ts), as seen by one signed-in
 // student: null unless the assignment is in their class, is for them (or
 // the whole class), is active, and is one of the runner games. Takes the
 // service-role client (students have no Supabase Auth session).

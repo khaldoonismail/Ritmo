@@ -9,6 +9,8 @@ import { RotateDeviceOverlay, usePhonePortrait, useShortLandscape } from "@/comp
 import { getAudioContext, unlockNoteAudio } from "@/lib/playNote";
 import { colors } from "@/lib/theme";
 import {
+  BETWEEN_SECONDS,
+  END_TAIL_SECONDS,
   LEVELS,
   MODE_LABELS,
   PATTERNS_PER_ROUND,
@@ -20,6 +22,7 @@ import {
   judgeTap,
   padsAhead,
   padsFor,
+  START_LEAD_SECONDS,
   starsFor,
   windowsFor,
   type Layout,
@@ -71,8 +74,18 @@ interface Run {
   echo: boolean;
   results: (Rating | null)[];
   splashes: number;
+  // Every judged tap's time from t0 (device delay taken off), in order.
+  taps: number[];
   bus: BeatBus;
   finished: boolean;
+}
+
+// One finished pattern, as the server checks it (lib/sharedGameCheck.ts):
+// the rhythm, and the taps the server judges again.
+export interface RhythmJumpAnswer {
+  meter: number;
+  bars: Pattern["bars"];
+  taps: number[];
 }
 
 interface Totals {
@@ -97,6 +110,10 @@ export default function RhythmJumpGame({
   character = DEFAULT_CHARACTER,
   autoStart = false,
   onChangeSettings,
+  onRunStart,
+  onRunEnd,
+  exitLabel = "Change settings",
+  endNote,
 }: {
   // How fast and forgiving it plays (a custom choice's nearest level).
   level: RhythmLevel;
@@ -112,6 +129,15 @@ export default function RhythmJumpGame({
   character?: CharacterChoice;
   autoStart?: boolean;
   onChangeSettings: () => void;
+  // Called as each round starts (an assigned game asks the server for a
+  // run id here) and when all 8 rhythms are done (only whole rounds count).
+  onRunStart?: () => void;
+  onRunEnd?: (answers: RhythmJumpAnswer[]) => void;
+  // The button that leaves the game ("Change settings"; "Back" when the
+  // teacher chose the settings).
+  exitLabel?: string;
+  // Shown on the round-complete panel (e.g. "Saved! Your best: 92%").
+  endNote?: React.ReactNode;
 }) {
   const compact = useShortLandscape();
   const phonePortrait = usePhonePortrait();
@@ -144,6 +170,18 @@ export default function RhythmJumpGame({
   const indexRef = useRef(0);
   const runRef = useRef<Run | null>(null);
   const totalsRef = useRef<Totals>({ ratings: [], splashes: 0 });
+  const answersRef = useRef<RhythmJumpAnswer[]>([]);
+  const onRunEndRef = useRef(onRunEnd);
+  onRunEndRef.current = onRunEnd;
+  const onRunStartRef = useRef(onRunStart);
+  onRunStartRef.current = onRunStart;
+  const endRound = () => {
+    runRef.current = null;
+    setPhase("over");
+    onRunEndRef.current?.([...answersRef.current]);
+  };
+  const endRoundRef = useRef(endRound);
+  endRoundRef.current = endRound;
   const [totals, setTotals] = useState<Totals>({ ratings: [], splashes: 0 });
   const nextTimer = useRef<number | null>(null);
   const [noAudio, setNoAudio] = useState(false);
@@ -200,7 +238,7 @@ export default function RhythmJumpGame({
       const pads = padsFor(lay, bpm);
       const spb = 60 / bpm;
       const bar = pattern.meter * spb;
-      const first = c.currentTime + 0.35;
+      const first = c.currentTime + START_LEAD_SECONDS;
       const listenT0 = echo ? first + bar : null;
       const countStart = echo ? (listenT0 as number) + lay.totalBeats * spb : first;
       const t0 = countStart + bar;
@@ -226,6 +264,7 @@ export default function RhythmJumpGame({
         echo,
         results: pads.map(() => null),
         splashes: 0,
+        taps: [],
         bus,
         finished: false,
       };
@@ -248,6 +287,7 @@ export default function RhythmJumpGame({
     r.finished = true;
     const results = r.results.map((x) => x ?? "miss");
     const t = { ratings: [...totalsRef.current.ratings, ...results], splashes: totalsRef.current.splashes + r.splashes };
+    answersRef.current = [...answersRef.current, { meter: r.pattern.meter, bars: r.pattern.bars, taps: r.taps }];
     totalsRef.current = t;
     setTotals(t);
     setStep("between");
@@ -259,12 +299,10 @@ export default function RhythmJumpGame({
       () => {
         nextTimer.current = null;
         if (phaseRef.current !== "playing") return;
-        if (last) {
-          runRef.current = null;
-          setPhase("over");
-        } else startPattern(r.index + 1);
+        if (last) endRoundRef.current();
+        else startPattern(r.index + 1);
       },
-      r.echo ? 1700 : 900
+      BETWEEN_SECONDS[r.echo ? "echo" : "read"] * 1000
     );
   }, [startPattern]);
 
@@ -313,7 +351,7 @@ export default function RhythmJumpGame({
           playTapSound("wobble");
         }
       });
-      if (heard > r.end - r.t0 + 0.2 && r.results.every((x) => x !== null)) finishPattern();
+      if (heard > r.end - r.t0 + END_TAIL_SECONDS && r.results.every((x) => x !== null)) finishPattern();
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -329,6 +367,7 @@ export default function RhythmJumpGame({
       const t = tapTime(c, timeStamp, delayMs);
       const res = judgeTap(t - r.t0, r.layout, r.pads, r.wins, r.results, r.spb);
       if (res.kind === "ignore") return; // count-in, listening, or after the end
+      r.taps.push(t - r.t0);
       if (res.kind === "note") {
         const { pad: i, rating, offset } = res;
         r.results[i] = rating;
@@ -358,6 +397,8 @@ export default function RhythmJumpGame({
     setRound(fresh);
     totalsRef.current = { ratings: [], splashes: 0 };
     setTotals(totalsRef.current);
+    answersRef.current = [];
+    onRunStartRef.current?.();
     heardAgainRef.current = -1;
     setPhase("playing");
     startPattern(0);
@@ -378,7 +419,7 @@ export default function RhythmJumpGame({
     unlockNoteAudio();
     setPhase("playing");
     const r = runRef.current;
-    if (r && r.finished && r.index >= PATTERNS_PER_ROUND - 1) setPhase("over");
+    if (r && r.finished && r.index >= PATTERNS_PER_ROUND - 1) endRoundRef.current();
     else startPattern(r ? (r.finished ? r.index + 1 : r.index) : indexRef.current);
   }, [startPattern]);
 
@@ -758,7 +799,7 @@ export default function RhythmJumpGame({
                   Start
                 </button>
                 <button type="button" onClick={onChangeSettings} style={secondaryButton}>
-                  Change settings
+                  {exitLabel}
                 </button>
               </>
             )}
@@ -793,11 +834,12 @@ export default function RhythmJumpGame({
                 <div style={{ fontWeight: 700, opacity: 0.7, fontSize: "0.9rem" }}>
                   Timing: {Math.round(acc * 100)}% · {PATTERNS_PER_ROUND} / {PATTERNS_PER_ROUND} patterns
                 </div>
+                {endNote}
                 <button type="button" onClick={startRound} style={primaryButton}>
                   Play again
                 </button>
                 <button type="button" onClick={onChangeSettings} style={secondaryButton}>
-                  Change settings
+                  {exitLabel}
                 </button>
               </>
             )}
