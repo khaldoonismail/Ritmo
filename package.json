@@ -19,7 +19,8 @@
     "check:rhythm-jump": "tsx scripts/check-rhythm-jump.ts",
     "check:fast-or-slow": "tsx scripts/check-fast-or-slow.ts",
     "check:loud-or-soft": "tsx scripts/check-loud-or-soft.ts",
-    "check:shared-games": "tsx scripts/check-shared-games.ts"
+    "check:shared-games": "tsx scripts/check-shared-games.ts",
+    "check:game-registry": "tsx scripts/check-game-registry.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.1",

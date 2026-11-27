@@ -353,7 +353,7 @@ export default function PlayGamePage() {
           Game not found
         </h1>
         <Link
-          href="/games/teacher/library"
+          href="/games/teacher/my-games"
           style={{ color: "inherit", textDecoration: "underline", fontWeight: 700 }}
         >
           ← Back to My Games
@@ -387,7 +387,7 @@ export default function PlayGamePage() {
       {/* The setup screen (and the Team Battle host, shown in it). */}
       {stage === "lobby" && (
         <Link
-          href="/games/teacher/library"
+          href="/games/teacher/my-games"
           style={{
             position: "fixed",
             top: "1.25rem",
@@ -1026,7 +1026,7 @@ export default function PlayGamePage() {
             })}
           </div>
           <Link
-            href="/games/teacher/library"
+            href="/games/teacher/my-games"
             style={{
               display: "inline-block",
               marginTop: "1.5rem",

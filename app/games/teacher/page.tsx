@@ -2,8 +2,9 @@ import Link from "next/link";
 import { colors, radius, solidShadow } from "@/lib/theme";
 
 const sections = [
+  { label: "Game Library", href: "/games/teacher/library" },
   { label: "Create a Game", href: "/games/teacher/create-game" },
-  { label: "My Games", href: "/games/teacher/library" },
+  { label: "My Games & Quizzes", href: "/games/teacher/my-games" },
 ];
 
 export default function GamesTeacherDashboard() {

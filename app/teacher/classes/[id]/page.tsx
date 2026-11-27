@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
@@ -256,6 +256,22 @@ export default function ManageClassPage() {
       setSchedule(scheduleRows || []);
     }
   }
+
+  // Arriving from the Game Library's "Assign" (?assign=<generator>): open
+  // that game's settings in the assign section and scroll to it.
+  const assignHandled = useRef(false);
+  useEffect(() => {
+    if (assignHandled.current || !games) return;
+    const generator = new URLSearchParams(window.location.search).get("assign");
+    if (!generator) return;
+    assignHandled.current = true;
+    const g = games.find((x) => x.generator === generator);
+    if (!g) return;
+    setShowAssignLesson(true);
+    setAssignKind("game");
+    setSettingsOpenFor(g.id);
+    window.setTimeout(() => document.getElementById(`assign-game-${g.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 150);
+  }, [games]);
 
   useEffect(() => {
     if (classId) loadAll();
@@ -1501,6 +1517,7 @@ export default function ManageClassPage() {
                 return (
                   <div
                     key={g.id}
+                    id={`assign-game-${g.id}`}
                     style={{
                       display: "flex",
                       flexWrap: "wrap",

@@ -132,7 +132,7 @@ export default function CreateGamePage() {
       return;
     }
 
-    router.push("/games/teacher/library");
+    router.push("/games/teacher/my-games");
   }
 
   // Kept as-is: this is the exact style already used by the answer-options

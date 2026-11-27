@@ -17,6 +17,9 @@ import { buildLeaderboards, studentDisplayNames } from "@/lib/gameLeaderboard";
 import { assignmentTitle as titleWithSettings } from "@/lib/noteReading";
 import { isRunnerGenerator, rankByOf } from "@/lib/runnerGames";
 import CertificateButton from "./CertificateButton";
+import MusicIsland from "@/components/island/MusicIsland";
+import { buildIslandData } from "@/lib/islandProgress";
+import { DEFAULT_CHARACTER, normalizeCharacter } from "@/components/characters/choice";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -104,6 +107,8 @@ export default async function StudentDashboardPage() {
     ...new Set((assignments || []).map((a) => a.game_id).filter((id): id is string => !!id)),
   ];
   let gameTitleMap = new Map<string, string>();
+  // games.id → games.generator, for Music Island (lib/islandProgress.ts).
+  const generatorOf = new Map<string, string | null>();
   // Runner games: shown with the best run (points for endless runs, the
   // accuracy for rounds); only the endless ones rank by points.
   const runnerGameIds = new Set<string>();
@@ -117,7 +122,10 @@ export default async function StudentDashboardPage() {
   if (gameIds.length > 0) {
     const { data: gameRows } = await supabase.from("games").select("id, title, generator").in("id", gameIds);
     gameTitleMap = new Map((gameRows || []).map((g) => [g.id, g.title]));
-    for (const g of gameRows || []) sortRunnerGame(g);
+    for (const g of gameRows || []) {
+      sortRunnerGame(g);
+      generatorOf.set(g.id, g.generator);
+    }
   }
 
   function assignmentTitle(a: { lesson_id: string | null; game_id: string | null; game_settings?: unknown }): string {
@@ -298,8 +306,40 @@ export default async function StudentDashboardPage() {
     .order("created_at", { ascending: false })
     .limit(5);
 
+  // Music Island: this student's own results in every game (any
+  // assignment), their homework, and their character.
+  const { data: myResults } = await supabase
+    .from("game_results")
+    .select("game_id, points, accuracy")
+    .eq("student_id", session.studentId);
+  const unknownGameIds = [...new Set((myResults || []).map((r) => r.game_id))].filter((id) => !generatorOf.has(id));
+  if (unknownGameIds.length > 0) {
+    const { data: rows } = await supabase.from("games").select("id, generator").in("id", unknownGameIds);
+    for (const g of rows || []) generatorOf.set(g.id, g.generator);
+  }
+  const island = buildIslandData({
+    assignments: assignments || [],
+    generatorOf,
+    statusOf: new Map([...progressMap].map(([id, p]) => [id, p.status])),
+    results: myResults || [],
+  });
+  const homeworkCount = (assignments || []).filter((a) => (progressMap.get(a.id)?.status ?? "not_started") !== "completed").length;
+  const { data: studentRow } = await supabase.from("students").select("runner_character").eq("id", session.studentId).maybeSingle();
+  const character = (studentRow?.runner_character ? normalizeCharacter(studentRow.runner_character) : null) ?? DEFAULT_CHARACTER;
+
   return (
+    <>
+    <MusicIsland
+      name={session.name}
+      levelLabel={`${level.label} · ${totalPoints} pts`}
+      character={character}
+      progress={island.progress}
+      hrefs={island.hrefs}
+      notes={island.notes}
+      homeworkCount={homeworkCount}
+    />
     <main
+      id="lessons"
       style={{
         minHeight: "100vh",
         display: "flex",
@@ -602,5 +642,6 @@ export default async function StudentDashboardPage() {
         <LogoutButton />
       </div>
     </main>
+    </>
   );
 }

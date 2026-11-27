@@ -1001,7 +1001,7 @@ export default function TeamBattleHost({ game, gameUrl }: { game: Game; gameUrl:
               </button>
             )}
             {/* Danger-styled (matches the "Delete" button convention in
-                app/games/teacher/library/page.tsx) since it's the one
+                app/games/teacher/my-games/page.tsx) since it's the one
                 control here that discards data — everyone's answers and
                 points for the current question. */}
             {!revealing && (
