@@ -18,6 +18,7 @@
     "check:piano-sound": "tsx scripts/check-piano-sound.ts",
     "check:rhythm-jump": "tsx scripts/check-rhythm-jump.ts",
     "check:fast-or-slow": "tsx scripts/check-fast-or-slow.ts",
+    "check:loud-or-soft": "tsx scripts/check-loud-or-soft.ts",
     "check:shared-games": "tsx scripts/check-shared-games.ts"
   },
   "dependencies": {
