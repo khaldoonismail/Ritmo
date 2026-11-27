@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 export default function MaintenancePage() {
   return (
     <main
+      data-maintenance=""
       style={{
         minHeight: "100vh",
         display: "flex",

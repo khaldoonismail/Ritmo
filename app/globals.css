@@ -254,3 +254,9 @@ input[type="checkbox"] {
     border-left: none !important;
   }
 }
+
+/* The site footer (components/SiteFooter.tsx) is hidden on the "Coming
+   Soon" page, which maintenance mode shows at any URL. */
+body:has([data-maintenance]) .site-footer {
+  display: none;
+}
