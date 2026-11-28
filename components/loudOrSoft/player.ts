@@ -1,5 +1,5 @@
 import { getAudioContext, schedulePianoTone } from "@/lib/playNote";
-import { LIMITER, brightnessHz, type Envelope, type Part, type Rendered } from "@/lib/loudOrSoft/music";
+import { END_TAIL_SECONDS, LIMITER, LISTEN_LEAD_SECONDS, brightnessHz, type Envelope, type Part, type Rendered } from "@/lib/loudOrSoft/music";
 
 // Plays Sleepy Town's music on the piano (lib/playNote.ts: the shared
 // AudioContext with the iPhone silent-switch fix, recorded samples with the
@@ -33,7 +33,7 @@ export class TownPlayer {
     const c = getAudioContext();
     if (!c) return null;
     if (c.state !== "running") c.resume().catch(() => {});
-    const t0 = c.currentTime + (opts.lead ?? 0.12);
+    const t0 = c.currentTime + (opts.lead ?? LISTEN_LEAD_SECONDS);
     const parts: { part: Part; start: number }[] = [];
     let referenceStart: number | null = null;
     let pieceStart = t0;
@@ -54,7 +54,7 @@ export class TownPlayer {
       );
     };
     if (opts.onPiece) at(pieceStart, opts.onPiece);
-    at(end + 0.25, () => {
+    at(end + END_TAIL_SECONDS, () => {
       const o = this.out;
       this.out = null;
       if (o) window.setTimeout(() => o.disconnect(), 600);

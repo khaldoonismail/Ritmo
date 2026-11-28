@@ -18,6 +18,7 @@ import {
 import type { NoteRunnerSettings, RunnerSettings, UpOrDownSettings } from "@/lib/runnerGames";
 import {
   checkHappyOrSad,
+  checkLoudOrSoft,
   checkMusicTrain,
   checkPianoHop,
   checkRhythmJump,
@@ -60,6 +61,8 @@ export function checkRun(settings: RunnerSettings, answers: unknown, elapsedSeco
       return checkRhythmJump(settings, answers, elapsedSeconds);
     case "music_train":
       return checkMusicTrain(settings, answers, elapsedSeconds);
+    case "loud_or_soft":
+      return checkLoudOrSoft(settings, answers, elapsedSeconds);
   }
 }
 

@@ -17,9 +17,11 @@ import type { PianoLevel } from "@/lib/pianoHop";
 import type { HappyOrSadLevel } from "@/lib/happyOrSad/pieces";
 import type { Labels } from "@/lib/happyOrSad/round";
 import type { TrainLevel } from "@/lib/fastOrSlow/music";
+import type { DynLevel } from "@/lib/loudOrSoft/music";
 
-// Piano Hop, Happy or Sad, Rhythm Jump and Music Train as shared library
-// games (supabase/migrations/0030_stage2_games.sql): the teacher's choice
+// Piano Hop, Happy or Sad, Rhythm Jump and Music Train
+// (supabase/migrations/0030_stage2_games.sql) and Sleepy Town (Loud or
+// Soft, 0031_sleepy_town.sql) as shared library games: the teacher's choice
 // saved on an assignment (assignments.game_settings, tagged with `game`),
 // its leaderboard variant (game_results.variant) and its label ("Hard",
 // "Custom (quarter, quarter rest · 3/4)").
@@ -32,6 +34,7 @@ export const PIANO_HOP_GENERATOR = "piano_hop";
 export const HAPPY_OR_SAD_GENERATOR = "happy_or_sad";
 export const RHYTHM_JUMP_GENERATOR = "rhythm_jump";
 export const MUSIC_TRAIN_GENERATOR = "music_train";
+export const LOUD_OR_SOFT_GENERATOR = "loud_or_soft";
 
 export interface PianoHopSettings {
   game: "piano_hop";
@@ -64,7 +67,14 @@ export interface MusicTrainSettings {
   italian: boolean;
 }
 
-export type SharedGameSettings = PianoHopSettings | HappyOrSadSettings | RhythmJumpSettings | MusicTrainSettings;
+export interface LoudOrSoftSettings {
+  game: "loud_or_soft";
+  level: DynLevel;
+  // The real markings (pp, p, mf, f, ff, cresc., dim.) next to the answers.
+  markings: boolean;
+}
+
+export type SharedGameSettings = PianoHopSettings | HappyOrSadSettings | RhythmJumpSettings | MusicTrainSettings | LoudOrSoftSettings;
 
 type Obj = Record<string, unknown>;
 const obj = (value: unknown): Obj => (value && typeof value === "object" ? (value as Obj) : {});
@@ -109,6 +119,11 @@ export function normalizeMusicTrainSettings(value: unknown): MusicTrainSettings 
   return { game: "music_train", level: level3(v.level), italian: v.italian === true };
 }
 
+export function normalizeLoudOrSoftSettings(value: unknown): LoudOrSoftSettings {
+  const v = obj(value);
+  return { game: "loud_or_soft", level: level3(v.level), markings: v.markings === true };
+}
+
 // How fast and forgiving a Rhythm Jump assignment plays.
 export function rhythmPlayLevel(s: RhythmJumpSettings): RhythmLevel {
   return s.custom ? levelOfChoice(s.custom) : (s.rhythms as RhythmLevel);
@@ -118,9 +133,10 @@ export function rhythmPlayLevel(s: RhythmJumpSettings): RhythmLevel {
 //
 // Each variant starts with the game's prefix, so a label can be read from
 // the variant alone (lib/gameLeaderboard.ts only has the variant):
-//   piano-hop:easy · happy-sad:medium · music-train:hard
+//   piano-hop:easy · happy-sad:medium · music-train:hard · sleepy-town:hard
 //   rhythm-jump:hard:echo:fast · rhythm-jump:custom-q.ee.qr-3.4:read:normal
-// Note names, Happy/Sad vs Major/Minor, Italian words and syllables don't
+// Note names, Happy/Sad vs Major/Minor, Italian words, dynamic markings
+// and syllables don't
 // change how hard a game is, so they're left out (same board).
 
 const LEVEL_WORD: Record<"easy" | "medium" | "hard", string> = { easy: "Easy", medium: "Medium", hard: "Hard" };
@@ -133,6 +149,8 @@ export function sharedGameVariant(s: SharedGameSettings): string {
       return `happy-sad:${s.level}`;
     case "music_train":
       return `music-train:${s.level}`;
+    case "loud_or_soft":
+      return `sleepy-town:${s.level}`;
     case "rhythm_jump": {
       const rhythms = s.custom ? `custom-${s.custom.values.join(".")}-${s.custom.meters.join(".")}` : s.rhythms;
       return `rhythm-jump:${rhythms}:${s.mode}:${s.tempo}`;
@@ -166,7 +184,7 @@ export function customChoiceLabel(c: RhythmChoice): string {
 // 4/4)"… Null for anything that isn't one of these games' variants.
 export function sharedVariantLabel(variant: string): string | null {
   const [prefix, ...rest] = variant.split(":");
-  if (prefix === "piano-hop" || prefix === "happy-sad" || prefix === "music-train") {
+  if (prefix === "piano-hop" || prefix === "happy-sad" || prefix === "music-train" || prefix === "sleepy-town") {
     const l = rest[0];
     return l === "easy" || l === "medium" || l === "hard" ? LEVEL_WORD[l] : null;
   }
@@ -194,5 +212,6 @@ export function sharedSettingsOf(gameSettings: unknown): SharedGameSettings | nu
   if (g === "happy_or_sad") return normalizeHappyOrSadSettings(gameSettings);
   if (g === "rhythm_jump") return normalizeRhythmJumpSettings(gameSettings);
   if (g === "music_train") return normalizeMusicTrainSettings(gameSettings);
+  if (g === "loud_or_soft") return normalizeLoudOrSoftSettings(gameSettings);
   return null;
 }

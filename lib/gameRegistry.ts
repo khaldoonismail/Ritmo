@@ -50,7 +50,7 @@ export interface GameEntry {
   // island. null: none (Note Reading is played from its shared game).
   route: string | null;
   // The shared library game it is assigned as (games.generator), or null
-  // when it can't be assigned yet (Sleepy Town: stage 1; Team Battle: live).
+  // when it can't be assigned (Team Battle: live, from the teacher's quizzes).
   generator: string | null;
   art: LandmarkArt; // the landmark on the island, and the library preview
   // Which spot of its region it takes (0 = the first). Spots without a
@@ -176,7 +176,7 @@ export const GAMES: GameEntry[] = [
     roundLength: "10 pieces",
     minutes: 4,
     route: "/games/loud-or-soft",
-    generator: null,
+    generator: "loud_or_soft",
     art: "sleepy-town",
     spot: 1,
     isNew: true,

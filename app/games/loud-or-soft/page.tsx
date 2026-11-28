@@ -10,9 +10,11 @@ import { usePianoSamples } from "@/lib/usePianoSamples";
 import { AnswerIcon, Hairpin } from "@/components/loudOrSoft/icons";
 import { LEVELS, type DynLevel } from "@/lib/loudOrSoft/music";
 
-// Sleepy Town (Loud or Soft), stage 1: dynamics by ear. An unlisted page
-// (not in the library, no database). 2D (SVG and CSS), light for old
-// tablets. Before the first round on a device: "Set your volume".
+// Sleepy Town (Loud or Soft): dynamics by ear. Free practice and the
+// teachers' Play demo (nothing saved); assigned rounds are played from
+// app/student/game/[assignmentId] (SharedGamePlayer). 2D (SVG and CSS),
+// light for old tablets. Before the first round on a device: "Set your
+// volume".
 
 const loadGame = () => import("@/components/loudOrSoft/SleepyTownGame");
 const SleepyTownGame = dynamic(loadGame, {

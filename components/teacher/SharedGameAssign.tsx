@@ -7,6 +7,7 @@ import { PIANO_LEVELS, type PianoLevel } from "@/lib/pianoHop";
 import { HAPPY_OR_SAD_LABELS, HAPPY_OR_SAD_LEVELS, type Labels } from "@/lib/happyOrSad/round";
 import type { HappyOrSadLevel } from "@/lib/happyOrSad/pieces";
 import { LEVELS as TRAIN_LEVELS, type TrainLevel } from "@/lib/fastOrSlow/music";
+import { LEVELS as TOWN_LEVELS, type DynLevel } from "@/lib/loudOrSoft/music";
 import {
   ALL_METERS,
   LEVELS as RHYTHM_LEVELS,
@@ -28,6 +29,7 @@ import {
 import { ValueSymbol } from "@/components/rhythmJump/Notation";
 import {
   normalizeHappyOrSadSettings,
+  normalizeLoudOrSoftSettings,
   normalizeMusicTrainSettings,
   normalizePianoHopSettings,
   normalizeRhythmJumpSettings,
@@ -35,8 +37,8 @@ import {
   type SharedGameSettings,
 } from "@/lib/sharedGames";
 
-// The Assign panel for Piano Hop, Happy or Sad, Rhythm Jump and Music
-// Train (the class page's "Choose settings…"). Hands back normalized
+// The Assign panel for Piano Hop, Happy or Sad, Rhythm Jump, Music Train
+// and Sleepy Town (the class page's "Choose settings…"). Hands back normalized
 // settings (lib/sharedGames.ts), saved on the assignment.
 
 const LEVEL_KEYS = ["easy", "medium", "hard"] as const;
@@ -172,6 +174,9 @@ export default function SharedGameAssign({
   // Music Train
   const [trainLevel, setTrainLevel] = useState<TrainLevel>("easy");
   const [italian, setItalian] = useState(false);
+  // Sleepy Town
+  const [townLevel, setTownLevel] = useState<DynLevel>("easy");
+  const [markings, setMarkings] = useState(false);
   // Rhythm Jump
   const [rhythms, setRhythms] = useState<RhythmLevel | "custom">("easy");
   const [choice, setChoice] = useState<RhythmChoice>(PRESET_CHOICES.easy);
@@ -219,6 +224,25 @@ export default function SharedGameAssign({
           options={LEVEL_KEYS.map((k) => ({ key: k, label: TRAIN_LEVELS[k].label, detail: TRAIN_LEVELS[k].detail }))}
         />
         <Check label="Italian tempo words" detail="Largo, Andante, Allegro… on the buttons" checked={italian} onChange={setItalian} />
+      </>
+    );
+  } else if (generator === "loud_or_soft") {
+    settings = normalizeLoudOrSoftSettings({ level: townLevel, markings });
+    intro = "Rounds of 10 pieces. Students can play as often as they like; their best round (most right) counts.";
+    body = (
+      <>
+        <OptionList
+          label="Level"
+          value={townLevel}
+          onChange={setTownLevel}
+          options={LEVEL_KEYS.map((k) => ({ key: k, label: TOWN_LEVELS[k].label, detail: TOWN_LEVELS[k].detail }))}
+        />
+        <Check
+          label="Dynamic markings"
+          detail="pp, p, mf, f, ff, cresc. and dim. next to the answers (phones always show the short marking)"
+          checked={markings}
+          onChange={setMarkings}
+        />
       </>
     );
   } else {

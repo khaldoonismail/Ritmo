@@ -13,8 +13,11 @@ import {
   LEVELS,
   LOUDNESS_RANK,
   QUESTION_TEXT,
+  REACT_SECONDS,
   REFERENCE_GAP,
   ROUND_LENGTH,
+  SETTLE_SECONDS,
+  SHOW_LEAD_SECONDS,
   answersFor,
   buildRound,
   dbAt,
@@ -45,8 +48,17 @@ type Step = "listen" | "ask" | "react" | "show" | "settle";
 type Hearing = "reference" | "gap" | "piece" | null;
 type Mode = "idle" | "tiptoe" | "walk" | "drum";
 
-const REACT_SECONDS = 1.9;
-const SETTLE_SECONDS = 1.1;
+// One answered piece, as the server checks it (lib/sharedGameCheck.ts):
+// the piece as it was played, and the child's answer.
+export interface LoudOrSoftAnswer {
+  melody: string;
+  dynamic: Answer;
+  bpm: number;
+  transpose: number;
+  repeats: number;
+  picked: Answer;
+}
+
 const START_X = 380; // where the character starts (town units)
 const END_X = 1380;
 const SPEED: Record<Mode, number> = { idle: 0, tiptoe: 95, walk: 170, drum: 0 }; // town units a second
@@ -57,14 +69,25 @@ export default function SleepyTownGame({
   character = DEFAULT_CHARACTER,
   autoStart = false,
   onChangeSettings,
+  onRunStart,
+  onRunEnd,
   exitLabel = "Change settings",
+  endNote,
 }: {
   level: DynLevel;
   markings: boolean;
   character?: CharacterChoice;
   autoStart?: boolean;
   onChangeSettings: () => void;
+  // Called as each round starts (an assigned game asks the server for a
+  // run id here) and when all 10 pieces are done (only whole rounds count).
+  onRunStart?: () => void;
+  onRunEnd?: (answers: LoudOrSoftAnswer[]) => void;
+  // The button that leaves the game ("Change settings"; "Back" when the
+  // teacher chose the settings).
   exitLabel?: string;
+  // Shown on the round-complete panel (e.g. "Saved! Your best: 90%").
+  endNote?: React.ReactNode;
 }) {
   const compact = useShortLandscape();
   const phonePortrait = usePhonePortrait();
@@ -90,6 +113,11 @@ export default function SleepyTownGame({
   const [index, setIndex] = useState(0);
   const indexRef = useRef(0);
   const resultsRef = useRef<boolean[]>([]);
+  const answersRef = useRef<LoudOrSoftAnswer[]>([]);
+  const onRunEndRef = useRef(onRunEnd);
+  onRunEndRef.current = onRunEnd;
+  const onRunStartRef = useRef(onRunStart);
+  onRunStartRef.current = onRunStart;
   const [correct, setCorrect] = useState(0);
   const [choice, setChoice] = useState<Answer | null>(null);
   const choiceRef = useRef<Answer | null>(null);
@@ -223,7 +251,7 @@ export default function SleepyTownGame({
     const playing = player.current!.play(r, {
       withReference: false,
       gap: 0,
-      lead: 0.2,
+      lead: SHOW_LEAD_SECONDS,
       onEnd: () => {
         show.current = null;
         setStep("settle");
@@ -238,6 +266,7 @@ export default function SleepyTownGame({
             setPhase("over");
             setWake(1.3);
             react("happy");
+            onRunEndRef.current?.([...answersRef.current]);
           } else listen(next);
         });
       },
@@ -261,6 +290,10 @@ export default function SleepyTownGame({
     choiceRef.current = a;
     setChoice(a);
     resultsRef.current = [...resultsRef.current, right];
+    answersRef.current = [
+      ...answersRef.current,
+      { melody: q.melody.id, dynamic: q.answer, bpm: q.bpm, transpose: q.transpose, repeats: q.repeats, picked: a },
+    ];
     const n = resultsRef.current.filter(Boolean).length;
     setCorrect(n);
     playFeedback(right ? "correct" : "wrong");
@@ -318,6 +351,8 @@ export default function SleepyTownGame({
     roundRef.current = fresh;
     setRound(fresh);
     resultsRef.current = [];
+    answersRef.current = [];
+    onRunStartRef.current?.();
     setCorrect(0);
     charX.current = START_X;
     placeChar();
@@ -347,6 +382,7 @@ export default function SleepyTownGame({
       if (next >= ROUND_LENGTH) {
         setPhase("over");
         setWake(1.3);
+        onRunEndRef.current?.([...answersRef.current]);
       } else listen(next);
     } else listen(indexRef.current);
   }, [listen, startShow]);
@@ -622,6 +658,7 @@ export default function SleepyTownGame({
                 <div style={{ fontWeight: 800 }}>
                   {correct} {correct === 1 ? "light" : "lights"} for the town · {correct} of {ROUND_LENGTH} right
                 </div>
+                {endNote}
                 <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                   <button type="button" onClick={startRound} style={{ ...primaryButton, flex: 1 }}>
                     Play again

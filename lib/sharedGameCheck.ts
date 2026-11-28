@@ -52,15 +52,35 @@ import {
   type Token,
 } from "@/lib/rhythmJump";
 import {
+  END_TAIL_SECONDS as TOWN_TAIL,
+  LISTEN_LEAD_SECONDS,
+  MELODIES as TOWN_MELODIES,
+  REACT_SECONDS,
+  REFERENCE_GAP,
+  ROUND_LENGTH as TOWN_ROUND,
+  SETTLE_SECONDS,
+  SHOW_LEAD_SECONDS,
+  TEMPO_RANGE as TOWN_TEMPOS,
+  TRANSPOSES as TOWN_TRANSPOSES,
+  KIND_OF,
+  answersFor as townAnswersFor,
+  render as renderTown,
+  repeatsFor as townRepeatsFor,
+  type Answer as DynAnswer,
+  type Melody as TownMelody,
+  type Question as TownQuestion,
+} from "@/lib/loudOrSoft/music";
+import {
   rhythmPlayLevel,
   type HappyOrSadSettings,
+  type LoudOrSoftSettings,
   type MusicTrainSettings,
   type PianoHopSettings,
   type RhythmJumpSettings,
 } from "@/lib/sharedGames";
 
-// Server checks for Piano Hop, Happy or Sad, Rhythm Jump and Music Train
-// runs (called by lib/runCheck.ts, from app/api/student/runs/finish). The
+// Server checks for Piano Hop, Happy or Sad, Rhythm Jump, Music Train and
+// Sleepy Town (Loud or Soft) runs (called by lib/runCheck.ts, from app/api/student/runs/finish). The
 // browser makes the questions and sends back each one with the child's
 // answer; the server never trusts the browser's score:
 //   * every question must be one the teacher's settings can make (and a
@@ -69,7 +89,7 @@ import {
 //   * the run can't have been faster than the game can go: each question
 //     takes at least its music / countdown / pause, so the time since the
 //     server started the run must cover them all;
-//   * Piano Hop ends at the last heart; the other three only count whole
+//   * Piano Hop ends at the last heart; the others only count whole
 //     rounds (they're ranked by accuracy, and a quit half-round would be an
 //     unfair 100 %).
 // Rhythm Jump's timing is judged again from the taps themselves: see
@@ -480,4 +500,104 @@ function patternProblem(s: RhythmJumpSettings, level: ReturnType<typeof rhythmPl
   if (!usesLevelFeature(level, p)) return "doesn't use this level's rhythms";
   if (JSON.stringify(p) === previous) return "same rhythm twice in a row";
   return null;
+}
+
+// --- Sleepy Town (Loud or Soft) ------------------------------------------------------------
+// answers: [{ melody, dynamic (what the piece was played at: "p", "cresc",
+// "subito-f"…), bpm, transpose, repeats, picked }] — exactly one round.
+// Each piece must be one the level can play, at a tempo, key and length
+// the game could have chosen, and the round must be built the way
+// buildRound builds it (lib/loudOrSoft/music.ts).
+
+const TOWN_BY_ID = new Map<string, TownMelody>(TOWN_MELODIES.map((m) => [m.id, m]));
+const STEADY_HARD: DynAnswer[] = ["pp", "p", "f", "ff"];
+
+export function checkLoudOrSoft(s: LoudOrSoftSettings, answers: unknown[], elapsed: number): RunCheck {
+  if (answers.length !== TOWN_ROUND) return fail(`a round has ${TOWN_ROUND} pieces, got ${answers.length}`);
+  const questions: TownQuestion[] = [];
+  const right: boolean[] = [];
+  let minimum = 0;
+  for (let i = 0; i < answers.length; i++) {
+    const a = answers[i] as { melody?: unknown; dynamic?: unknown; bpm?: unknown; transpose?: unknown; repeats?: unknown; picked?: unknown } | null;
+    const melody = typeof a?.melody === "string" ? TOWN_BY_ID.get(a.melody) : undefined;
+    if (!melody) return fail(`answer ${i}: unknown melody`);
+    const dynamic = a!.dynamic as DynAnswer;
+    if (typeof dynamic !== "string" || !Object.prototype.hasOwnProperty.call(KIND_OF, dynamic)) return fail(`answer ${i}: not a dynamic`);
+    const kind = KIND_OF[dynamic];
+    // The dynamic must be one this level plays (its own answers).
+    if (s.level !== "hard" && kind !== "steady") return fail(`answer ${i}: changing dynamics not in this level`);
+    const choices = townAnswersFor(s.level, kind);
+    if (!choices.includes(dynamic)) return fail(`answer ${i}: dynamic not in this level`);
+    const bpm = a!.bpm;
+    if (!isInt(bpm) || bpm < TOWN_TEMPOS[0] || bpm > TOWN_TEMPOS[1]) return fail(`answer ${i}: tempo not one the game plays`);
+    if (!isInt(a!.transpose) || !TOWN_TRANSPOSES.includes(a!.transpose)) return fail(`answer ${i}: key not one the game plays`);
+    if (a!.repeats !== townRepeatsFor(melody, bpm, kind)) return fail(`answer ${i}: wrong length`);
+    if (i > 0 && questions[i - 1].melody.id === melody.id) return fail(`answer ${i}: same melody twice in a row`);
+    if (!choices.includes(a!.picked as DynAnswer)) return fail(`answer ${i}: not an answer`);
+    const q: TownQuestion = { level: s.level, kind, melody, answer: dynamic, bpm, transpose: a!.transpose, repeats: a!.repeats as number };
+    questions.push(q);
+    const ok = a!.picked === dynamic;
+    right.push(ok);
+
+    // The normal tune and the piece play before the answers open; then
+    // (after a wrong answer's reaction) the piece again with the town
+    // following it, and the town settles.
+    const r = renderTown(q);
+    minimum +=
+      LISTEN_LEAD_SECONDS +
+      r.reference.seconds +
+      REFERENCE_GAP +
+      r.piece.seconds +
+      TOWN_TAIL +
+      (ok ? 0 : REACT_SECONDS) +
+      SHOW_LEAD_SECONDS +
+      r.piece.seconds +
+      TOWN_TAIL +
+      SETTLE_SECONDS;
+  }
+
+  const shape = townRoundProblem(s.level, questions);
+  if (shape) return fail(shape);
+  const slow = timeCheck(elapsed, minimum);
+  if (slow) return fail(slow);
+  const correct = right.filter(Boolean).length;
+  return {
+    ok: true,
+    score: { points: correct * 100, correct, total: TOWN_ROUND, bestStreak: longestStreak(right), accuracy: pct(correct, TOWN_ROUND) },
+  };
+}
+
+function townRoundProblem(level: LoudOrSoftSettings["level"], qs: TownQuestion[]): string | null {
+  const byMelody = new Map<string, string[]>();
+  for (const q of qs) byMelody.set(q.melody.id, [...(byMelody.get(q.melody.id) ?? []), q.answer]);
+  const sorted = (xs: string[]) => [...xs].sort().join(",");
+  if (level === "easy") {
+    // 5 melodies, each once soft and once loud.
+    if (byMelody.size !== 5 || [...byMelody.values()].some((v) => sorted(v) !== "f,p")) return "not an Easy round";
+    return null;
+  }
+  if (level === "medium") {
+    // 3 melodies at p, mf and f, plus one more melody once.
+    const shapes = [...byMelody.values()].map(sorted);
+    const full = shapes.filter((x) => x === "f,mf,p").length;
+    const single = shapes.filter((x) => x === "p" || x === "mf" || x === "f").length;
+    if (byMelody.size !== 4 || full !== 3 || single !== 1) return "not a Medium round";
+    return null;
+  }
+  // Hard: 2 getting louder, 2 getting softer, 3 sudden changes (both ways
+  // at least once), 3 different steady levels from pp, p, f, ff; the
+  // melodies go round once, so only one can come twice.
+  const count = (a: DynAnswer) => qs.filter((q) => q.answer === a).length;
+  const steady = qs.filter((q) => q.kind === "steady").map((q) => q.answer);
+  const ok =
+    count("cresc") === 2 &&
+    count("dim") === 2 &&
+    count("subito-f") >= 1 &&
+    count("subito-p") >= 1 &&
+    count("subito-f") + count("subito-p") === 3 &&
+    steady.length === 3 &&
+    new Set(steady).size === 3 &&
+    steady.every((a) => STEADY_HARD.includes(a)) &&
+    byMelody.size >= Math.min(TOWN_ROUND, TOWN_MELODIES.length);
+  return ok ? null : "not a Hard round";
 }

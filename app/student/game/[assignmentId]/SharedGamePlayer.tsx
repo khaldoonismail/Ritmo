@@ -12,11 +12,12 @@ import { rhythmPlayLevel, type SharedGameSettings } from "@/lib/sharedGames";
 import { starsFor as roundStars } from "@/lib/happyOrSad/round";
 import { SaveNote, useRunSave, type Best } from "./useRunSave";
 
-// An assigned Piano Hop, Happy or Sad, Rhythm Jump or Music Train game.
+// An assigned Piano Hop, Happy or Sad, Rhythm Jump, Music Train or Sleepy
+// Town (Loud or Soft) game.
 // The teacher chose the settings; the student plays as often as they like
 // and the best result counts (runs are started, checked and saved by
 // ./useRunSave). Piano Hop is an endless run (best = most points); the
-// other three are rounds (best = highest accuracy, whole rounds only).
+// others are rounds (best = highest accuracy, whole rounds only).
 
 const loading = () => (
   <main style={{ minHeight: "100dvh", display: "grid", placeItems: "center", background: "#BFE3F5" }}>
@@ -28,11 +29,15 @@ const loaders = {
   happy_or_sad: () => import("@/components/happyOrSad/HappyOrSadGame"),
   rhythm_jump: () => import("@/components/rhythmJump/RhythmJumpGame"),
   music_train: () => import("@/components/musicTrain/MusicTrainGame"),
+  loud_or_soft: () => import("@/components/loudOrSoft/SleepyTownGame"),
 };
 const PianoHopGame = dynamic(loaders.piano_hop, { ssr: false, loading });
 const HappyOrSadGame = dynamic(loaders.happy_or_sad, { ssr: false, loading });
 const RhythmJumpGame = dynamic(loaders.rhythm_jump, { ssr: false, loading });
 const MusicTrainGame = dynamic(loaders.music_train, { ssr: false, loading });
+const SleepyTownGame = dynamic(loaders.loud_or_soft, { ssr: false, loading });
+const loadVolume = () => import("@/components/loudOrSoft/VolumeStep");
+const VolumeStep = dynamic(loadVolume, { ssr: false, loading });
 const Calibration = dynamic(() => import("@/components/rhythmJump/Calibration"), { ssr: false, loading });
 
 const INTRO: Record<SharedGameSettings["game"], { icon: string; text: string; controls: string }> = {
@@ -56,9 +61,14 @@ const INTRO: Record<SharedGameSettings["game"], { icon: string; text: string; co
     text: "Listen to the music and pick the driver who keeps its speed. 10 pieces a round. Play as often as you like — your best round counts.",
     controls: "Tablet or phone: tap · Sound on 🔊",
   },
+  loud_or_soft: {
+    icon: "🌙🥁",
+    text: "First a normal tune plays, then the music: is it softer or louder? Tiptoe past the sleeping houses, or bang the drum and wake the town! 10 pieces a round. Play as often as you like — your best round counts.",
+    controls: "Tablet or phone: tap · Sound on 🔊 · Headphones or a quiet room help",
+  },
 };
 
-type Screen = "intro" | "calibrate" | "game";
+type Screen = "intro" | "calibrate" | "volume" | "game";
 
 export default function SharedGamePlayer({
   assignmentId,
@@ -77,12 +87,18 @@ export default function SharedGamePlayer({
   const [runKey, setRunKey] = useState(0);
   const [delayMs, setDelayMs] = useState<number | null>(null);
   const [skipped, setSkipped] = useState(false);
+  const [volumeSet, setVolumeSet] = useState(true);
   const { best, save, onRunStart, onRunEnd } = useRunSave(assignmentId, initialBest);
   const { runner, chosen, picking, setPicking, save: saveRunner } = useRunnerChoice();
 
   useEffect(() => {
     loaders[settings.game]().catch(() => {});
     if (settings.game === "rhythm_jump") setDelayMs(loadCalibration());
+    if (settings.game === "loud_or_soft") {
+      loadVolume()
+        .then((m) => setVolumeSet(m.volumeIsSet()))
+        .catch(() => {});
+    }
   }, [settings.game]);
 
   const endNote = <SaveNote save={save} byAccuracy={byAccuracy} />;
@@ -91,6 +107,11 @@ export default function SharedGamePlayer({
     // Rhythm Jump measures this device's delay once, before the first game.
     if (settings.game === "rhythm_jump" && delayMs === null && !skipped) {
       setScreen("calibrate");
+      return;
+    }
+    // Sleepy Town: "Set your volume" once on a device, before the first game.
+    if (settings.game === "loud_or_soft" && !volumeSet) {
+      setScreen("volume");
       return;
     }
     setRunKey(Date.now());
@@ -116,6 +137,19 @@ export default function SharedGamePlayer({
     );
   }
 
+  if (screen === "volume") {
+    return (
+      <VolumeStep
+        onDone={() => {
+          setVolumeSet(true);
+          setRunKey(Date.now());
+          setScreen("game");
+        }}
+        onCancel={back}
+      />
+    );
+  }
+
   if (screen === "game") {
     switch (settings.game) {
       case "piano_hop":
@@ -124,6 +158,8 @@ export default function SharedGamePlayer({
         return <HappyOrSadGame key={runKey} {...common} level={settings.level} labels={settings.labels} onRunEnd={onRunEnd} />;
       case "music_train":
         return <MusicTrainGame key={runKey} {...common} level={settings.level} italian={settings.italian} onRunEnd={onRunEnd} />;
+      case "loud_or_soft":
+        return <SleepyTownGame key={runKey} {...common} level={settings.level} markings={settings.markings} onRunEnd={onRunEnd} />;
       case "rhythm_jump":
         return (
           <RhythmJumpGame

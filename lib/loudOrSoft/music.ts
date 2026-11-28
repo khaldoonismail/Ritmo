@@ -299,6 +299,19 @@ export function render(q: Question): Rendered {
 
 export const ROUND_LENGTH = 10;
 
+// The pace of a question (components/loudOrSoft/SleepyTownGame.tsx and
+// player.ts), also used by the server to reject impossibly fast rounds
+// (lib/sharedGameCheck.ts): the normal tune and the piece start
+// LISTEN_LEAD_SECONDS after the question; the answers open END_TAIL_SECONDS
+// after the piece ends. A wrong answer gets REACT_SECONDS of funny
+// reaction; then the piece plays again (SHOW_LEAD_SECONDS in) with the town
+// following it, and the town settles for SETTLE_SECONDS.
+export const LISTEN_LEAD_SECONDS = 0.12;
+export const SHOW_LEAD_SECONDS = 0.2;
+export const END_TAIL_SECONDS = 0.25;
+export const REACT_SECONDS = 1.9;
+export const SETTLE_SECONDS = 1.1;
+
 function shuffle<T>(xs: T[], rand: () => number): T[] {
   const a = [...xs];
   for (let i = a.length - 1; i > 0; i--) {

@@ -1,5 +1,5 @@
 // Checks the server's checks and scoring for Piano Hop, Happy or Sad,
-// Rhythm Jump and Music Train (lib/sharedGameCheck.ts, via lib/runCheck.ts)
+// Rhythm Jump, Music Train and Sleepy Town (Loud or Soft) (lib/sharedGameCheck.ts, via lib/runCheck.ts)
 // with rounds made by the games' own round makers: hundreds of honest
 // rounds at a real pace must all pass and score like the game does;
 // too-fast runs, questions outside the settings, half rounds, answers
@@ -11,6 +11,13 @@ import { PianoQuestionSupply, answerSeconds, pointsFor, HOP_LAND_SECONDS, RIGHT_
 import { buildRound as buildHappyRound } from "../lib/happyOrSad/round";
 import { parsePiece } from "../lib/happyOrSad/pieces";
 import { buildRound as buildTrainRound, render, answersFor, type Answer } from "../lib/fastOrSlow/music";
+import {
+  buildRound as buildTownRound,
+  render as renderTown,
+  answersFor as townAnswersFor,
+  REFERENCE_GAP,
+  type Question as TownQuestion,
+} from "../lib/loudOrSoft/music";
 import {
   PRESET_CHOICES,
   accuracy,
@@ -27,6 +34,7 @@ import {
 } from "../lib/rhythmJump";
 import {
   normalizeHappyOrSadSettings,
+  normalizeLoudOrSoftSettings,
   normalizeMusicTrainSettings,
   normalizePianoHopSettings,
   normalizeRhythmJumpSettings,
@@ -204,6 +212,52 @@ for (const cfg of configs) {
   expect(!checkRun(easy, e.answers, HOURS).ok, "Rhythm Jump easy: Medium patterns accepted");
 }
 
+// --- Sleepy Town (Loud or Soft) --------------------------------------------------------------
+// The real pace of a round: normal tune, gap, piece, answer; a wrong
+// answer's reaction; the piece again with the town; the town settles.
+function townRun(round: TownQuestion[], wrongEvery: number) {
+  let seconds = 0;
+  let correct = 0;
+  const answers = round.map((q, i) => {
+    const wrong = wrongEvery > 0 && i % wrongEvery === 0;
+    const options = townAnswersFor(q.level, q.kind);
+    const picked = wrong ? options.find((a) => a !== q.answer)! : q.answer;
+    if (!wrong) correct++;
+    const r = renderTown(q);
+    seconds += 0.12 + r.reference.seconds + REFERENCE_GAP + r.piece.seconds + 0.25 + (wrong ? 1.9 : 0) + 0.2 + r.piece.seconds + 0.25 + 1.1;
+    return { melody: q.melody.id, dynamic: q.answer, bpm: q.bpm, transpose: q.transpose, repeats: q.repeats, picked };
+  });
+  return { answers, seconds, correct };
+}
+
+for (const level of LEVELS) {
+  const settings = normalizeLoudOrSoftSettings({ level, markings: level === "hard" });
+  for (let n = 0; n < 300; n++) {
+    const round = buildTownRound(level);
+    const r = townRun(round, n % 4);
+    const c = checkRun(settings, r.answers, r.seconds);
+    expect(c.ok && c.score.correct === r.correct && c.score.accuracy === r.correct * 10, `Sleepy Town ${level}: honest round rejected or mis-scored (${!c.ok && c.reason})`);
+    if (n === 0) {
+      expect(!checkRun(settings, r.answers, r.seconds * 0.5).ok, `Sleepy Town ${level}: too fast accepted`);
+      expect(!checkRun(settings, r.answers.slice(0, 9), r.seconds).ok, `Sleepy Town ${level}: half round accepted`);
+      // Every piece claimed to be at the dynamic the child picked.
+      expect(!checkRun(settings, r.answers.map((a) => ({ ...a, dynamic: "f", picked: "f" })), HOURS).ok, `Sleepy Town ${level}: all-loud round accepted`);
+      expect(!checkRun(settings, r.answers.map((a, i) => (i === 3 ? { ...a, repeats: a.repeats + 1 } : a)), HOURS).ok, `Sleepy Town ${level}: wrong length accepted`);
+      expect(!checkRun(settings, r.answers.map((a, i) => (i === 3 ? { ...a, bpm: 200 } : a)), HOURS).ok, `Sleepy Town ${level}: wrong tempo accepted`);
+      expect(!checkRun(settings, r.answers.map((a, i) => (i === 3 ? { ...a, picked: "mp" } : a)), HOURS).ok, `Sleepy Town ${level}: impossible answer accepted`);
+    }
+  }
+}
+{
+  // A Hard round can't be sent for an Easy assignment, or the other way round.
+  const easy = normalizeLoudOrSoftSettings({ level: "easy" });
+  expect(!checkRun(easy, townRun(buildTownRound("hard"), 0).answers, HOURS).ok, "Sleepy Town easy: Hard round accepted");
+  const hard = normalizeLoudOrSoftSettings({ level: "hard" });
+  expect(!checkRun(hard, townRun(buildTownRound("easy"), 0).answers, HOURS).ok, "Sleepy Town hard: Easy round accepted");
+  const medium = normalizeLoudOrSoftSettings({ level: "medium" });
+  expect(!checkRun(medium, townRun(buildTownRound("easy"), 0).answers, HOURS).ok, "Sleepy Town medium: Easy round accepted");
+}
+
 // --- labels and variants -------------------------------------------------------------------
 const label = (s: object) => variantLabel(sharedGameVariant(s as never));
 expect(assignmentTitle("Piano Hop", { game: "piano_hop", level: "medium", naming: "letters" }) === "Piano Hop – Medium", "Piano Hop title");
@@ -220,6 +274,9 @@ expect(
   "a custom choice equal to a preset becomes the preset"
 );
 expect(variantLabel("hard") === "Hard" && variantLabel("treble-easy") === "Treble Easy", "older variants still label");
+expect(assignmentTitle("Sleepy Town", { game: "loud_or_soft", level: "medium", markings: true }) === "Sleepy Town – Medium", "Sleepy Town title");
+expect(sharedGameVariant(normalizeLoudOrSoftSettings({ level: "hard", markings: true })) === "sleepy-town:hard", "Sleepy Town variant");
+expect(label(normalizeLoudOrSoftSettings({ level: "easy" })) === "Easy", "Sleepy Town label");
 
 if (failures) {
   console.error(`${failures} check(s) failed`);
