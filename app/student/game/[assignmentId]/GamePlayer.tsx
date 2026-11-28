@@ -33,20 +33,26 @@ const cardShadowOnGreen = "#124e07";
 // (no lobby/PIN/bots/timer), since the point here is auto-graded
 // submission, not hosting a round. Every answer is recorded locally and
 // sent to /api/student/submit-game only once, after the last question.
+//
+// `practice` (Note Reading's free practice, app/games/note-reading): no
+// intro, nothing sent or saved; the score is counted here and the end
+// screen offers a fresh round or other settings.
 export default function GamePlayer({
   assignmentId,
   title,
   questions,
   alreadyCompleted,
   savedScore,
+  practice,
 }: {
   assignmentId: string;
   title: string;
   questions: Question[];
   alreadyCompleted: boolean;
   savedScore: number | null;
+  practice?: { onPlayAgain: () => void; onChangeSettings: () => void };
 }) {
-  const [started, setStarted] = useState(false);
+  const [started, setStarted] = useState(!!practice);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
@@ -64,7 +70,9 @@ export default function GamePlayer({
   // Exit (✕ in the top row while answering): asks first, then back to the
   // dashboard. Answers so far aren't sent (as before: only a finished game
   // is submitted).
-  const exit = useGameExit({ to: STUDENT_HOME });
+  // In practice, leaving goes back to the settings.
+  const exit = useGameExit(practice ? {} : { to: STUDENT_HOME });
+  const leave = practice ? practice.onChangeSettings : exit.leave;
 
   async function submitAnswers(finalAnswers: { questionId: string; selectedIndex: number | null }[]) {
     setSubmitting(true);
@@ -103,7 +111,10 @@ export default function GamePlayer({
     setTimeout(() => {
       const next = currentIndex + 1;
       if (next >= questions.length) {
-        submitAnswers(nextAnswers);
+        if (practice) {
+          const correctCount = nextAnswers.filter((a, k) => a.selectedIndex === questions[k].correctIndex).length;
+          setResult({ score: correctCount * 100, correctCount, total: questions.length });
+        } else submitAnswers(nextAnswers);
         return;
       }
       setCurrentIndex(next);
@@ -158,9 +169,23 @@ export default function GamePlayer({
         >
           {result.score} pts
         </div>
-        <Link href="/student/dashboard" style={{ color: "inherit", textDecoration: "underline", fontWeight: 700 }}>
-          ← Back to Dashboard
-        </Link>
+        {practice ? (
+          <>
+            <p style={{ margin: 0, fontWeight: 700, opacity: 0.6, fontSize: "0.9rem" }}>Practice round · not saved</p>
+            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", justifyContent: "center" }}>
+              <button type="button" onClick={practice.onPlayAgain} style={practiceButton(true)}>
+                Play again
+              </button>
+              <button type="button" onClick={practice.onChangeSettings} style={practiceButton(false)}>
+                Change settings
+              </button>
+            </div>
+          </>
+        ) : (
+          <Link href="/student/dashboard" style={{ color: "inherit", textDecoration: "underline", fontWeight: 700 }}>
+            ← Back to Dashboard
+          </Link>
+        )}
       </main>
     );
   }
@@ -308,7 +333,21 @@ export default function GamePlayer({
           })}
         </div>
       </div>
-      {exit.asking && <LeaveConfirm onStay={exit.stay} onLeave={exit.leave} />}
+      {exit.asking && <LeaveConfirm onStay={exit.stay} onLeave={leave} />}
     </main>
   );
+}
+
+function practiceButton(primary: boolean): React.CSSProperties {
+  return {
+    fontSize: "1.05rem",
+    fontWeight: 800,
+    padding: "0.8rem 1.6rem",
+    borderRadius: radius.button,
+    border: primary ? "none" : `2px solid ${colors.inputBorder}`,
+    background: primary ? colors.greenButton : colors.white,
+    boxShadow: primary ? solidShadow(4, colors.greenButtonShadow) : "none",
+    color: primary ? colors.white : colors.textPrimary,
+    cursor: "pointer",
+  };
 }

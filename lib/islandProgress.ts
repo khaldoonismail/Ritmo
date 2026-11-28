@@ -119,7 +119,7 @@ export function buildIslandData({
   for (const g of GAMES) {
     if (hrefs[g.id] !== undefined) continue;
     if (g.skill === "class") hrefs[g.id] = "/student/play";
-    else if (g.route) hrefs[g.id] = g.route;
+    else if (g.practice ?? g.route) hrefs[g.id] = (g.practice ?? g.route)!;
     else {
       hrefs[g.id] = null;
       notes[g.id] = `Your teacher will open ${g.title} for you.`;

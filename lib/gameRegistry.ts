@@ -47,8 +47,11 @@ export interface GameEntry {
   roundLength: string; // "10 pieces", "endless run (3 hearts)"…
   minutes: number; // about how long a round takes
   // The game's own page: Play demo for teachers, free practice on the
-  // island. null: none (Note Reading is played from its shared game).
+  // island. null: none (Note Reading's demo is its shared game, played
+  // from the library's play page).
   route: string | null;
+  // The island's free-practice page, when it isn't `route` (Note Reading).
+  practice?: string;
   // The shared library game it is assigned as (games.generator), or null
   // when it can't be assigned (Team Battle: live, from the teacher's quizzes).
   generator: string | null;
@@ -71,6 +74,7 @@ export const GAMES: GameEntry[] = [
     roundLength: "10 questions",
     minutes: 4,
     route: null,
+    practice: "/games/note-reading",
     generator: "note_reading",
     art: "lighthouse",
     spot: 0,

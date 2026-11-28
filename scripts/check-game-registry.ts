@@ -45,6 +45,8 @@ for (const g of GAMES) {
     const dir = `app${g.route}`;
     if (!existsSync(`${dir}/page.tsx`)) fail(`${g.id}: route ${g.route} has no page (${dir}/page.tsx)`);
   } else if (!g.generator) fail(`${g.id}: neither a page nor a shared game`);
+  if (g.practice && !existsSync(`app${g.practice}/page.tsx`)) fail(`${g.id}: practice page ${g.practice} has no page`);
+  if (g.skill !== "class" && !g.route && !g.practice) fail(`${g.id}: no free-practice page for the island`);
   const { island, spot } = islandOf(g, SPOT_COUNT);
   const key = `${island}/${g.skill}/${spot}`;
   if (taken.has(key)) fail(`${g.id}: spot ${key} already taken`);
@@ -110,7 +112,7 @@ if (P["music-train"].homework?.due !== "To do" || P["music-train"].played) fail(
 if (data.homeworkCount !== 3) fail(`homework count ${data.homeworkCount}`);
 if (P["rhythm-jump"].played || data.hrefs["rhythm-jump"] !== "/games/rhythm-jump") fail("an unplayed, unassigned game: new, opens its own page");
 if (data.hrefs["team-battle"] !== "/student/play") fail("team battle opens the join page");
-if (data.hrefs["note-reading"] !== null || !data.notes["note-reading"]) fail("note reading without an assignment: a note, no page");
+if (data.hrefs["note-reading"] !== "/games/note-reading" || data.notes["note-reading"]) fail("note reading without an assignment: opens free practice");
 for (const g of GAMES) if (!(g.id in data.progress) || !(g.id in data.hrefs)) fail(`${g.id} missing from the island data`);
 if (dueLabel(null, NOW) !== "To do" || dueLabel(day(-1), NOW) !== "Late!" || dueLabel(day(0.2), NOW) !== "Today" || dueLabel(day(10), NOW) !== "5 Dec") fail("due labels");
 if (starsForAccuracy(90) !== 3 || starsForAccuracy(89) !== 2 || starsForAccuracy(60) !== 2 || starsForAccuracy(59) !== 1) fail("stars");
